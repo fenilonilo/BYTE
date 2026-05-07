@@ -7,14 +7,14 @@ from uuid import uuid4
 from app.domain.entities import Conversation, IncomingMessage, Message, OutgoingMessage
 
 if TYPE_CHECKING:
-    from app.ports.llm import LLMPort
+    from app.ports.agent import AgentPort
     from app.ports.logger import LoggerPort
     from app.ports.repository import RepositoryPort
 
 
 class ProcessIncomingMessage:
-    def __init__(self, llm: LLMPort, repo: RepositoryPort, log: LoggerPort) -> None:
-        self._llm = llm
+    def __init__(self, agent: AgentPort, repo: RepositoryPort, log: LoggerPort) -> None:
+        self._agent = agent
         self._repo = repo
         self._log = log
 
@@ -36,9 +36,9 @@ class ProcessIncomingMessage:
         )
         conversation = conversation.with_message(user_msg)
 
-        self._log.info("llm.complete.start", conversation_id=conv_id)
-        response_text = await self._llm.complete(
-            prompt=msg.content,
+        self._log.info("agent.run.start", conversation_id=conv_id)
+        response_text = await self._agent.run(
+            message=msg.content,
             conversation=conversation,
         )
 
@@ -51,7 +51,7 @@ class ProcessIncomingMessage:
         conversation = conversation.with_message(assistant_msg)
 
         await self._repo.save(conversation)
-        self._log.info("llm.complete.done", conversation_id=conv_id)
+        self._log.info("agent.run.done", conversation_id=conv_id)
 
         return OutgoingMessage(
             content=response_text,

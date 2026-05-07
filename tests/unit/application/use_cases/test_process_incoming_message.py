@@ -24,10 +24,10 @@ def incoming_msg() -> IncomingMessage:
 
 
 @pytest.fixture
-def mock_llm() -> AsyncMock:
-    llm = AsyncMock()
-    llm.complete.return_value = "Hello back!"
-    return llm
+def mock_agent() -> AsyncMock:
+    agent = AsyncMock()
+    agent.run.return_value = "Hello back!"
+    return agent
 
 
 @pytest.fixture
@@ -46,11 +46,11 @@ def mock_log() -> MagicMock:
 @pytest.mark.unit
 async def test_execute_returns_outgoing_message(
     incoming_msg: IncomingMessage,
-    mock_llm: AsyncMock,
+    mock_agent: AsyncMock,
     mock_repo: AsyncMock,
     mock_log: MagicMock,
 ) -> None:
-    use_case = ProcessIncomingMessage(llm=mock_llm, repo=mock_repo, log=mock_log)
+    use_case = ProcessIncomingMessage(agent=mock_agent, repo=mock_repo, log=mock_log)
     result = await use_case.execute(incoming_msg)
     assert isinstance(result, OutgoingMessage)
     assert result.content == "Hello back!"
@@ -59,32 +59,32 @@ async def test_execute_returns_outgoing_message(
 
 
 @pytest.mark.unit
-async def test_execute_calls_llm(
+async def test_execute_calls_agent(
     incoming_msg: IncomingMessage,
-    mock_llm: AsyncMock,
+    mock_agent: AsyncMock,
     mock_repo: AsyncMock,
     mock_log: MagicMock,
 ) -> None:
-    use_case = ProcessIncomingMessage(llm=mock_llm, repo=mock_repo, log=mock_log)
+    use_case = ProcessIncomingMessage(agent=mock_agent, repo=mock_repo, log=mock_log)
     await use_case.execute(incoming_msg)
-    mock_llm.complete.assert_called_once()
+    mock_agent.run.assert_called_once()
 
 
 @pytest.mark.unit
 async def test_execute_saves_conversation(
     incoming_msg: IncomingMessage,
-    mock_llm: AsyncMock,
+    mock_agent: AsyncMock,
     mock_repo: AsyncMock,
     mock_log: MagicMock,
 ) -> None:
-    use_case = ProcessIncomingMessage(llm=mock_llm, repo=mock_repo, log=mock_log)
+    use_case = ProcessIncomingMessage(agent=mock_agent, repo=mock_repo, log=mock_log)
     await use_case.execute(incoming_msg)
     mock_repo.save.assert_called_once()
 
 
 @pytest.mark.unit
 async def test_execute_loads_existing_conversation(
-    mock_llm: AsyncMock,
+    mock_agent: AsyncMock,
     mock_repo: AsyncMock,
     mock_log: MagicMock,
 ) -> None:
@@ -98,7 +98,7 @@ async def test_execute_loads_existing_conversation(
         timestamp=NOW,
         conversation_id="conv-123",
     )
-    use_case = ProcessIncomingMessage(llm=mock_llm, repo=mock_repo, log=mock_log)
+    use_case = ProcessIncomingMessage(agent=mock_agent, repo=mock_repo, log=mock_log)
     await use_case.execute(msg)
     mock_repo.get.assert_called_once_with("conv-123")
 
@@ -106,12 +106,12 @@ async def test_execute_loads_existing_conversation(
 @pytest.mark.unit
 async def test_execute_creates_conversation_when_none(
     incoming_msg: IncomingMessage,
-    mock_llm: AsyncMock,
+    mock_agent: AsyncMock,
     mock_repo: AsyncMock,
     mock_log: MagicMock,
 ) -> None:
     mock_repo.get.return_value = None
-    use_case = ProcessIncomingMessage(llm=mock_llm, repo=mock_repo, log=mock_log)
+    use_case = ProcessIncomingMessage(agent=mock_agent, repo=mock_repo, log=mock_log)
     result = await use_case.execute(incoming_msg)
     assert isinstance(result, OutgoingMessage)
     mock_repo.save.assert_called_once()
