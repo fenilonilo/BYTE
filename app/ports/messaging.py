@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
-from app.domain.entities import IncomingMessage, OutgoingMessage
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from app.domain.entities import IncomingMessage, OutgoingMessage
 
 
 class MessagingPort(ABC):

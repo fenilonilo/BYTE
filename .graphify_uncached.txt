@@ -1,0 +1,3 @@
+D:\Projetos\Marcelo\CLAUDE.md
+D:\Projetos\Marcelo\docs\ARCHITECTURE.md
+D:\Projetos\Marcelo\docs\CONVENTIONS.md

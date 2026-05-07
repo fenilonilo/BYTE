@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from app.domain.entities import Conversation, IncomingMessage, Message, OutgoingMessage
 
-
-NOW = datetime.now(tz=timezone.utc)
+NOW = datetime.now(tz=UTC)
 
 
 def test_message_fields() -> None:
@@ -19,7 +20,7 @@ def test_message_fields() -> None:
 
 def test_message_is_frozen() -> None:
     msg = Message(id="1", role="user", content="hello", timestamp=NOW)
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         msg.content = "changed"  # type: ignore[misc]
 
 

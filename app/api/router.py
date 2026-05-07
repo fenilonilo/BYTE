@@ -1,7 +1,7 @@
-# app/api/router.py
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends
@@ -10,9 +10,11 @@ from app.api.deps import get_llm, get_logger, get_repo
 from app.api.schemas import IncomingMessageSchema, OutgoingMessageSchema
 from app.application.use_cases.process_incoming_message import ProcessIncomingMessage
 from app.domain.entities import IncomingMessage
-from app.ports.llm import LLMPort
-from app.ports.logger import LoggerPort
-from app.ports.repository import RepositoryPort
+
+if TYPE_CHECKING:
+    from app.ports.llm import LLMPort
+    from app.ports.logger import LoggerPort
+    from app.ports.repository import RepositoryPort
 
 router = APIRouter()
 
@@ -30,7 +32,7 @@ async def receive_message(
         sender=body.sender,
         content=body.content,
         channel=body.channel,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         conversation_id=body.conversation_id,
     )
     outgoing = await use_case.execute(incoming)

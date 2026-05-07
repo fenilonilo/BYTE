@@ -1,8 +1,11 @@
-# app/adapters/repository/in_memory_repository.py
 from __future__ import annotations
 
-from app.domain.entities import Conversation
+from typing import TYPE_CHECKING
+
 from app.ports.repository import RepositoryPort
+
+if TYPE_CHECKING:
+    from app.domain.entities import Conversation
 
 
 class InMemoryRepository(RepositoryPort):

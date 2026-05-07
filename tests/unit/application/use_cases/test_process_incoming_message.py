@@ -1,15 +1,14 @@
-# tests/unit/application/use_cases/test_process_incoming_message.py
 from __future__ import annotations
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.application.use_cases.process_incoming_message import ProcessIncomingMessage
 from app.domain.entities import Conversation, IncomingMessage, OutgoingMessage
 
-
-NOW = datetime.now(tz=timezone.utc)
+NOW = datetime.now(tz=UTC)
 
 
 @pytest.fixture

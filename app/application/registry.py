@@ -1,13 +1,7 @@
-from __future__ import annotations
-
-from typing import Generic, TypeVar
-
 from app.domain.exceptions import RegistryDuplicateError, RegistryKeyError
 
-T = TypeVar("T")
 
-
-class Registry(Generic[T]):
+class Registry[T]:
     def __init__(self) -> None:
         self._store: dict[str, T] = {}
 

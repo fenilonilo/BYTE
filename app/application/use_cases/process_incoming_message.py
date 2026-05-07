@@ -1,13 +1,15 @@
-# app/application/use_cases/process_incoming_message.py
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app.domain.entities import Conversation, IncomingMessage, Message, OutgoingMessage
-from app.ports.llm import LLMPort
-from app.ports.logger import LoggerPort
-from app.ports.repository import RepositoryPort
+
+if TYPE_CHECKING:
+    from app.ports.llm import LLMPort
+    from app.ports.logger import LoggerPort
+    from app.ports.repository import RepositoryPort
 
 
 class ProcessIncomingMessage:
@@ -23,7 +25,7 @@ class ProcessIncomingMessage:
             conversation = Conversation(
                 id=conv_id,
                 messages=(),
-                created_at=datetime.now(tz=timezone.utc),
+                created_at=datetime.now(tz=UTC),
             )
 
         user_msg = Message(
@@ -44,7 +46,7 @@ class ProcessIncomingMessage:
             id=str(uuid4()),
             role="assistant",
             content=response_text,
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
         )
         conversation = conversation.with_message(assistant_msg)
 

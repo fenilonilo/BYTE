@@ -1,15 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="40869fc0-4552-4f1e-8899-61bdf80cef01" name="Changes" comment="" />
+    <list default="true" id="40869fc0-4552-4f1e-8899-61bdf80cef01" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/adapters/llm/stub_llm.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/adapters/llm/stub_llm.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/adapters/repository/in_memory_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/adapters/repository/in_memory_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/deps.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/deps.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/router.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/router.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/application/registry.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/application/registry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/application/use_cases/process_incoming_message.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/application/use_cases/process_incoming_message.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/domain/entities.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/domain/entities.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/ports/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/ports/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/ports/llm.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/ports/llm.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/ports/messaging.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/ports/messaging.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/ports/repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/ports/repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/application/use_cases/test_process_incoming_message.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/application/use_cases/test_process_incoming_message.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/domain/test_entities.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/domain/test_entities.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5
-}]]></component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
   <component name="ProjectId" id="3DMxuu99Y5ofCZXsL1rKmw5pRid" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -17,7 +39,11 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "RunOnceActivity.ShowReadmeOnStart": "true"
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "master"
   }
 }]]></component>
   <component name="SharedIndexes">

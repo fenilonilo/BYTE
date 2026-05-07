@@ -1,8 +1,11 @@
-# app/adapters/llm/stub_llm.py
 from __future__ import annotations
 
-from app.domain.entities import Conversation
+from typing import TYPE_CHECKING
+
 from app.ports.llm import LLMPort
+
+if TYPE_CHECKING:
+    from app.domain.entities import Conversation
 
 
 class StubLLM(LLMPort):
