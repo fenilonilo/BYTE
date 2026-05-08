@@ -4,7 +4,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.domain.entities import Conversation, IncomingMessage, Message, OutgoingMessage
+from app.domain.entities import (
+    Conversation,
+    IncomingMessage,
+    Message,
+    OutgoingMessage,
+    TextBlock,
+)
 
 if TYPE_CHECKING:
     from app.ports.agent import AgentPort
@@ -37,9 +43,15 @@ class ProcessIncomingMessage:
         conversation = conversation.with_message(user_msg)
 
         self._log.info("agent.run.start", conversation_id=conv_id)
-        response_text = await self._agent.run(
+        response = await self._agent.run(
             message=msg.content,
             conversation=conversation,
+            model_override=msg.model_override,
+        )
+
+        response_text = next(
+            (block.text for block in response.content if isinstance(block, TextBlock)),
+            "",
         )
 
         assistant_msg = Message(
@@ -57,4 +69,6 @@ class ProcessIncomingMessage:
             content=response_text,
             channel=msg.channel,
             recipient=msg.sender,
+            model_used=response.model_used,
+            routed_from=response.routed_from,
         )

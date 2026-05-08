@@ -6,9 +6,23 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.application.use_cases.process_incoming_message import ProcessIncomingMessage
-from app.domain.entities import Conversation, IncomingMessage, OutgoingMessage
+from app.domain.entities import (
+    AgentResponse,
+    Conversation,
+    IncomingMessage,
+    OutgoingMessage,
+    TextBlock,
+)
 
 NOW = datetime.now(tz=UTC)
+
+_AGENT_RESPONSE = AgentResponse(
+    content=(TextBlock(text="Hello back!"),),
+    model_used="groq/llama-3.3-70b-versatile",
+    complexity="simple",
+    tools_called=(),
+    routed_from=None,
+)
 
 
 @pytest.fixture
@@ -26,7 +40,7 @@ def incoming_msg() -> IncomingMessage:
 @pytest.fixture
 def mock_agent() -> AsyncMock:
     agent = AsyncMock()
-    agent.run.return_value = "Hello back!"
+    agent.run.return_value = _AGENT_RESPONSE
     return agent
 
 
@@ -56,6 +70,39 @@ async def test_execute_returns_outgoing_message(
     assert result.content == "Hello back!"
     assert result.channel == "api"
     assert result.recipient == "user-1"
+
+
+@pytest.mark.unit
+async def test_execute_propagates_model_used(
+    incoming_msg: IncomingMessage,
+    mock_agent: AsyncMock,
+    mock_repo: AsyncMock,
+    mock_log: MagicMock,
+) -> None:
+    use_case = ProcessIncomingMessage(agent=mock_agent, repo=mock_repo, log=mock_log)
+    result = await use_case.execute(incoming_msg)
+    assert result.model_used == "groq/llama-3.3-70b-versatile"
+    assert result.routed_from is None
+
+
+@pytest.mark.unit
+async def test_execute_passes_model_override_to_agent(
+    mock_agent: AsyncMock,
+    mock_repo: AsyncMock,
+    mock_log: MagicMock,
+) -> None:
+    msg = IncomingMessage(
+        id="msg-x",
+        sender="user-1",
+        content="Hello!",
+        channel="api",
+        timestamp=NOW,
+        model_override="gemini",
+    )
+    use_case = ProcessIncomingMessage(agent=mock_agent, repo=mock_repo, log=mock_log)
+    await use_case.execute(msg)
+    _, kwargs = mock_agent.run.call_args
+    assert kwargs.get("model_override") == "gemini"
 
 
 @pytest.mark.unit
@@ -115,3 +162,23 @@ async def test_execute_creates_conversation_when_none(
     result = await use_case.execute(incoming_msg)
     assert isinstance(result, OutgoingMessage)
     mock_repo.save.assert_called_once()
+
+
+@pytest.mark.unit
+async def test_execute_returns_empty_string_when_no_text_block(
+    incoming_msg: IncomingMessage,
+    mock_repo: AsyncMock,
+    mock_log: MagicMock,
+) -> None:
+    empty_response = AgentResponse(
+        content=(),
+        model_used="groq/llama-3.3-70b-versatile",
+        complexity="simple",
+        tools_called=(),
+        routed_from=None,
+    )
+    agent = AsyncMock()
+    agent.run.return_value = empty_response
+    use_case = ProcessIncomingMessage(agent=agent, repo=mock_repo, log=mock_log)
+    result = await use_case.execute(incoming_msg)
+    assert result.content == ""
