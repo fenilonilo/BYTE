@@ -79,6 +79,7 @@ async def test_complex_signal_routes_to_gemini(conversation: Conversation) -> No
     mock_gemini.run.assert_called_once()
     assert result.routed_from == "groq/llama-3.3-70b-versatile"
     assert result.model_used == "google/gemini-1.5-flash"
+    assert isinstance(result.content[0], TextBlock)
     assert result.content[0].text == "Complex answer"
 
 

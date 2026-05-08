@@ -123,6 +123,7 @@ def test_agent_response_simple() -> None:
         tools_called=(),
         routed_from=None,
     )
+    assert isinstance(resp.content[0], TextBlock)
     assert resp.content[0].text == "hello"
     assert resp.complexity == "simple"
     assert resp.routed_from is None
