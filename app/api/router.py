@@ -34,10 +34,13 @@ async def receive_message(
         channel=body.channel,
         timestamp=datetime.now(tz=UTC),
         conversation_id=body.conversation_id,
+        model_override=body.model_override,
     )
     outgoing = await use_case.execute(incoming)
     return OutgoingMessageSchema(
         content=outgoing.content,
         channel=outgoing.channel,
         recipient=outgoing.recipient,
+        model_used=outgoing.model_used,
+        routed_from=outgoing.routed_from,
     )

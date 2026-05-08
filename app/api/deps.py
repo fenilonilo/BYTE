@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.adapters.agent.agno_agent import AgnoAgent
+from app.adapters.agent.gemini_agno_agent import GeminiAgnoAgent
+from app.adapters.agent.groq_agno_agent import GroqAgnoAgent
+from app.adapters.agent.routing_agno_agent import RoutingAgnoAgent
 from app.adapters.logging.structlog_logger import StructlogLogger
 from app.adapters.repository.postgres_repository import PostgresRepository
 from app.config import Settings
@@ -40,4 +42,8 @@ def get_repo() -> RepositoryPort:
 
 @lru_cache
 def get_agent() -> AgentPort:
-    return AgnoAgent(get_settings())
+    settings = get_settings()
+    return RoutingAgnoAgent(
+        groq_agent=GroqAgnoAgent(settings),
+        gemini_agent=GeminiAgnoAgent(settings),
+    )
