@@ -5,13 +5,12 @@ from typing import TYPE_CHECKING
 
 import groq as groq_sdk
 
-from app.domain.entities import AgentResponse
 from app.ports.agent import AgentPort
 
 if TYPE_CHECKING:
     from app.adapters.agent.gemini_agno_agent import GeminiAgnoAgent
     from app.adapters.agent.groq_agno_agent import GroqAgnoAgent
-    from app.domain.entities import Conversation
+    from app.domain.entities import AgentResponse, Conversation
 
 
 class RoutingAgnoAgent(AgentPort):
