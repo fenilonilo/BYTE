@@ -5,7 +5,16 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.domain.entities import Conversation, IncomingMessage, Message, OutgoingMessage
+from app.domain.entities import (
+    AgentResponse,
+    AudioBlock,
+    Conversation,
+    ImageBlock,
+    IncomingMessage,
+    Message,
+    OutgoingMessage,
+    TextBlock,
+)
 
 NOW = datetime.now(tz=UTC)
 
@@ -75,3 +84,65 @@ def test_conversation_with_message_preserves_metadata() -> None:
     new_conv = conv.with_message(msg)
     assert new_conv.id == "c1"
     assert new_conv.created_at == NOW
+
+
+@pytest.mark.unit
+def test_text_block_defaults() -> None:
+    block = TextBlock()
+    assert block.type == "text"
+    assert block.text == ""
+
+
+@pytest.mark.unit
+def test_text_block_is_frozen() -> None:
+    block = TextBlock(text="hello")
+    with pytest.raises(FrozenInstanceError):
+        block.text = "world"  # type: ignore[misc]
+
+
+@pytest.mark.unit
+def test_image_block_default_mime_type() -> None:
+    block = ImageBlock()
+    assert block.mime_type == "image/jpeg"
+    assert block.url is None
+    assert block.base64_data is None
+
+
+@pytest.mark.unit
+def test_audio_block_default_mime_type() -> None:
+    block = AudioBlock()
+    assert block.mime_type == "audio/mpeg"
+
+
+@pytest.mark.unit
+def test_agent_response_simple() -> None:
+    resp = AgentResponse(
+        content=(TextBlock(text="hello"),),
+        model_used="groq/llama-3.3-70b-versatile",
+        complexity="simple",
+        tools_called=(),
+        routed_from=None,
+    )
+    assert resp.content[0].text == "hello"
+    assert resp.complexity == "simple"
+    assert resp.routed_from is None
+
+
+@pytest.mark.unit
+def test_agent_response_empty_content_is_handoff_signal() -> None:
+    resp = AgentResponse(
+        content=(),
+        model_used="groq/llama-3.3-70b-versatile",
+        complexity="complex",
+        tools_called=(),
+        routed_from=None,
+    )
+    assert resp.content == ()
+    assert resp.complexity == "complex"
+
+
+@pytest.mark.unit
+def test_outgoing_message_model_fields_default() -> None:
+    msg = OutgoingMessage(content="hi", channel="api", recipient="user-1")
+    assert msg.model_used == ""
+    assert msg.routed_from is None
