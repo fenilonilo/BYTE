@@ -39,7 +39,7 @@ async def prepared_engine(db_url: str):
 
 @pytest_asyncio.fixture
 async def client(prepared_engine):
-    from main import app
+    from main import app  # noqa: PLC0415
 
     repo = PostgresRepository(prepared_engine)
     agent = StubAgent()

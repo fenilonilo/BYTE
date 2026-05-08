@@ -39,9 +39,7 @@ class PostgresRepository(RepositoryPort):
                 conv_model.updated_at = now
 
             existing_ids_result = await session.execute(
-                select(MessageModel.id).where(
-                    MessageModel.conversation_id == conversation.id
-                )
+                select(MessageModel.id).where(MessageModel.conversation_id == conversation.id)
             )
             existing_ids = {row[0] for row in existing_ids_result}
 

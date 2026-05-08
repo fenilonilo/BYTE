@@ -33,15 +33,15 @@ async def test_run_returns_response_content(
     mock_response.content = "Agent says hello"
 
     with (
-        patch("app.adapters.agent.agno_agent.Agent") as MockAgent,
+        patch("app.adapters.agent.agno_agent.Agent") as mock_agent_cls,
         patch("app.adapters.agent.agno_agent.PostgresDb"),
         patch("app.adapters.agent.agno_agent.Claude"),
     ):
         mock_inner = AsyncMock()
-        MockAgent.return_value = mock_inner
+        mock_agent_cls.return_value = mock_inner
         mock_inner.arun = AsyncMock(return_value=mock_response)
 
-        from app.adapters.agent.agno_agent import AgnoAgent
+        from app.adapters.agent.agno_agent import AgnoAgent  # noqa: PLC0415
 
         agent = AgnoAgent(mock_settings)
         result = await agent.run("Hello", conversation)
@@ -57,15 +57,15 @@ async def test_run_passes_session_id_from_conversation(
     mock_response.content = "response"
 
     with (
-        patch("app.adapters.agent.agno_agent.Agent") as MockAgent,
+        patch("app.adapters.agent.agno_agent.Agent") as mock_agent_cls,
         patch("app.adapters.agent.agno_agent.PostgresDb"),
         patch("app.adapters.agent.agno_agent.Claude"),
     ):
         mock_inner = AsyncMock()
-        MockAgent.return_value = mock_inner
+        mock_agent_cls.return_value = mock_inner
         mock_inner.arun = AsyncMock(return_value=mock_response)
 
-        from app.adapters.agent.agno_agent import AgnoAgent
+        from app.adapters.agent.agno_agent import AgnoAgent  # noqa: PLC0415
 
         agent = AgnoAgent(mock_settings)
         await agent.run("Hello", conversation)
@@ -81,15 +81,15 @@ async def test_run_returns_empty_string_when_content_is_none(
     mock_response.content = None
 
     with (
-        patch("app.adapters.agent.agno_agent.Agent") as MockAgent,
+        patch("app.adapters.agent.agno_agent.Agent") as mock_agent_cls,
         patch("app.adapters.agent.agno_agent.PostgresDb"),
         patch("app.adapters.agent.agno_agent.Claude"),
     ):
         mock_inner = AsyncMock()
-        MockAgent.return_value = mock_inner
+        mock_agent_cls.return_value = mock_inner
         mock_inner.arun = AsyncMock(return_value=mock_response)
 
-        from app.adapters.agent.agno_agent import AgnoAgent
+        from app.adapters.agent.agno_agent import AgnoAgent  # noqa: PLC0415
 
         agent = AgnoAgent(mock_settings)
         result = await agent.run("Hello", conversation)
@@ -99,14 +99,14 @@ async def test_run_returns_empty_string_when_content_is_none(
 
 @pytest.mark.unit
 async def test_agno_agent_implements_port(mock_settings: MagicMock) -> None:
-    from app.ports.agent import AgentPort
+    from app.ports.agent import AgentPort  # noqa: PLC0415
 
     with (
         patch("app.adapters.agent.agno_agent.Agent"),
         patch("app.adapters.agent.agno_agent.PostgresDb"),
         patch("app.adapters.agent.agno_agent.Claude"),
     ):
-        from app.adapters.agent.agno_agent import AgnoAgent
+        from app.adapters.agent.agno_agent import AgnoAgent  # noqa: PLC0415
 
         agent = AgnoAgent(mock_settings)
         assert isinstance(agent, AgentPort)
