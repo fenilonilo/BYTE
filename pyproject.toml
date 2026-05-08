@@ -20,7 +20,8 @@ api = [
 ]
 agent = [
     "agno>=1.5",
-    "anthropic>=0.39",
+    "groq>=0.11",
+    "google-generativeai>=0.8",
 ]
 db = [
     "sqlalchemy[asyncio]>=2.0",
