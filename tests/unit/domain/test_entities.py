@@ -146,3 +146,22 @@ def test_outgoing_message_model_fields_default() -> None:
     msg = OutgoingMessage(content="hi", channel="api", recipient="user-1")
     assert msg.model_used == ""
     assert msg.routed_from is None
+
+
+@pytest.mark.unit
+def test_incoming_message_model_override_defaults_none() -> None:
+    msg = IncomingMessage(id="4", sender="alice", content="hi", channel="api", timestamp=NOW)
+    assert msg.model_override is None
+
+
+@pytest.mark.unit
+def test_incoming_message_model_override_set() -> None:
+    msg = IncomingMessage(
+        id="5",
+        sender="alice",
+        content="hi",
+        channel="api",
+        timestamp=NOW,
+        model_override="gemini",
+    )
+    assert msg.model_override == "gemini"

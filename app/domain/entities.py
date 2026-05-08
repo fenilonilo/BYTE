@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -48,7 +48,7 @@ class AudioBlock:
     mime_type: str = "audio/mpeg"
 
 
-ContentBlock: TypeAlias = TextBlock | ImageBlock | AudioBlock
+type ContentBlock = TextBlock | ImageBlock | AudioBlock
 
 
 @dataclass(frozen=True, slots=True)
