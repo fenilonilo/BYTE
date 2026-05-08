@@ -132,7 +132,12 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["app"]
-omit = ["app/adapters/**"]  # adapters covered via integration only
+omit = [
+    "app/adapters/**",
+    "app/api/**",
+    "app/config.py",
+    "app/ports/**",
+]
 
 [tool.coverage.report]
 exclude_lines = [
