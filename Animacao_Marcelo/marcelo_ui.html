@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Marcelo — Interface</title>
-  <style>
+<style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
@@ -28,8 +28,9 @@
       top: 20px;
       left: 20px;
       max-width: 420px;
-      max-height: 220px;
-      overflow: hidden;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      overflow-x: hidden;
       background: rgba(0, 0, 0, 0.45);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
@@ -40,7 +41,9 @@
       flex-direction: column;
       gap: 8px;
       pointer-events: none;
+      scrollbar-width: none;
     }
+    #transcript::-webkit-scrollbar { display: none; }
 
     .msg {
       font-size: 13px;
@@ -50,6 +53,56 @@
     .msg.user      { color: #a0cfff; }
     .msg.assistant { color: #b8ffcb; }
     .msg.interim   { color: rgba(255, 255, 255, 0.35); font-style: italic; }
+
+    /* ── Preview card ── */
+    #preview-card {
+      display: none;
+      background: rgba(0, 20, 40, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(100, 200, 255, 0.25);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-top: 8px;
+      pointer-events: auto;
+    }
+    #preview-card.visible { display: block; }
+    #preview-header {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: rgba(100, 200, 255, 0.7);
+      margin-bottom: 8px;
+    }
+    #preview-body {
+      font-size: 12px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.85);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 260px;
+      overflow-y: auto;
+      scrollbar-width: none;
+      margin-bottom: 12px;
+    }
+    #preview-body::-webkit-scrollbar { display: none; }
+    #preview-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .preview-btn {
+      flex: 1;
+      padding: 7px 0;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .preview-btn:hover { opacity: 0.8; }
+    #btn-approve { background: rgba(50, 200, 100, 0.85); color: #fff; }
+    #btn-cancel  { background: rgba(200, 60, 60, 0.7);  color: #fff; }
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(4px); }
@@ -153,7 +206,16 @@
 
   <canvas id="canvas"></canvas>
 
-  <div id="transcript"></div>
+  <div id="transcript">
+    <div id="preview-card">
+      <div id="preview-header">Prompt para Claude Code</div>
+      <pre id="preview-body"></pre>
+      <div id="preview-actions">
+        <button class="preview-btn" id="btn-approve">Enviar</button>
+        <button class="preview-btn" id="btn-cancel">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <div id="webcam-wrap">
     <video id="webcam" autoplay playsinline muted></video>
@@ -175,7 +237,7 @@
   <div id="gesture-badge"></div>
 
   <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    import * as THREE from './vendor/three/three.module.js';
     // Expose for hand-tracker.js (needs THREE.Vector3 without its own import)
     window.THREE = THREE;
 
@@ -207,8 +269,11 @@
     const micBtn       = document.getElementById('mic-btn');
     const sendBtn      = document.getElementById('send-btn');
     const webcamEl     = document.getElementById('webcam');
+    const previewCard  = document.getElementById('preview-card');
+    const previewBody  = document.getElementById('preview-body');
+    const btnApprove   = document.getElementById('btn-approve');
+    const btnCancel    = document.getElementById('btn-cancel');
 
-    const MAX_MESSAGES = 4;
     let interimEl = null;
 
     function addTranscript(role, text) {
@@ -219,20 +284,17 @@
           transcriptEl.appendChild(interimEl);
         }
         interimEl.textContent = text;
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
         return;
       }
 
-      // Remove stale interim before adding final
       if (interimEl) { interimEl.remove(); interimEl = null; }
 
       const div = document.createElement('div');
       div.className = `msg ${role === 'user' ? 'user' : 'assistant'}`;
       div.textContent = (role === 'user' ? 'Você: ' : 'Marcelo: ') + text;
       transcriptEl.appendChild(div);
-
-      while (transcriptEl.children.length > MAX_MESSAGES) {
-        transcriptEl.removeChild(transcriptEl.firstChild);
-      }
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
     }
 
     // ── Chat client ──────────────────────────────────────────────
@@ -246,24 +308,37 @@
       onTranscript: ({ role, text }) => addTranscript(role, text),
       onResponse:   (text)          => addTranscript('assistant', text),
       onError:      (msg)           => console.error('[Marcelo]', msg),
+      onPreview: ({ prompt, project }) => {
+        previewBody.textContent = prompt;
+        previewCard.classList.add('visible');
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      },
+    });
+
+    btnApprove.addEventListener('click', () => {
+      client.approvePreview();
+      previewCard.classList.remove('visible');
+    });
+
+    btnCancel.addEventListener('click', () => {
+      client.cancelPreview();
+      previewCard.classList.remove('visible');
     });
     client.setAmplitudeCallback((amp) => setAmplitude(amp));
     client.connect();
 
-    // ── Mic button ───────────────────────────────────────────────
+    // ── Mic button — toggle always-on loop ──────────────────────
     let micActive = false;
 
     micBtn.addEventListener('click', async () => {
       if (micActive) {
-        client.stopMic();
+        client.disableMic();
         micActive = false;
         micBtn.classList.remove('active');
       } else {
         micActive = true;
         micBtn.classList.add('active');
-        await client.startMic();
-        micActive = false;
-        micBtn.classList.remove('active');
+        await client.enableMic();
       }
     });
 
