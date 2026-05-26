@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # Groq (Llama 3.3 70B — default model)
     groq_api_key: str = ""
     groq_model_id: str = "llama-3.3-70b-versatile"
+    # Tool-use model: llama3-groq-70b-8192-tool-use-preview supports OpenAI-style function calling
+    groq_tools_model_id: str = "llama3-groq-70b-8192-tool-use-preview"
 
     # Groq TTS — Orpheus v1
     groq_tts_model: str = "canopylabs/orpheus-v1-english"
