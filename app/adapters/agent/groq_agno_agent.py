@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.models.groq import Groq
+from agno.tools import Toolkit
 
 from app.adapters.agent.schemas import GroqOutputSchema, map_content_block
 from app.domain.entities import AgentResponse
@@ -14,23 +15,49 @@ if TYPE_CHECKING:
     from app.config import Settings
     from app.domain.entities import Conversation
 
-_SYSTEM_PROMPT = (
-    "Classify this task before responding. "
-    "If the task requires deep multi-step reasoning, advanced mathematics, "
-    "complex code generation, or long-form structured analysis: "
-    "set complexity='complex' and content=[]. Do NOT answer the question. "
-    "Otherwise: set complexity='simple' and fill content with your full answer."
-)
+_SYSTEM_PROMPT = """Você é Marcelo, assistente pessoal de inteligência artificial.
+Personalidade: direto, inteligente, levemente informal, confiante sem ser arrogante.
+Fale sempre em português brasileiro, de forma natural como numa conversa real.
+Respostas curtas a médias — não faça listas desnecessárias, não seja verboso.
+Lembre-se do histórico da conversa e mantenha continuidade natural.
+
+Você tem acesso a ferramentas:
+- filesystem: criar, ler, editar, deletar arquivos e pastas em ~/Desktop/marcelo/
+- developer: abrir ambiente de desenvolvimento (PyCharm + terminal com claude), enviar prompts ao claude
+
+Quando o usuário disser "cria o projeto X" ou "codar X" ou "abrir projeto X":
+  → chame open_dev_environment(project_name="X")
+
+Quando o modo desenvolvimento está ativo (open_dev_environment já foi chamado) e o usuário descrever uma tarefa de código:
+  → reformate o pedido no seguinte formato e responda APENAS com o prompt formatado:
+
+## Task
+[descrição clara e objetiva da tarefa]
+
+## Requisitos
+- [item específico e acionável]
+- [item específico e acionável]
+
+## Contexto
+Projeto: [nome] | Workspace: ~/Desktop/marcelo/[nome]/
+
+## Constraints
+[arquitetura, stack, estilo — se mencionados pelo usuário; omitir se não mencionado]
+
+Antes de responder, classifique internamente a complexidade:
+- Se a tarefa exige raciocínio profundo multi-etapas, matemática avançada, geração de código complexo ou análise estruturada longa: defina complexity='complex' e content=[]. NÃO responda.
+- Caso contrário: complexity='simple' e preencha content com sua resposta completa."""
 
 
 class GroqAgnoAgent(AgentPort):
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, tools: list[Toolkit] | None = None) -> None:
         self._model_id = settings.groq_model_id
         agno_db_url = settings.database_url.replace("+asyncpg", "+psycopg")
         db = PostgresDb(db_url=agno_db_url)
         self._agent = Agent(
             model=Groq(id=self._model_id),
             db=db,
+            tools=tools or [],
             add_history_to_context=True,
             add_datetime_to_context=settings.agno_add_datetime,
             add_location_to_context=settings.agno_add_location,
