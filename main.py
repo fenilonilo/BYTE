@@ -10,6 +10,7 @@ from app.api.deps import get_evolution_client, get_logger, get_settings
 from app.api.router import router
 from app.api.voice import router as voice_router
 from app.api.webhooks import router as webhook_router
+from app.api.ws_chat import router as ws_chat_router
 
 structlog.configure(
     processors=[
@@ -45,4 +46,5 @@ app.add_middleware(
 )
 app.include_router(router, prefix="/api/v1")
 app.include_router(voice_router, prefix="/api/v1")
+app.include_router(ws_chat_router, prefix="/api/v1")
 app.include_router(webhook_router, prefix="/api/v1")
