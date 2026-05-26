@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marcelo — Interface</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #fff;
+    }
+
+    #canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    /* ── Transcript ── */
+    #transcript {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      max-width: 420px;
+      max-height: 220px;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .msg {
+      font-size: 13px;
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease;
+    }
+    .msg.user      { color: #a0cfff; }
+    .msg.assistant { color: #b8ffcb; }
+    .msg.interim   { color: rgba(255, 255, 255, 0.35); font-style: italic; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Webcam ── */
+    #webcam-wrap {
+      position: fixed;
+      bottom: 80px;
+      left: 20px;
+      width: 160px;
+      height: 120px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      opacity: 0.6;
+      transition: opacity 0.3s;
+    }
+    #webcam-wrap:hover { opacity: 0.9; }
+    #webcam {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    /* ── Dock ── */
+    #dock {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 32px;
+      padding: 10px 16px;
+      width: min(600px, 90vw);
+    }
+
+    #text-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: 14px;
+      caret-color: #7cf;
+    }
+    #text-input::placeholder { color: rgba(255, 255, 255, 0.28); }
+
+    .dock-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 18px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: color 0.2s, background 0.2s;
+      line-height: 1;
+    }
+    .dock-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.10); }
+    .dock-btn.active { color: #f66; }
+
+    /* ── State badge ── */
+    #state-badge {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: rgba(255, 255, 255, 0.30);
+      padding: 4px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 20px;
+      pointer-events: none;
+      transition: color 0.6s;
+    }
+
+    /* ── Gesture indicator ── */
+    #gesture-badge {
+      position: fixed;
+      bottom: 80px;
+      left: 190px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.25);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="canvas"></canvas>
+
+  <div id="transcript"></div>
+
+  <div id="webcam-wrap">
+    <video id="webcam" autoplay playsinline muted></video>
+  </div>
+
+  <div id="dock">
+    <input
+      id="text-input"
+      type="text"
+      placeholder="Fale ou escreva para o Marcelo…"
+      autocomplete="off"
+      spellcheck="false"
+    >
+    <button class="dock-btn" id="mic-btn" title="Microfone (toggle)">🎤</button>
+    <button class="dock-btn" id="send-btn" title="Enviar">➤</button>
+  </div>
+
+  <div id="state-badge">idle</div>
+  <div id="gesture-badge"></div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    // Expose for hand-tracker.js (needs THREE.Vector3 without its own import)
+    window.THREE = THREE;
+
+    import {
+      init as particleInit,
+      getCamera,
+      setState,
+      setAmplitude,
+      applyHandForce,
+      clearHandForce,
+      setMouseNDC,
+    } from './js/particle-engine.js';
+
+    import { init as handTrackerInit } from './js/hand-tracker.js';
+    import { ChatClient } from './js/chat-client.js';
+
+    const WS_URL  = 'ws://localhost:8000/api/v1/ws/chat';
+    const TTS_URL = 'http://localhost:8000/api/v1/tts';
+
+    // ── Particle engine ──────────────────────────────────────────
+    const canvas = document.getElementById('canvas');
+    particleInit(canvas);
+
+    // ── UI refs ──────────────────────────────────────────────────
+    const stateBadge   = document.getElementById('state-badge');
+    const gestureBadge = document.getElementById('gesture-badge');
+    const transcriptEl = document.getElementById('transcript');
+    const textInput    = document.getElementById('text-input');
+    const micBtn       = document.getElementById('mic-btn');
+    const sendBtn      = document.getElementById('send-btn');
+    const webcamEl     = document.getElementById('webcam');
+
+    const MAX_MESSAGES = 4;
+    let interimEl = null;
+
+    function addTranscript(role, text) {
+      if (role === 'interim') {
+        if (!interimEl) {
+          interimEl = document.createElement('div');
+          interimEl.className = 'msg interim';
+          transcriptEl.appendChild(interimEl);
+        }
+        interimEl.textContent = text;
+        return;
+      }
+
+      // Remove stale interim before adding final
+      if (interimEl) { interimEl.remove(); interimEl = null; }
+
+      const div = document.createElement('div');
+      div.className = `msg ${role === 'user' ? 'user' : 'assistant'}`;
+      div.textContent = (role === 'user' ? 'Você: ' : 'Marcelo: ') + text;
+      transcriptEl.appendChild(div);
+
+      while (transcriptEl.children.length > MAX_MESSAGES) {
+        transcriptEl.removeChild(transcriptEl.firstChild);
+      }
+    }
+
+    // ── Chat client ──────────────────────────────────────────────
+    const client = new ChatClient({
+      wsUrl: WS_URL,
+      ttsUrl: TTS_URL,
+      onState: (s) => {
+        setState(s);
+        stateBadge.textContent = s;
+      },
+      onTranscript: ({ role, text }) => addTranscript(role, text),
+      onResponse:   (text)          => addTranscript('assistant', text),
+      onError:      (msg)           => console.error('[Marcelo]', msg),
+    });
+    client.setAmplitudeCallback((amp) => setAmplitude(amp));
+    client.connect();
+
+    // ── Mic button ───────────────────────────────────────────────
+    let micActive = false;
+
+    micBtn.addEventListener('click', async () => {
+      if (micActive) {
+        client.stopMic();
+        micActive = false;
+        micBtn.classList.remove('active');
+      } else {
+        micActive = true;
+        micBtn.classList.add('active');
+        await client.startMic();
+        micActive = false;
+        micBtn.classList.remove('active');
+      }
+    });
+
+    // ── Text send ────────────────────────────────────────────────
+    function sendText() {
+      const text = textInput.value.trim();
+      if (!text) return;
+      textInput.value = '';
+      client.sendText(text);
+    }
+
+    sendBtn.addEventListener('click', sendText);
+    textInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+    });
+
+    // ── Mouse interaction ────────────────────────────────────────
+    let mouseDown = false;
+
+    window.addEventListener('mousemove', (e) => {
+      const ndcX =  (e.clientX / window.innerWidth)  * 2 - 1;
+      const ndcY = -(e.clientY / window.innerHeight) * 2 + 1;
+      setMouseNDC(ndcX, ndcY, mouseDown);
+    });
+    window.addEventListener('mousedown', () => { mouseDown = true; });
+    window.addEventListener('mouseup',   () => { mouseDown = false; });
+
+    // ── Webcam + hand tracker ────────────────────────────────────
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      webcamEl.srcObject = stream;
+
+      await handTrackerInit(webcamEl, getCamera(), ({ gesture, worldPos, velocity }) => {
+        gestureBadge.textContent = gesture !== 'none' ? gesture : '';
+
+        if (gesture === 'none' || !worldPos) {
+          clearHandForce();
+          return;
+        }
+
+        const wp  = new THREE.Vector3(worldPos.x, worldPos.y, worldPos.z);
+        const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
+        applyHandForce(wp, gesture, vel);
+      });
+    } catch (err) {
+      console.warn('[Marcelo] Camera unavailable:', err.message);
+      document.getElementById('webcam-wrap').style.display = 'none';
+    }
+  </script>
+
+</body>
+</html>
