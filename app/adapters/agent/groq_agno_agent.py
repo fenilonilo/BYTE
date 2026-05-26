@@ -58,7 +58,7 @@ class GroqAgnoAgent(AgentPort):
     def __init__(self, settings: Settings, tools: list[Toolkit] | None = None) -> None:
         self._model_id = settings.groq_tools_model_id if tools else settings.groq_model_id
         self._has_tools = bool(tools)
-        agno_db_url = settings.database_url.replace("+asyncpg", "+psycopg")
+        agno_db_url = settings.database_url.replace("+asyncpg", "+psycopg").split("?")[0]
         db = PostgresDb(db_url=agno_db_url)
         prompt = _SYSTEM_PROMPT_WITH_TOOLS if tools else _SYSTEM_PROMPT
         self._agent = Agent(

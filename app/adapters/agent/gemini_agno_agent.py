@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class GeminiAgnoAgent(AgentPort):
     def __init__(self, settings: Settings) -> None:
         self._model_id = settings.gemini_model_id
-        agno_db_url = settings.database_url.replace("+asyncpg", "+psycopg")
+        agno_db_url = settings.database_url.replace("+asyncpg", "+psycopg").split("?")[0]
         db = PostgresDb(db_url=agno_db_url)
         self._agent = Agent(
             model=Gemini(id=self._model_id),
