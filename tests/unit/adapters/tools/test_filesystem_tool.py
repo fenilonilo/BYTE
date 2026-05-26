@@ -53,7 +53,7 @@ def test_delete_folder(toolkit: FilesystemToolkit, workspace: Path) -> None:
     assert not (workspace / "todel").exists()
 
 
-def test_list_files(toolkit: FilesystemToolkit, workspace: Path) -> None:
+def test_list_files(toolkit: FilesystemToolkit) -> None:
     toolkit.create_file("a.txt", "")
     toolkit.create_folder("subdir")
     result = json.loads(toolkit.list_files())
