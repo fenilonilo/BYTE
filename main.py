@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.deps import get_evolution_client, get_logger, get_settings
 from app.api.router import router
+from app.api.voice import router as voice_router
 from app.api.webhooks import router as webhook_router
 
 structlog.configure(
@@ -43,4 +44,5 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router, prefix="/api/v1")
+app.include_router(voice_router, prefix="/api/v1")
 app.include_router(webhook_router, prefix="/api/v1")
