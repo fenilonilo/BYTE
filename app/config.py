@@ -20,9 +20,13 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model_id: str = "llama-3.3-70b-versatile"
 
-    # Groq TTS
-    groq_tts_model: str = "playai-tts"
-    groq_tts_voice: str = "Fritz-PlayAI"
+    # Groq TTS — Orpheus v1
+    groq_tts_model: str = "canopylabs/orpheus-v1-english"
+    groq_tts_voice: str = "daniel"
+
+    # Developer tools
+    workspace_path: str = ""  # resolved at runtime to ~/Desktop/marcelo if empty
+    pycharm_path: str = r"C:\Users\fenil\AppData\Local\Programs\PyCharm 2025.2.0.1\bin\pycharm.bat"
 
     # Google Gemini (Gemini 1.5 Flash — complex/fallback model)
     google_api_key: str = ""
