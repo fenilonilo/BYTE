@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import subprocess
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from app.adapters.shell.windows_shell_adapter import WindowsShellAdapter
 
