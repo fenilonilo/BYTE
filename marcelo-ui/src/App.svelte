@@ -1,7 +1,13 @@
 <script lang="ts">
-  // Filled in Task 12 after all components exist
+  import ParticleCanvas    from './components/ParticleCanvas.svelte'
+  import WebcamView        from './components/WebcamView.svelte'
+  import ChatOverlay       from './components/ChatOverlay.svelte'
+  import ProjectsOverlay   from './components/ProjectsOverlay.svelte'
+  import GestureHUD        from './components/GestureHUD.svelte'
 </script>
 
-<div style="width:100vw;height:100vh;background:#060a0f;display:flex;align-items:center;justify-content:center;">
-  <span style="color:rgba(99,179,255,0.4);font-family:monospace">marcelo ui v2 — loading</span>
-</div>
+<ParticleCanvas />
+<WebcamView />
+<GestureHUD />
+<ChatOverlay />
+<ProjectsOverlay />
