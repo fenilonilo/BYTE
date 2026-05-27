@@ -12,7 +12,8 @@ function _getCtx() {
  * Returns Promise that resolves when playback ends.
  */
 export async function playAndAnalyze(arrayBuffer, onAmplitude) {
-  const ctx     = _getCtx();
+  const ctx = _getCtx();
+  if (ctx.state === 'suspended') await ctx.resume();
   const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
 
   const analyser = ctx.createAnalyser();

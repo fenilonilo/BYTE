@@ -63,3 +63,24 @@ logs/
 # Misc
 .cache/
 node_modules/
+
+# Claude Code
+.claude/settings.local.json
+.claude/settings.json
+
+# Playwright MCP
+.playwright-mcp/
+
+# Screenshots / temp images
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Dev server logs
+uvicorn_out.txt
+uvicorn_err.txt
+server_run.log
+
+# Large external reference docs
+docs/AGNO_DOCS.txt

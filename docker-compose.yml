@@ -1,12 +1,14 @@
 services:
   db:
     image: pgvector/pgvector:pg16
+    container_name: db_marcelo
     environment:
       POSTGRES_DB: marcelo
       POSTGRES_USER: marcelo
       POSTGRES_PASSWORD: marcelo
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,19 +17,65 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_marcelo
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-api:
+    container_name: evolution_api
+    image: atendai/evolution-api:v2.2.3
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      # Isso aqui força o override de qualquer erro no arquivo .env
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_TYPE=postgres
+      - DATABASE_CONNECTION_URI=postgresql://marcelo:marcelo@db:5432/marcelo?schema=evolution&sslmode=disable
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1035194821
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - evolution_instances:/evolution/instances
+
   app:
     build: .
     depends_on:
       db:
         condition: service_healthy
+      evolution-api:
+        condition: service_started
     environment:
+      # App usando o schema 'public' ou 'app'
       MARCELO_DATABASE_URL: postgresql+asyncpg://marcelo:marcelo@db:5432/marcelo
       MARCELO_AGNO_MODEL_ID: claude-sonnet-4-6
       MARCELO_AGNO_ADD_DATETIME: "true"
       MARCELO_AGNO_ADD_LOCATION: "true"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MARCELO_GROQ_API_KEY: ${GROQ_API_KEY}
+      MARCELO_GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
     ports:
       - "8000:8000"
 
 volumes:
   pgdata:
+  redisdata:
+  evolution_instances:

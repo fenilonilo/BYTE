@@ -1,20 +1,30 @@
 // MediaPipe Hands gesture tracker
 // window.THREE must be set before calling init()
 
-const GESTURE = {
-  pinchDist:   0.06,
-  explosiveMs: 150,
+const CFG = {
+  pinchDist:      0.07,   // thumb-index dist threshold
+  pinchOpenMs:    600,    // max ms pinch→open for explode
+  debounceFrames: 3,      // frames same gesture before reporting
+  posAlpha:       0.25,   // EMA for position (lower = smoother)
+  velAlpha:       0.18,   // EMA for velocity
 };
 
-let camera3D    = null;
-let lastGesture = 'none';
-let lastFistTime = null;
-let prevPalmPos  = { x: 0, y: 0, z: 0 };
-let prevTime     = performance.now();
+let camera3D     = null;
+let lastGesture  = 'none';
+let pendingGesture = 'none';
+let pendingCount   = 0;
+
+let pinchStartTime = null;  // tracks when pinch began
+
+// Smoothed position and velocity
+let smoothPos = { x: 0, y: 0, z: 0 };
+let smoothVel = { x: 0, y: 0, z: 0 };
+let prevSmoothedPos = null;
+let prevTime  = performance.now();
 
 /**
  * @param {HTMLVideoElement} videoEl
- * @param {THREE.PerspectiveCamera} camera — Three.js camera for world-space unproject
+ * @param {THREE.PerspectiveCamera} camera
  * @param {Function} onGesture — ({gesture, worldPos, velocity}) each frame
  */
 export async function init(videoEl, camera, onGesture) {
@@ -28,53 +38,93 @@ export async function init(videoEl, camera, onGesture) {
   });
 
   hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.5,
+    maxNumHands:            1,
+    modelComplexity:        1,
+    minDetectionConfidence: 0.65,
+    minTrackingConfidence:  0.55,
   });
 
   hands.onResults((results) => {
     if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-      if (lastGesture !== 'none') {
-        onGesture({ gesture: 'none', worldPos: null, velocity: null });
-        lastGesture = 'none';
-      }
+      _commitGesture('none', null, null, onGesture);
       return;
     }
 
-    const lm      = results.multiHandLandmarks[0];
-    const gesture = _classify(lm);
-    const worldPos = _landmarkToWorld(lm[9]);
+    const lm  = results.multiHandLandmarks[0];
+    const raw = _landmarkToWorld(lm[9]);
 
     const now = performance.now();
     const dt  = Math.max((now - prevTime) / 1000, 0.001);
     prevTime  = now;
 
-    const velocity = {
-      x: (worldPos.x - prevPalmPos.x) / dt,
-      y: (worldPos.y - prevPalmPos.y) / dt,
-      z: (worldPos.z - prevPalmPos.z) / dt,
-    };
-    prevPalmPos = { ...worldPos };
-    lastGesture = gesture;
+    // EMA position smoothing
+    if (prevSmoothedPos === null) {
+      smoothPos = { ...raw };
+    } else {
+      smoothPos.x += CFG.posAlpha * (raw.x - smoothPos.x);
+      smoothPos.y += CFG.posAlpha * (raw.y - smoothPos.y);
+      smoothPos.z += CFG.posAlpha * (raw.z - smoothPos.z);
+    }
 
-    onGesture({ gesture, worldPos, velocity });
+    // Raw velocity then EMA smooth
+    const rawVel = prevSmoothedPos
+      ? {
+          x: (smoothPos.x - prevSmoothedPos.x) / dt,
+          y: (smoothPos.y - prevSmoothedPos.y) / dt,
+          z: (smoothPos.z - prevSmoothedPos.z) / dt,
+        }
+      : { x: 0, y: 0, z: 0 };
+
+    smoothVel.x += CFG.velAlpha * (rawVel.x - smoothVel.x);
+    smoothVel.y += CFG.velAlpha * (rawVel.y - smoothVel.y);
+    smoothVel.z += CFG.velAlpha * (rawVel.z - smoothVel.z);
+
+    prevSmoothedPos = { ...smoothPos };
+
+    const rawGesture = _classify(lm, now);
+    _commitGesture(rawGesture, { ...smoothPos }, { ...smoothVel }, onGesture);
   });
 
   const mpCamera = new window.Camera(videoEl, {
     onFrame: async () => { await hands.send({ image: videoEl }); },
-    width: 320,
-    height: 240,
+    width: 640,
+    height: 480,
   });
   mpCamera.start();
+}
+
+// Instantaneous gestures bypass debounce — fire on first frame
+const INSTANT_GESTURES = new Set(['explode', 'pinch']);
+
+function _commitGesture(gesture, pos, vel, onGesture) {
+  if (INSTANT_GESTURES.has(gesture)) {
+    lastGesture    = gesture;
+    pendingGesture = gesture;
+    pendingCount   = CFG.debounceFrames;
+    onGesture({ gesture, worldPos: pos, velocity: vel });
+    return;
+  }
+
+  if (gesture === pendingGesture) {
+    pendingCount++;
+  } else {
+    pendingGesture = gesture;
+    pendingCount   = 1;
+  }
+
+  if (pendingCount >= CFG.debounceFrames || gesture === 'none') {
+    if (gesture !== lastGesture || gesture !== 'none') {
+      lastGesture = gesture;
+      onGesture({ gesture, worldPos: pos, velocity: vel });
+    }
+  }
 }
 
 function _loadScript(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
     const s = document.createElement('script');
-    s.src = src;
+    s.src     = src;
     s.onload  = resolve;
     s.onerror = reject;
     document.head.appendChild(s);
@@ -85,55 +135,55 @@ function _dist(a, b) {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
 }
 
-function _classify(lm) {
+function _fingerExtended(tip, pip) {
+  // tip.y < pip.y — tip above PIP in image space (y goes down). Relaxed threshold.
+  return tip.y < pip.y + 0.01;
+}
+
+function _classify(lm, now) {
   const thumbTip  = lm[4];
   const indexTip  = lm[8];
   const middleTip = lm[12];
   const ringTip   = lm[16];
   const pinkyTip  = lm[20];
 
-  // Pinch: thumb-index close
-  if (_dist(thumbTip, indexTip) < GESTURE.pinchDist) return 'pinch';
+  const isPinch = _dist(thumbTip, indexTip) < CFG.pinchDist;
 
-  // Curl: tip y > pip y in image coords (y increases downward)
-  const indexCurled  = indexTip.y  > lm[6].y;
-  const middleCurled = middleTip.y > lm[10].y;
-  const ringCurled   = ringTip.y   > lm[14].y;
-  const pinkyCurled  = pinkyTip.y  > lm[18].y;
+  const indexExt  = _fingerExtended(indexTip,  lm[6]);
+  const middleExt = _fingerExtended(middleTip, lm[10]);
+  const ringExt   = _fingerExtended(ringTip,   lm[14]);
+  const pinkyExt  = _fingerExtended(pinkyTip,  lm[18]);
+  const extCount  = [indexExt, middleExt, ringExt, pinkyExt].filter(Boolean).length;
 
-  const allCurled = indexCurled && middleCurled && ringCurled && pinkyCurled;
-  if (allCurled) {
-    if (lastGesture !== 'attract') lastFistTime = performance.now();
-    return 'attract';
+  // Pinch held
+  if (isPinch) {
+    if (pinchStartTime === null) pinchStartTime = now;
+    return 'pinch';
   }
 
-  // Explosive open: fist → open within threshold
-  if (lastGesture === 'attract' && lastFistTime !== null) {
-    const elapsed = performance.now() - lastFistTime;
-    if (elapsed < GESTURE.explosiveMs) {
-      lastFistTime = null;
-      return 'explode';
-    }
+  // Explode: pinch released → hand open (≥2 fingers free) within window
+  if (pinchStartTime !== null) {
+    const held = now - pinchStartTime;
+    pinchStartTime = null;
+    if (extCount >= 2 && held < CFG.pinchOpenMs) return 'explode';
   }
 
-  // Point: only index extended
-  if (!indexCurled && middleCurled && ringCurled && pinkyCurled) return 'repel';
+  // Fist: no fingers extended
+  if (extCount === 0) return 'attract';
 
-  const allOpen = !indexCurled && !middleCurled && !ringCurled && !pinkyCurled;
-  if (allOpen) {
-    // Wrist tilt: angle of wrist→middle_mcp determines rotate vs flow
-    const dx    = lm[9].x - lm[0].x;
-    const dy    = lm[9].y - lm[0].y;
-    const angle = Math.abs(Math.atan2(dy, dx));
-    return (angle < 0.5 || angle > 2.6) ? 'rotate' : 'flow';
-  }
+  // Repel: only index extended
+  if (indexExt && !middleExt && !ringExt && !pinkyExt) return 'repel';
 
+  // Rotate: peace sign — index + middle extended, ring + pinky curled
+  if (indexExt && middleExt && !ringExt && !pinkyExt) return 'rotate';
+
+  // Open hand — no specific gesture, neutral
   return 'none';
 }
 
 function _landmarkToWorld(lm) {
   const THREE = window.THREE;
-  const ndcX  = (lm.x * 2) - 1;
+  const ndcX  =  (lm.x * 2) - 1;
   const ndcY  = -(lm.y * 2) + 1;
 
   const v   = new THREE.Vector3(ndcX, ndcY, 0.5);

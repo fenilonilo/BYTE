@@ -36,6 +36,6 @@ async def text_to_speech(
         model=settings.groq_tts_model,
         voice=settings.groq_tts_voice,
         input=body.text,
-        response_format="mp3",
+        response_format="wav",
     )
-    return Response(content=audio_response.read(), media_type="audio/mpeg")
+    return Response(content=audio_response.read(), media_type="audio/wav")

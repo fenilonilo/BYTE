@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import sys
 from contextlib import asynccontextmanager
+
+# asyncpg on Windows with Python 3.12+ ProactorEventLoop causes WinError 64
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import structlog
 from fastapi import FastAPI

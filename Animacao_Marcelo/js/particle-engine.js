@@ -1,8 +1,8 @@
 // Particle swarm engine — Three.js, state machine, force fields, audio uniforms
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import * as THREE from '../vendor/three/three.module.js';
+import { EffectComposer } from '../vendor/three/postprocessing/EffectComposer.js';
+import { RenderPass } from '../vendor/three/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from '../vendor/three/postprocessing/UnrealBloomPass.js';
 
 const COUNT       = 20000;
 const HAND_RADIUS = 25;
@@ -32,10 +32,13 @@ let currentCore   = STATE_PARAMS.idle.core;
 let uAmplitude = 0.0;
 let smoothAmp  = 0.0;
 
-let handActive   = false;
-let handPos      = new THREE.Vector3();
-let handGesture  = 'none';
-let handVelocity = new THREE.Vector3();
+let handActive       = false;
+let handPos          = new THREE.Vector3();
+let handGesture      = 'none';
+let handVelocity     = new THREE.Vector3();
+let explodeActive    = false;  // explosion persists until cancelled
+let explodeImpulse   = false;  // fire initial burst on first frame
+let gestureRotOffset = 0.0;    // accumulated rotation from peace gesture
 
 let mouseNDC   = new THREE.Vector2(9999, 9999);
 let isDragging = false;
@@ -149,11 +152,20 @@ export function applyHandForce(worldPos, gesture, velocity) {
   handPos.copy(worldPos);
   handGesture  = gesture;
   handVelocity.copy(velocity || new THREE.Vector3());
+  if (gesture === 'explode') {
+    explodeActive  = true;
+    explodeImpulse = true;
+  }
+  if (gesture === 'attract') {
+    explodeActive  = false;  // fist cancels explosion
+    explodeImpulse = false;
+  }
 }
 
 export function clearHandForce() {
   handActive  = false;
   handGesture = 'none';
+  // Note: explodeActive intentionally persists after hand leaves frame
 }
 
 export function setMouseNDC(ndcX, ndcY, dragging) {
@@ -194,7 +206,14 @@ function _animate() {
   material.uniforms.uAmplitude.value = smoothAmp;
 
   const t    = time * 1.086;
-  const rotT = t * currentRot;
+
+  // Rotate follows hand X movement — move peace sign left/right to spin sphere
+  if (handActive && handGesture === 'rotate') {
+    // handVelocity is world-space units/sec; scale to rotation radians/frame
+    gestureRotOffset += handVelocity.x * delta * 0.15;
+  }
+
+  const rotT = t * currentRot + gestureRotOffset;
   const cosR = Math.cos(rotT);
   const sinR = Math.sin(rotT);
 
@@ -227,31 +246,32 @@ function _animate() {
     const fz = xBase * sinR + zBase * cosR;
     target.set(fx, yBase, fz);
 
-    // Hand force
-    if (handActive) {
+    // Explode — initial impulse outward from center, then free-float (no lerp)
+    if (explodeActive && explodeImpulse) {
+      const fromCenter = positions[i].clone().normalize();
+      // Randomize direction slightly so particles scatter in 3D
+      fromCenter.x += (Math.random() - 0.5) * 0.4;
+      fromCenter.y += (Math.random() - 0.5) * 0.4;
+      fromCenter.z += (Math.random() - 0.5) * 0.4;
+      velocities[i].add(fromCenter.normalize().multiplyScalar(12.0 + Math.random() * 6.0));
+    }
+
+    // Hand force (proximity-based, only when not exploding)
+    if (handActive && !explodeActive && handGesture !== 'rotate') {
       const toHand = handPos.clone().sub(positions[i]);
       const dist   = toHand.length();
       const inf    = Math.max(0, 1 - dist / HAND_RADIUS) ** 2;
 
       if (inf > 0) {
         switch (handGesture) {
-          case 'flow':
-            velocities[i].add(handVelocity.clone().multiplyScalar(inf * 0.8));
-            break;
-          case 'rotate':
-            velocities[i].add(_tangent(toHand).multiplyScalar(inf * 2.0));
-            break;
           case 'attract':
-            velocities[i].add(toHand.normalize().multiplyScalar(inf * 2.0));
-            break;
-          case 'explode':
-            velocities[i].add(toHand.normalize().multiplyScalar(-inf * 5.0));
+            velocities[i].add(toHand.normalize().multiplyScalar(inf * 2.5));
             break;
           case 'pinch':
             velocities[i].add(toHand.multiplyScalar(inf * 3.0));
             break;
           case 'repel':
-            velocities[i].add(toHand.normalize().multiplyScalar(-inf * 1.5));
+            velocities[i].add(toHand.normalize().multiplyScalar(-inf * 2.0));
             break;
         }
       }
@@ -266,14 +286,16 @@ function _animate() {
       velocities[i].add(toMouse.normalize().multiplyScalar(-mInf * strength));
     }
 
-    // Apply velocity, damp
+    // Apply velocity — low damping when exploding (particles float freely)
     positions[i].add(velocities[i].clone().multiplyScalar(delta));
-    velocities[i].multiplyScalar(0.85);
+    velocities[i].multiplyScalar(explodeActive ? 0.97 : 0.85);
 
-    // Lerp toward swarm target — slower lerp = trail when pushed hard
-    const speed = velocities[i].length();
-    const lerpF = Math.max(0.03, 0.1 - speed * 0.01);
-    positions[i].lerp(target, lerpF);
+    // Lerp toward swarm target — disabled during explosion (no gravity pulling back)
+    if (!explodeActive) {
+      const speed = velocities[i].length();
+      const lerpF = Math.max(0.03, 0.1 - speed * 0.01);
+      positions[i].lerp(target, lerpF);
+    }
 
     dummy.position.copy(positions[i]);
     dummy.updateMatrix();
@@ -289,4 +311,6 @@ function _animate() {
   instancedMesh.instanceMatrix.needsUpdate = true;
   instancedMesh.instanceColor.needsUpdate  = true;
   composer.render();
+
+  if (explodeImpulse) explodeImpulse = false;  // impulse fires once
 }

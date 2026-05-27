@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from logging.config import fileConfig
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
