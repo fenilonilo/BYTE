@@ -7,14 +7,14 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_llm, get_logger, get_repo
+from app.api.deps import get_agent, get_logger, get_repo
 from app.api.schemas import IncomingMessageSchema, OutgoingMessageSchema
 from app.application.use_cases.process_incoming_message import ProcessIncomingMessage
 from app.config import Settings
 from app.domain.entities import IncomingMessage
 
 if TYPE_CHECKING:
-    from app.ports.llm import LLMPort
+    from app.ports.agent import AgentPort
     from app.ports.logger import LoggerPort
     from app.ports.repository import RepositoryPort
 
@@ -26,11 +26,11 @@ _settings = Settings()
 @router.post("/messages", response_model=OutgoingMessageSchema)
 async def receive_message(
     body: IncomingMessageSchema,
-    llm: LLMPort = Depends(get_llm),
+    agent: AgentPort = Depends(get_agent),
     repo: RepositoryPort = Depends(get_repo),
     log: LoggerPort = Depends(get_logger),
 ) -> OutgoingMessageSchema:
-    use_case = ProcessIncomingMessage(llm=llm, repo=repo, log=log)
+    use_case = ProcessIncomingMessage(agent=agent, repo=repo, log=log)
     incoming = IncomingMessage(
         id=str(uuid4()),
         sender=body.sender,
