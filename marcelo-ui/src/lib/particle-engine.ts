@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import type { ParticleState } from './types'
+import type { UnifiedGesture, UnifiedGestureState } from './types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,33 @@ let isDragging = false
 
 // Freeze state
 let frozenUntil = 0
+
+// ─── Gesture modifier system ──────────────────────────────────────────────────
+
+interface GestureModifier {
+  spreadMult: number
+  coreMult:   number
+  rotMult:    number
+  bloomAdd:   number
+}
+
+const GESTURE_MODIFIERS: Record<UnifiedGesture, GestureModifier> = {
+  none:      { spreadMult: 1.0, coreMult: 1.0, rotMult: 1.0, bloomAdd: 0.0 },
+  pinch:     { spreadMult: 0.1, coreMult: 0.2, rotMult: 0.5, bloomAdd: 0.3 },
+  swipe:     { spreadMult: 1.2, coreMult: 1.0, rotMult: 4.0, bloomAdd: 0.5 },
+  freeze:    { spreadMult: 1.0, coreMult: 1.0, rotMult: 0.0, bloomAdd: 0.0 },
+  orbit:     { spreadMult: 0.8, coreMult: 0.8, rotMult: 2.0, bloomAdd: 0.4 },
+  portal:    { spreadMult: 0.6, coreMult: 0.6, rotMult: 1.5, bloomAdd: 0.6 },
+  explosion: { spreadMult: 1.0, coreMult: 1.0, rotMult: 1.0, bloomAdd: 0.0 },
+}
+
+let _targetMod: GestureModifier = { ...GESTURE_MODIFIERS.none }
+let _activeMod: GestureModifier = { ...GESTURE_MODIFIERS.none }
+
+// One-shot guards — prevent multi-fire within a single gesture hold
+let _blastFired:  boolean = false
+let _swipeFired:  boolean = false
+let _freezeFired: boolean = false
 
 // ─── Shader material ──────────────────────────────────────────────────────────
 
@@ -304,6 +332,64 @@ export function clearBreath(): void {
   if (idx >= 0) activeEffects.splice(idx, 1)
 }
 
+/** Apply a unified gesture state: sets modifier targets and fires one-shot effects. */
+export function applyGesture(state: UnifiedGestureState): void {
+  _targetMod = GESTURE_MODIFIERS[state.gesture] ?? GESTURE_MODIFIERS.none
+
+  // ONE-SHOT: explosion blast (fires once per blast phase entry)
+  if (state.gesture === 'explosion') {
+    if (!_blastFired && state.phase === 'blast') {
+      shockwave(new THREE.Vector3(0, 0, 0), 80, 10)
+      _blastFired = true
+    }
+  } else {
+    _blastFired = false
+  }
+
+  // ONE-SHOT: swipe wave (fires once per swipe gesture commit)
+  if (state.gesture === 'swipe') {
+    if (!_swipeFired) {
+      activeEffects.push({
+        type: 'wave',
+        origin: new THREE.Vector3(0, 0, 0),
+        dirSign: state.swipeSign >= 0 ? 1 : -1,
+        speed: 3,
+      })
+      _swipeFired = true
+    }
+  } else {
+    _swipeFired = false
+  }
+
+  // ONE-SHOT: freeze (fires crystallize once per freeze gesture commit)
+  if (state.gesture === 'freeze') {
+    if (!_freezeFired) {
+      crystallize(3000)
+      _freezeFired = true
+    }
+  } else {
+    _freezeFired = false
+  }
+
+  // PERSISTENT: orbit (update or remove)
+  const orbitIdx = activeEffects.findIndex(e => e.type === 'orbit')
+  if (state.gesture === 'orbit') {
+    if (orbitIdx >= 0) activeEffects.splice(orbitIdx, 1)
+    activeEffects.push({ type: 'orbit', origin: state.orbitAnchor.clone(), radius: 20 })
+  } else if (orbitIdx >= 0) {
+    activeEffects.splice(orbitIdx, 1)
+  }
+
+  // PERSISTENT: portal (update or remove)
+  const portalIdx = activeEffects.findIndex(e => e.type === 'portal')
+  if (state.gesture === 'portal') {
+    if (portalIdx >= 0) activeEffects.splice(portalIdx, 1)
+    activeEffects.push({ type: 'portal', origin: state.portalCenter.clone(), radius: state.portalRadius })
+  } else if (portalIdx >= 0) {
+    activeEffects.splice(portalIdx, 1)
+  }
+}
+
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 function _onResize(): void {
@@ -353,13 +439,21 @@ function _animate(): void {
   }
 
   smoothAmp += (uAmplitude - smoothAmp) * 0.1
-  if (!frozen) bloomPass.strength = currentBloom + smoothAmp * 1.5
+
+  // Lerp active modifier toward target
+  const mLerp = 0.05
+  _activeMod.spreadMult += (_targetMod.spreadMult - _activeMod.spreadMult) * mLerp
+  _activeMod.coreMult   += (_targetMod.coreMult   - _activeMod.coreMult)   * mLerp
+  _activeMod.rotMult    += (_targetMod.rotMult    - _activeMod.rotMult)    * mLerp
+  _activeMod.bloomAdd   += (_targetMod.bloomAdd   - _activeMod.bloomAdd)   * mLerp
+
+  if (!frozen) bloomPass.strength = currentBloom + _activeMod.bloomAdd + smoothAmp * 1.5
 
   material.uniforms.uTime.value      = time * 0.4
   material.uniforms.uAmplitude.value = smoothAmp
 
   const t    = time * 1.086
-  const rotT = t * currentRot
+  const rotT = t * currentRot * _activeMod.rotMult
   const cosR = Math.cos(rotT)
   const sinR = Math.sin(rotT)
   const mouseWorld = _ndcToWorld(mouseNDC.x, mouseNDC.y)
@@ -387,7 +481,9 @@ function _animate(): void {
     const n3 = Math.abs((Math.sin(i * 93.989)  * 43758.5453) % 1.0)
 
     const radiusDist    = Math.pow(n3, 5.0)
-    const currentRadius = currentCore + currentSpread * radiusDist
+    const effCore       = currentCore   * _activeMod.coreMult
+    const effSpread     = currentSpread * _activeMod.spreadMult
+    const currentRadius = effCore + effSpread * radiusDist
     const theta = n1 * Math.PI * 2.0
     const phi   = Math.acos((n2 * 2.0) - 1.0)
 
