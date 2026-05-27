@@ -4,12 +4,11 @@
   import * as GestureEngine from '../lib/gesture-engine'
   import { updateGestureState } from '../stores/gesture.svelte'
   import type { GestureState } from '../lib/types'
-  import * as THREE from 'three'
   import {
     shockwave, vortex, orbitAnchor, crystallize,
     splitField, clearSplitField, portalRing, clearPortal,
     directionalBeam, clearBeam, lateralWave, breathePulse, clearBreath,
-    applyHandForce, clearHandForce, setState,
+    applyHandForce, clearHandForce,
   } from '../lib/particle-engine'
 
   let canvasEl: HTMLCanvasElement
@@ -73,7 +72,10 @@
       if (bimanual.pattern === 'orbit') {
         const freeHand = left.gesture !== 'pinch' ? left : right
         if (freeHand.gesture !== 'none') {
-          applyHandForce(freeHand.worldPos, freeHand.gesture, freeHand.velocity)
+          const mapped = freeHand.gesture === 'fist' ? 'attract'
+            : freeHand.gesture === 'open' ? 'repel'
+            : 'pinch'
+          applyHandForce(freeHand.worldPos, mapped, freeHand.velocity)
         }
       }
       return
