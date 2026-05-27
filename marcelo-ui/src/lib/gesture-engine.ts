@@ -36,6 +36,7 @@ let _bimanual: BimanualPattern = {
 
 // prayer state
 let _prayerPhase: 'none' | 'contact' | 'release' | 'blast' = 'none'
+let _blastExpiresAt: number | null = null
 
 // orbit state
 let _orbitAnchorHand: 'left' | 'right' | null = null
@@ -90,6 +91,8 @@ export function dispose(): void {
   _mpCamera = null
   _onGesture = null
   camera3D = null
+  _prayerPhase = 'none'
+  _blastExpiresAt = null
 }
 
 // ─── Internal result handler ──────────────────────────────────────────────────
@@ -186,12 +189,6 @@ function _detectBimanual(now: number): void {
     return
   }
 
-  // ── BLAST PROTECTION: prayer-explosion blast persists for its full duration ──
-  if (_prayerPhase === 'blast') {
-    _bimanual = { active: true, pattern: 'prayer-explosion', phase: 'blast', progress: 1 }
-    return
-  }
-
   // ── FREEZE: both fists within window ──────────────────────────────────────
   if (L.gesture === 'fist' && R.gesture === 'fist') {
     const lt = _lastFistTimes.left; const rt = _lastFistTimes.right
@@ -200,6 +197,17 @@ function _detectBimanual(now: number): void {
       _freezeExpiresAt = now + 3000   // match crystallize(3000) duration
       return
     }
+  }
+
+  // ── BLAST PROTECTION: prayer-explosion blast persists for its full duration ──
+  if (_prayerPhase === 'blast') {
+    if (now < (_blastExpiresAt ?? 0)) {
+      _bimanual = { active: true, pattern: 'prayer-explosion', phase: 'blast', progress: 1 }
+      return
+    }
+    // Blast expired — clear state
+    _prayerPhase = 'none'
+    _blastExpiresAt = null
   }
 
   // ── DUAL-PINCH ────────────────────────────────────────────────────────────
@@ -220,8 +228,8 @@ function _detectBimanual(now: number): void {
         const sepVel = L.velocity.clone().sub(R.velocity).length()
         if (sepVel > PRAYER_VEL * 60) {
           _prayerPhase = 'blast'
+          _blastExpiresAt = now + 500
           _bimanual = { active: true, pattern: 'prayer-explosion', phase: 'blast', progress: 1 }
-          setTimeout(() => { _prayerPhase = 'none' }, 500)
           return
         }
       }
@@ -306,8 +314,9 @@ function _detectBimanual(now: number): void {
 }
 
 function _resetBimanual(): void {
-  if (_bimanual.pattern === 'freeze' && _freezeExpiresAt !== null && performance.now() < _freezeExpiresAt) return
-  if (_prayerPhase === 'blast') return  // blast duration managed by setTimeout
+  const now = performance.now()
+  if (_bimanual.pattern === 'freeze' && _freezeExpiresAt !== null && now < _freezeExpiresAt) return
+  if (_prayerPhase === 'blast' && now < (_blastExpiresAt ?? 0)) return
   _bimanual = { active: false, pattern: null, phase: 'idle', progress: 0 }
   _freezeExpiresAt = null
 }
