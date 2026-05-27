@@ -4,10 +4,10 @@ import type { HandGesture, BimanualGesture, HandState, BimanualPattern, GestureS
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PINCH_DIST    = 0.06   // normalized landmark distance
-const PRAYER_DIST   = 0.08   // palms touching threshold (normalized)
-const PRAYER_VEL    = 0.8    // separation velocity to trigger blast
+const PRAYER_DIST   = 0.15   // palms touching threshold (normalized)
+const PRAYER_VEL    = 0.3    // separation velocity to trigger blast
 const IMPLOSION_VEL = 0.3    // max approach velocity
-const IMPLOSION_DIST = 0.15  // distance to trigger vortex
+const IMPLOSION_DIST = 0.20  // distance to trigger vortex
 const ORBIT_HOLD_MS = 500    // ms pinch must be stable before orbit activates
 const FREEZE_WINDOW = 300    // ms both fists must close within
 
@@ -123,7 +123,7 @@ function _processResults(results: any): void {
     // Breathe detection
     if (gesture === 'open') {
       const speed = velocity.length()
-      if (speed < 0.05 * 60) { // units/s threshold (world space)
+      if (speed < 0.15 * 60) { // units/s threshold (world space)
         if (h.breatheStartTime === null) h.breatheStartTime = now
         if (now - h.breatheStartTime > 1000) {
           h.state.gesture = 'breathe'
@@ -133,7 +133,7 @@ function _processResults(results: any): void {
       } else {
         h.breatheStartTime = null
         // Swipe detection
-        if (Math.abs(velocity.x) > 1.5 * 60) {
+        if (Math.abs(velocity.x) > 0.8 * 60) {  // was 1.5 * 60
           h.state.gesture = 'swipe'
         } else {
           h.state.gesture = 'open'
@@ -186,6 +186,12 @@ function _detectBimanual(now: number): void {
     return
   }
 
+  // ── BLAST PROTECTION: prayer-explosion blast persists for its full duration ──
+  if (_prayerPhase === 'blast') {
+    _bimanual = { active: true, pattern: 'prayer-explosion', phase: 'blast', progress: 1 }
+    return
+  }
+
   // ── FREEZE: both fists within window ──────────────────────────────────────
   if (L.gesture === 'fist' && R.gesture === 'fist') {
     const lt = _lastFistTimes.left; const rt = _lastFistTimes.right
@@ -222,7 +228,7 @@ function _detectBimanual(now: number): void {
       _bimanual = { active: true, pattern: 'prayer-explosion', phase: _prayerPhase, progress: 0.5 }
       return
     } else {
-      if (_prayerPhase !== 'blast') _prayerPhase = 'none'
+      _prayerPhase = 'none'
     }
 
     // ── IMPLOSION: both open, approaching slowly ────────────────────────────
@@ -301,6 +307,7 @@ function _detectBimanual(now: number): void {
 
 function _resetBimanual(): void {
   if (_bimanual.pattern === 'freeze' && _freezeExpiresAt !== null && performance.now() < _freezeExpiresAt) return
+  if (_prayerPhase === 'blast') return  // blast duration managed by setTimeout
   _bimanual = { active: false, pattern: null, phase: 'idle', progress: 0 }
   _freezeExpiresAt = null
 }
