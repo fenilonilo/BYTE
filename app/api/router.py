@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -51,7 +50,7 @@ async def receive_message(
 @router.get("/projects")
 async def list_projects() -> list[dict]:
     """Return directories in workspace_path sorted by mtime descending."""
-    workspace: Path = _settings.workspace_path
+    workspace = _settings.workspace_path
     if not workspace.is_dir():
         return []
 
