@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { gestureState } from '../stores/gesture.svelte'
   import type { BimanualGesture, HandGesture } from '../lib/types'
 
@@ -51,6 +52,11 @@
     badgeTimer && clearTimeout(badgeTimer)
     badgeTimer = setTimeout(() => { badgeText = null }, 1500)
   }
+
+  onDestroy(() => {
+    freezeTimer && clearTimeout(freezeTimer)
+    badgeTimer && clearTimeout(badgeTimer)
+  })
 </script>
 
 <!-- Freeze ice overlay -->
@@ -59,7 +65,7 @@
     position:fixed;inset:0;z-index:25;pointer-events:none;
     background:rgba(150,220,255,0.04);
     animation:iceIn 400ms ease;
-  " class="freeze-overlay"></div>
+  "></div>
 {/if}
 
 <!-- Gesture badge -->
