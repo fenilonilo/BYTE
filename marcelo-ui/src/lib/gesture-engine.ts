@@ -103,6 +103,15 @@ export function dispose(): void {
   _freezeExpiresAt = null
   _hands.left  = _emptyHand()
   _hands.right = _emptyHand()
+  _candidate        = 'none'
+  _candidateCount   = 0
+  _committed        = 'none'
+  _noHandCount      = 0
+  _orbitAnchorHand  = null
+  _orbitAnchorSince = null
+  _orbitTotalDelta  = 0
+  _orbitPrevAngle   = null
+  _lastFistTimes    = { left: null, right: null }
 }
 
 // ─── Result handler ───────────────────────────────────────────────────────────
