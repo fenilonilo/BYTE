@@ -54,7 +54,7 @@ class GroqAgnoAgent(AgentPort):
         db = PostgresDb(db_url=agno_db_url)
         prompt = _SYSTEM_PROMPT_WITH_TOOLS if tools else _SYSTEM_PROMPT
         self._agent = Agent(
-            model=Groq(id=self._model_id),
+            model=Groq(id=self._model_id, api_key=settings.groq_api_key or None),
             db=db,
             tools=tools or [],
             add_history_to_context=True,

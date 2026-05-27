@@ -21,7 +21,7 @@ class GeminiAgnoAgent(AgentPort):
         agno_db_url = settings.database_url.replace("+asyncpg", "+psycopg").split("?")[0]
         db = PostgresDb(db_url=agno_db_url)
         self._agent = Agent(
-            model=Gemini(id=self._model_id),
+            model=Gemini(id=self._model_id, api_key=settings.google_api_key or None),
             db=db,
             add_history_to_context=True,
             add_datetime_to_context=settings.agno_add_datetime,

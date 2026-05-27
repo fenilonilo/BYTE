@@ -11,7 +11,6 @@ from app.adapters.agent.groq_agno_agent import GroqAgnoAgent
 from app.adapters.agent.routing_agno_agent import RoutingAgnoAgent
 from app.adapters.logging.structlog_logger import StructlogLogger
 from app.adapters.messaging.evolution_client import EvolutionClient
-from app.adapters.repository.postgres_repository import PostgresRepository
 from app.adapters.shell.windows_shell_adapter import WindowsShellAdapter
 from app.adapters.tools.developer_tool import DeveloperToolkit
 from app.adapters.tools.filesystem_tool import FilesystemToolkit
@@ -42,7 +41,24 @@ def get_engine() -> AsyncEngine:
 
 @lru_cache
 def get_repo() -> RepositoryPort:
-    return PostgresRepository(get_engine())
+    """Return PostgresRepository, falling back to InMemory when DB is unreachable."""
+    import socket
+
+    from sqlalchemy.engine import make_url
+
+    from app.adapters.repository.in_memory_repository import InMemoryRepository
+
+    url = make_url(get_settings().database_url)
+    host = url.host or "localhost"
+    port = url.port or 5432
+    try:
+        socket.setdefaulttimeout(1)
+        with socket.create_connection((host, port), timeout=1):
+            pass
+        from app.adapters.repository.postgres_repository import PostgresRepository
+        return PostgresRepository(get_engine())
+    except OSError:
+        return InMemoryRepository()
 
 
 @lru_cache
