@@ -1,66 +1,61 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { gestureState } from '../stores/gesture.svelte'
-  import type { BimanualGesture, HandGesture } from '../lib/types'
+  import type { UnifiedGesture } from '../lib/types'
 
-  // Freeze ice overlay: tracked via crystallize bimanual
-  let frozen = $state(false)
-  let freezeTimer: ReturnType<typeof setTimeout> | null = null
+  // Freeze countdown
+  let freezeCountdown = $state(0)
+  let _freezeInterval: ReturnType<typeof setInterval> | null = null
 
   // Badge visible timer
-  let badgeText = $state<string | null>(null)
-  let badgeTimer: ReturnType<typeof setTimeout> | null = null
+  let badgeVisible = $state(false)
+  let _badgeTimer: ReturnType<typeof setTimeout> | null = null
 
-  const bimanualLabels: Record<BimanualGesture, string> = {
-    'prayer-explosion': '🙏 EXPLOSÃO',
-    'implosion':        '🌀 IMPLOSÃO',
-    'orbit':            '🌌 ÓRBITA',
-    'freeze':           '❄️ CONGELAR',
-    'dual-pinch':       '⚡ CAMPO DUPLO',
-    'portal':           '🔮 PORTAL',
-  }
-
-  const unimanualLabels: Partial<Record<HandGesture, string>> = {
-    pinch:   '👌 PINCH',
-    fist:    '✊ BURST',
-    open:    '🖐 REPELIR',
-    point:   '☝️ APONTAR',
-    swipe:   '🌊 ONDA',
-    breathe: '💫 RESPIRAR',
+  const LABELS: Record<UnifiedGesture, string> = {
+    none:      '',
+    pinch:     '👌 PINCH',
+    swipe:     '🌊 ONDA',
+    explosion: '🙏 EXPLOSÃO',
+    orbit:     '🌌 ÓRBITA',
+    freeze:    '❄️ CONGELAR',
+    portal:    '🔮 PORTAL',
   }
 
   $effect(() => {
-    const { bimanual, left, right } = gestureState
+    const g = gestureState.gesture
+    if (g === 'none') { badgeVisible = false; return }
 
-    if (bimanual.active && bimanual.pattern) {
-      _showBadge(bimanualLabels[bimanual.pattern])
-      if (bimanual.pattern === 'freeze') {
-        frozen = true
-        freezeTimer && clearTimeout(freezeTimer)
-        freezeTimer = setTimeout(() => { frozen = false }, 3000)
-      }
-      return
+    badgeVisible = true
+    _badgeTimer && clearTimeout(_badgeTimer)
+    _badgeTimer = setTimeout(() => { badgeVisible = false }, 1500)
+
+    // Start freeze countdown
+    if (g === 'freeze' && !_freezeInterval) {
+      freezeCountdown = 3
+      _freezeInterval = setInterval(() => {
+        freezeCountdown = Math.max(0, freezeCountdown - 1)
+        if (freezeCountdown <= 0) {
+          clearInterval(_freezeInterval!)
+          _freezeInterval = null
+        }
+      }, 1000)
     }
-
-    const activeGesture = left.gesture !== 'none' ? left.gesture : right.gesture
-    const label = unimanualLabels[activeGesture]
-    if (label) _showBadge(label)
+    // Reset freeze countdown if gesture changed away from freeze
+    if (g !== 'freeze' && _freezeInterval) {
+      clearInterval(_freezeInterval)
+      _freezeInterval = null
+      freezeCountdown = 0
+    }
   })
 
-  function _showBadge(text: string): void {
-    badgeText = text
-    badgeTimer && clearTimeout(badgeTimer)
-    badgeTimer = setTimeout(() => { badgeText = null }, 1500)
-  }
-
   onDestroy(() => {
-    freezeTimer && clearTimeout(freezeTimer)
-    badgeTimer && clearTimeout(badgeTimer)
+    _badgeTimer   && clearTimeout(_badgeTimer)
+    _freezeInterval && clearInterval(_freezeInterval)
   })
 </script>
 
 <!-- Freeze ice overlay -->
-{#if frozen}
+{#if gestureState.gesture === 'freeze'}
   <div style="
     position:fixed;inset:0;z-index:25;pointer-events:none;
     background:rgba(150,220,255,0.04);
@@ -69,7 +64,7 @@
 {/if}
 
 <!-- Gesture badge -->
-{#if badgeText}
+{#if badgeVisible && gestureState.gesture !== 'none'}
   <div style="
     position:fixed;
     top:16px;
@@ -87,8 +82,32 @@
     color:rgba(255,255,255,0.8);
     pointer-events:none;
     animation:fadeIn 100ms ease;
+    display:flex;gap:8px;align-items:center;
   ">
-    {badgeText}
+    {LABELS[gestureState.gesture]}
+
+    {#if gestureState.gesture === 'swipe'}
+      <span>{gestureState.swipeSign >= 0 ? '→' : '←'}</span>
+    {/if}
+
+    {#if gestureState.gesture === 'orbit'}
+      <span style="opacity:0.6;font-size:9px;">âncora ativa</span>
+    {/if}
+
+    {#if gestureState.gesture === 'portal'}
+      <span style="opacity:0.6;font-size:9px;">r={Math.round(gestureState.portalRadius)}</span>
+    {/if}
+
+    {#if gestureState.gesture === 'freeze' && freezeCountdown > 0}
+      <span style="opacity:0.6;font-size:9px;">{freezeCountdown}s</span>
+    {/if}
+
+    {#if gestureState.handCount > 0}
+      <span style="
+        background:rgba(255,255,255,0.1);border-radius:10px;
+        padding:1px 6px;font-size:9px;opacity:0.7;
+      ">{gestureState.handCount}✋</span>
+    {/if}
   </div>
 {/if}
 
