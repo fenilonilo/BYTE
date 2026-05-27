@@ -7,8 +7,7 @@ import type { UnifiedGesture, UnifiedGestureState } from './types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const COUNT       = 20_000
-const HAND_RADIUS = 25
+const COUNT        = 20_000
 const MOUSE_RADIUS = 15
 
 const STATE_PARAMS: Record<ParticleState, {
@@ -64,16 +63,6 @@ interface ActiveEffect {
 }
 
 const activeEffects: ActiveEffect[] = []
-
-// Hand state
-let handActive   = false
-let handPos      = new THREE.Vector3()
-let handGesture  = 'none'
-let handVelocity = new THREE.Vector3()
-
-// Global gesture state (replaces hand-cursor approach for continuous gestures)
-let _globalGesture: 'none' | 'attract' | 'repel' | 'breathe' = 'none'
-let _globalOrigin  = new THREE.Vector3()  // center of effect (default scene origin)
 
 let mouseNDC   = new THREE.Vector2(9999, 9999)
 let isDragging = false
@@ -205,33 +194,6 @@ export function setAmplitude(value: number): void {
   uAmplitude = Math.max(0, Math.min(1, value))
 }
 
-export function applyHandForce(worldPos: THREE.Vector3, gesture: string, velocity: THREE.Vector3): void {
-  handActive   = true
-  handPos.copy(worldPos)
-  handGesture  = gesture
-  handVelocity.copy(velocity)
-}
-
-export function clearHandForce(): void {
-  handActive  = false
-  handGesture = 'none'
-}
-
-/** Set a continuous global gesture effect. All particles affected regardless of position. */
-export function setGlobalGesture(
-  type: 'none' | 'attract' | 'repel' | 'breathe',
-  origin?: THREE.Vector3,
-): void {
-  _globalGesture = type
-  if (origin) _globalOrigin.copy(origin)
-  else _globalOrigin.set(0, 0, 0)
-}
-
-/** Clear the global gesture. */
-export function clearGlobalGesture(): void {
-  _globalGesture = 'none'
-}
-
 export function setMouseNDC(ndcX: number, ndcY: number, dragging: boolean): void {
   mouseNDC.set(ndcX, ndcY)
   isDragging = dragging
@@ -239,7 +201,6 @@ export function setMouseNDC(ndcX: number, ndcY: number, dragging: boolean): void
 
 export function dispose(): void {
   window.removeEventListener('resize', _onResize)
-  _globalGesture = 'none'
   renderer.dispose()
 }
 
@@ -259,7 +220,7 @@ export function vortex(targetPos: THREE.Vector3, strength: number): void {
   activeEffects.push({ type: 'vortex', target: targetPos.clone(), strength })
 }
 
-/** Orbit anchor — particles orbit around anchor continuously while active. Call clearHandForce() to stop. */
+/** Orbit anchor — particles orbit around anchor continuously while active. Call clearPortal() or remove orbit effect to stop. */
 export function orbitAnchor(anchor: THREE.Vector3, radius: number): void {
   // Remove previous orbit
   const idx = activeEffects.findIndex(e => e.type === 'orbit')
@@ -502,49 +463,6 @@ function _animate(): void {
     const fx = xBase * cosR - zBase * sinR
     const fz = xBase * sinR + zBase * cosR
     target.set(fx, yBase, fz)
-
-    // ── Global gesture (affects all particles from _globalOrigin) ──────────
-    if (_globalGesture !== 'none') {
-      const fromOrigin = positions[i].clone().sub(_globalOrigin)
-      const d = fromOrigin.length() + 0.01  // avoid div-by-zero
-      switch (_globalGesture) {
-        case 'attract': {
-          // Pull toward origin — stronger the farther away
-          const pull = Math.min(1.0, d / 40)
-          velocities[i].add(fromOrigin.normalize().multiplyScalar(-pull * 2.5 * delta * 60))
-          break
-        }
-        case 'repel': {
-          // Push away from origin
-          const push = Math.min(1.0, 20 / (d + 5))
-          velocities[i].add(fromOrigin.normalize().multiplyScalar(push * 2.0 * delta * 60))
-          break
-        }
-        case 'breathe': {
-          // Rhythmic expansion/contraction from origin
-          const pulse = Math.sin(time * 2.5) * 1.2
-          velocities[i].add(fromOrigin.normalize().multiplyScalar(pulse * delta * 60 * 0.6))
-          break
-        }
-      }
-    }
-
-    // ── Hand force (KEEP for legacy mouse drag / beam direction) ─────────────
-    if (handActive) {
-      const toHand = handPos.clone().sub(positions[i])
-      const dist   = toHand.length()
-      const inf    = Math.max(0, 1 - dist / HAND_RADIUS) ** 2
-      if (inf > 0) {
-        switch (handGesture) {
-          case 'flow':   velocities[i].add(handVelocity.clone().multiplyScalar(inf * 0.8)); break
-          case 'rotate': velocities[i].add(_tangent(toHand).multiplyScalar(inf * 2.0)); break
-          case 'attract':velocities[i].add(toHand.normalize().multiplyScalar(inf * 2.0)); break
-          case 'explode':velocities[i].add(toHand.normalize().multiplyScalar(-inf * 5.0)); break
-          case 'pinch':  velocities[i].add(toHand.multiplyScalar(inf * 3.0)); break
-          case 'repel':  velocities[i].add(toHand.normalize().multiplyScalar(-inf * 1.5)); break
-        }
-      }
-    }
 
     // ── New effects ───────────────────────────────────────────────────────
     for (const fx of activeEffects) {

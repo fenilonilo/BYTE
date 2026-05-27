@@ -16,40 +16,6 @@ export interface UnifiedGestureState {
   phase:        string           // 'idle' | 'contact' | 'blast' | 'sustained' | 'instant'
 }
 
-// ─── Legacy gesture types (kept until GestureHUD migrates in Task 5) ─────────
-
-export type HandGesture = 'none' | 'open' | 'pinch' | 'fist' | 'point' | 'swipe' | 'breathe' | 'idle'
-
-export type BimanualGesture =
-  | 'prayer-explosion'
-  | 'implosion'
-  | 'orbit'
-  | 'freeze'
-  | 'dual-pinch'
-  | 'portal'
-
-export interface HandState {
-  gesture: HandGesture
-  worldPos: Vector3
-  velocity: Vector3
-  /** milliseconds this gesture has been held continuously */
-  age: number
-}
-
-export interface BimanualPattern {
-  active: boolean
-  pattern: BimanualGesture | null
-  phase: string
-  /** 0..1 completion progress for phase transitions */
-  progress: number
-}
-
-export interface GestureState {
-  left: HandState
-  right: HandState
-  bimanual: BimanualPattern
-}
-
 // ─── Chat ─────────────────────────────────────────────────────────────────────
 
 export type MessageRole = 'user' | 'assistant' | 'interim'
