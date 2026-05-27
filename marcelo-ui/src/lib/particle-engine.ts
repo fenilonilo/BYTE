@@ -70,6 +70,10 @@ let handPos      = new THREE.Vector3()
 let handGesture  = 'none'
 let handVelocity = new THREE.Vector3()
 
+// Global gesture state (replaces hand-cursor approach for continuous gestures)
+let _globalGesture: 'none' | 'attract' | 'repel' | 'breathe' = 'none'
+let _globalOrigin  = new THREE.Vector3()  // center of effect (default scene origin)
+
 let mouseNDC   = new THREE.Vector2(9999, 9999)
 let isDragging = false
 
@@ -185,6 +189,21 @@ export function clearHandForce(): void {
   handGesture = 'none'
 }
 
+/** Set a continuous global gesture effect. All particles affected regardless of position. */
+export function setGlobalGesture(
+  type: 'none' | 'attract' | 'repel' | 'breathe',
+  origin?: THREE.Vector3,
+): void {
+  _globalGesture = type
+  if (origin) _globalOrigin.copy(origin)
+  else _globalOrigin.set(0, 0, 0)
+}
+
+/** Clear the global gesture. */
+export function clearGlobalGesture(): void {
+  _globalGesture = 'none'
+}
+
 export function setMouseNDC(ndcX: number, ndcY: number, dragging: boolean): void {
   mouseNDC.set(ndcX, ndcY)
   isDragging = dragging
@@ -192,6 +211,7 @@ export function setMouseNDC(ndcX: number, ndcY: number, dragging: boolean): void
 
 export function dispose(): void {
   window.removeEventListener('resize', _onResize)
+  _globalGesture = 'none'
   renderer.dispose()
 }
 
@@ -387,7 +407,33 @@ function _animate(): void {
     const fz = xBase * sinR + zBase * cosR
     target.set(fx, yBase, fz)
 
-    // ── Hand force (existing gestures) ────────────────────────────────────
+    // ── Global gesture (affects all particles from _globalOrigin) ──────────
+    if (_globalGesture !== 'none') {
+      const fromOrigin = positions[i].clone().sub(_globalOrigin)
+      const d = fromOrigin.length() + 0.01  // avoid div-by-zero
+      switch (_globalGesture) {
+        case 'attract': {
+          // Pull toward origin — stronger the farther away
+          const pull = Math.min(1.0, d / 40)
+          velocities[i].add(fromOrigin.normalize().multiplyScalar(-pull * 2.5 * delta * 60))
+          break
+        }
+        case 'repel': {
+          // Push away from origin
+          const push = Math.min(1.0, 20 / (d + 5))
+          velocities[i].add(fromOrigin.normalize().multiplyScalar(push * 2.0 * delta * 60))
+          break
+        }
+        case 'breathe': {
+          // Rhythmic expansion/contraction from origin
+          const pulse = Math.sin(time * 2.5) * 1.2
+          velocities[i].add(fromOrigin.normalize().multiplyScalar(pulse * delta * 60 * 0.6))
+          break
+        }
+      }
+    }
+
+    // ── Hand force (KEEP for legacy mouse drag / beam direction) ─────────────
     if (handActive) {
       const toHand = handPos.clone().sub(positions[i])
       const dist   = toHand.length()
@@ -466,9 +512,8 @@ function _animate(): void {
           break
         }
         case 'wave': {
-          const fromOrigin = positions[i].clone().sub(fx.origin!)
-          const inf = Math.max(0, 1 - fromOrigin.length() / 50) ** 2
-          velocities[i].x += (fx.dirSign ?? 1) * inf * (fx.speed ?? 4)
+          // Full-screen sweep — affects all particles regardless of distance
+          velocities[i].x += (fx.dirSign ?? 1) * (fx.speed ?? 4) * delta * 60 * 0.5
           break
         }
         case 'breathe': {
