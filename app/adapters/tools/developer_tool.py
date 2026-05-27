@@ -48,7 +48,7 @@ class DeveloperToolkit(Toolkit):
 
         self._shell.run(
             ["powershell", "-NoProfile", "-Command",
-             f"Start-Process 'wt' -ArgumentList \"-d '{path_str}' --title '{window_title}' pwsh -NoExit -Command claude\""],
+             f"Start-Process 'wt' -ArgumentList @('-d', '\"{path_str}\"', '--title', '\"{window_title}\"', 'powershell', '-NoExit', '-Command', 'claude')"],
         )
 
         self.active_project = project_name
