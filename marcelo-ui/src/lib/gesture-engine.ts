@@ -1,55 +1,62 @@
 import * as THREE from 'three'
-import type { HandGesture, BimanualGesture, HandState, BimanualPattern, GestureState } from './types'
+import type { UnifiedGesture, UnifiedGestureState } from './types'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const PINCH_DIST    = 0.06   // normalized landmark distance
-const PRAYER_DIST   = 0.15   // palms touching threshold (normalized)
-const PRAYER_VEL    = 0.3    // separation velocity to trigger blast
-const IMPLOSION_VEL = 0.3    // max approach velocity
-const IMPLOSION_DIST = 0.20  // distance to trigger vortex
-const ORBIT_HOLD_MS = 500    // ms pinch must be stable before orbit activates
-const FREEZE_WINDOW = 300    // ms both fists must close within
+const PINCH_DIST    = 0.06   // normalized landmark distance (thumb-index)
+const PRAYER_DIST   = 15     // world units: hands "touching" threshold
+const PRAYER_VEL    = 18     // world units/s separation velocity → blast
+const FREEZE_WINDOW = 300    // ms: both fists must close within this window
+const ORBIT_HOLD_MS = 500    // ms: pinch must be stable before orbit activates
+const HOLD_FRAMES   = 5      // consecutive frames before single-hand gesture commits
+const BIMANUAL_HOLD = 3      // consecutive frames before bimanual gesture commits
+const MEMORY_FRAMES = 5      // frames of no-hand before committed gesture resets
+
+// ─── Internal types ───────────────────────────────────────────────────────────
+
+type RawGesture = 'pinch' | 'fist' | 'open' | 'none'
+
+interface PerHandInternal {
+  worldPos:          THREE.Vector3
+  velocity:          THREE.Vector3
+  prevPos:           THREE.Vector3
+  prevTime:          number
+  fistSince:         number | null   // timestamp when fist first detected
+  rawGesture:        RawGesture
+  detectedThisFrame: boolean
+}
 
 // ─── Module state ─────────────────────────────────────────────────────────────
 
 let camera3D: THREE.PerspectiveCamera | null = null
 let _mpCamera: any = null
 
-interface PerHandInternal {
-  state: HandState
-  gestureStartTime: number
-  prevPos: THREE.Vector3
-  prevTime: number
-  breatheStartTime: number | null
-  prevResolvedGesture: HandGesture
-}
-
 const _hands: Record<'left' | 'right', PerHandInternal> = {
   left:  _emptyHand(),
   right: _emptyHand(),
 }
 
-let _bimanual: BimanualPattern = {
-  active: false, pattern: null, phase: 'idle', progress: 0
-}
+// Smoothing state
+let _candidate: UnifiedGesture    = 'none'
+let _candidateCount: number       = 0
+let _committed: UnifiedGesture    = 'none'
+let _noHandCount: number          = 0
 
-// prayer state
-let _prayerPhase: 'none' | 'contact' | 'release' | 'blast' = 'none'
-let _blastExpiresAt: number | null = null
+// Prayer / explosion state machine
+let _prayerPhase: 'none' | 'contact' | 'blast' = 'none'
+let _blastExpiresAt: number | null              = null
 
-// orbit state
+// Orbit tracking
 let _orbitAnchorHand: 'left' | 'right' | null = null
-let _orbitAnchorSince: number | null = null
-let _orbitTotalDelta: number = 0
-let _orbitPrevAngle: number | null = null
+let _orbitAnchorSince: number | null          = null
+let _orbitTotalDelta: number                  = 0
+let _orbitPrevAngle: number | null            = null
 
-// freeze
+// Freeze tracking
 let _lastFistTimes: Record<'left' | 'right', number | null> = { left: null, right: null }
 let _freezeExpiresAt: number | null = null
 
-export type GestureCallback = (state: GestureState) => void
-
+export type GestureCallback = (state: UnifiedGestureState) => void
 let _onGesture: GestureCallback | null = null
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -59,8 +66,8 @@ export async function init(
   camera: THREE.PerspectiveCamera,
   onGesture: GestureCallback,
 ): Promise<void> {
-  camera3D    = camera
-  _onGesture  = onGesture
+  camera3D   = camera
+  _onGesture = onGesture
 
   await _loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js')
   await _loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js')
@@ -70,17 +77,17 @@ export async function init(
   })
 
   hands.setOptions({
-    maxNumHands: 2,
-    modelComplexity: 1,
+    maxNumHands:           2,
+    modelComplexity:       1,
     minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.5,
+    minTrackingConfidence:  0.5,
   })
 
   hands.onResults(_processResults)
 
   _mpCamera = new (window as any).Camera(videoEl, {
     onFrame: async () => { await hands.send({ image: videoEl }) },
-    width: 320,
+    width:  320,
     height: 240,
   })
   _mpCamera.start()
@@ -88,242 +95,253 @@ export async function init(
 
 export function dispose(): void {
   _mpCamera?.stop()
-  _mpCamera = null
-  _onGesture = null
-  camera3D = null
-  _prayerPhase = 'none'
+  _mpCamera     = null
+  _onGesture    = null
+  camera3D      = null
+  _prayerPhase  = 'none'
   _blastExpiresAt = null
+  _freezeExpiresAt = null
+  _hands.left  = _emptyHand()
+  _hands.right = _emptyHand()
 }
 
-// ─── Internal result handler ──────────────────────────────────────────────────
+// ─── Result handler ───────────────────────────────────────────────────────────
 
 function _processResults(results: any): void {
   const now = performance.now()
 
-  // Reset both hands to none
-  _hands.left.state.gesture  = 'none'
-  _hands.right.state.gesture = 'none'
+  // Mark both hands as not-detected this frame
+  _hands.left.detectedThisFrame  = false
+  _hands.right.detectedThisFrame = false
 
-  const lms  = results.multiHandLandmarks ?? []
-  const hand = results.multiHandedness ?? []
+  const lms  = results.multiHandLandmarks  ?? []
+  const meta = results.multiHandedness     ?? []
 
   for (let hi = 0; hi < lms.length; hi++) {
     const landmarks = lms[hi]
-    // MediaPipe labels: "Left" = user's left (mirrored = right in image) — use as-is
-    const side: 'left' | 'right' = (hand[hi]?.label ?? 'Right') === 'Left' ? 'left' : 'right'
+    const side: 'left' | 'right' = (meta[hi]?.label ?? 'Right') === 'Left' ? 'left' : 'right'
     const h = _hands[side]
 
-    const gesture  = _classify(landmarks)
+    const raw     = _classifyRaw(landmarks)
     const worldPos = _landmarkToWorld(landmarks[9])
     const dt       = Math.max((now - h.prevTime) / 1000, 0.001)
 
-    const velocity = new THREE.Vector3(
+    h.velocity.set(
       (worldPos.x - h.prevPos.x) / dt,
       (worldPos.y - h.prevPos.y) / dt,
       (worldPos.z - h.prevPos.z) / dt,
     )
+    h.worldPos.copy(worldPos)
+    h.rawGesture        = raw
+    h.detectedThisFrame = true
 
-    // Breathe detection
-    if (gesture === 'open') {
-      const speed = velocity.length()
-      if (speed < 0.15 * 60) { // units/s threshold (world space)
-        if (h.breatheStartTime === null) h.breatheStartTime = now
-        if (now - h.breatheStartTime > 1000) {
-          h.state.gesture = 'breathe'
-        } else {
-          h.state.gesture = 'open'
-        }
-      } else {
-        h.breatheStartTime = null
-        // Swipe detection
-        if (Math.abs(velocity.x) > 0.8 * 60) {  // was 1.5 * 60
-          h.state.gesture = 'swipe'
-        } else {
-          h.state.gesture = 'open'
-        }
-      }
+    // Track fist onset for freeze detection
+    if (raw === 'fist') {
+      if (_lastFistTimes[side] === null) _lastFistTimes[side] = now
+      if (h.fistSince === null) h.fistSince = now
     } else {
-      h.breatheStartTime = null
-      h.state.gesture = gesture
+      _lastFistTimes[side] = null
+      h.fistSince = null
     }
-
-    h.state.worldPos.copy(worldPos)
-    h.state.velocity.copy(velocity)
-
-    // Track age using resolved gesture (handles breathe/swipe divergence from raw gesture)
-    const resolvedGesture = h.state.gesture
-    if (resolvedGesture !== h.prevResolvedGesture) {
-      h.gestureStartTime = now
-    }
-    h.state.age = now - h.gestureStartTime
-    h.prevResolvedGesture = resolvedGesture
 
     h.prevPos.copy(worldPos)
     h.prevTime = now
-
-    // Freeze: track fist times
-    if (gesture === 'fist') {
-      if (_lastFistTimes[side] === null) _lastFistTimes[side] = now
-    } else {
-      _lastFistTimes[side] = null
-    }
   }
 
-  _detectBimanual(now)
+  const handCount = ((_hands.left.detectedThisFrame ? 1 : 0) + (_hands.right.detectedThisFrame ? 1 : 0)) as 0 | 1 | 2
 
-  if (_onGesture) {
-    _onGesture({
-      left:     { ..._hands.left.state, worldPos: _hands.left.state.worldPos.clone(), velocity: _hands.left.state.velocity.clone() },
-      right:    { ..._hands.right.state, worldPos: _hands.right.state.worldPos.clone(), velocity: _hands.right.state.velocity.clone() },
-      bimanual: { ..._bimanual },
-    })
-  }
+  const rawGesture = _classifyUnified(handCount, now)
+  const smoothed   = _smooth(rawGesture, handCount)
+
+  const state = _buildState(smoothed, handCount, now)
+
+  if (_onGesture) _onGesture(state)
 }
 
-function _detectBimanual(now: number): void {
-  const L = _hands.left.state
-  const R = _hands.right.state
+// ─── Classification ───────────────────────────────────────────────────────────
 
-  if (L.gesture === 'none' || R.gesture === 'none') {
-    _resetBimanual()
-    return
-  }
+function _classifyUnified(handCount: 0 | 1 | 2, now: number): UnifiedGesture {
+  if (handCount === 0) return 'none'
 
-  // ── FREEZE: both fists within window ──────────────────────────────────────
-  if (L.gesture === 'fist' && R.gesture === 'fist') {
-    const lt = _lastFistTimes.left; const rt = _lastFistTimes.right
-    if (lt !== null && rt !== null && Math.abs(lt - rt) < FREEZE_WINDOW) {
-      _bimanual = { active: true, pattern: 'freeze', phase: 'instant', progress: 1 }
-      _freezeExpiresAt = now + 3000   // match crystallize(3000) duration
-      return
-    }
-  }
-
-  // ── BLAST PROTECTION: prayer-explosion blast persists for its full duration ──
-  if (_prayerPhase === 'blast') {
-    if (now < (_blastExpiresAt ?? 0)) {
-      _bimanual = { active: true, pattern: 'prayer-explosion', phase: 'blast', progress: 1 }
-      return
-    }
-    // Blast expired — clear state
-    _prayerPhase = 'none'
+  // Expire blast
+  if (_blastExpiresAt !== null && now >= _blastExpiresAt) {
     _blastExpiresAt = null
+    _prayerPhase    = 'none'
   }
 
-  // ── DUAL-PINCH ────────────────────────────────────────────────────────────
-  if (L.gesture === 'pinch' && R.gesture === 'pinch') {
-    _bimanual = { active: true, pattern: 'dual-pinch', phase: 'sustained', progress: 1 }
-    return
-  }
+  if (handCount === 2) {
+    const L = _hands.left
+    const R = _hands.right
 
-  // ── PRAYER-EXPLOSION: both open, palms approaching / contact ─────────────
-  if (L.gesture === 'open' && R.gesture === 'open') {
-    const dist = L.worldPos.distanceTo(R.worldPos)
+    // ── 1. FREEZE: both fists within FREEZE_WINDOW ──────────────────────────
+    if (L.rawGesture === 'fist' && R.rawGesture === 'fist') {
+      const lt = _lastFistTimes.left; const rt = _lastFistTimes.right
+      if (lt !== null && rt !== null && Math.abs(lt - rt) < FREEZE_WINDOW) {
+        _freezeExpiresAt = now + 3000
+        return 'freeze'
+      }
+    }
 
-    if (dist < PRAYER_DIST * 100) { // convert normalized to world-ish (camera-projected)
-      if (_prayerPhase === 'none') {
-        _prayerPhase = 'contact'
-      } else if (_prayerPhase === 'contact') {
-        // Detect release velocity
+    // Sustain freeze until it expires
+    if (_freezeExpiresAt !== null && now < _freezeExpiresAt) return 'freeze'
+    if (_freezeExpiresAt !== null && now >= _freezeExpiresAt) _freezeExpiresAt = null
+
+    // ── 2. EXPLOSION: prayer contact → fast separation ───────────────────────
+    if (_prayerPhase === 'blast' && _blastExpiresAt !== null) return 'explosion'
+
+    if (L.rawGesture === 'open' && R.rawGesture === 'open') {
+      const dist = L.worldPos.distanceTo(R.worldPos)
+      if (dist < PRAYER_DIST) {
+        if (_prayerPhase === 'none') _prayerPhase = 'contact'
+        // Check separation velocity
         const sepVel = L.velocity.clone().sub(R.velocity).length()
-        if (sepVel > PRAYER_VEL * 60) {
-          _prayerPhase = 'blast'
-          _blastExpiresAt = now + 500
-          _bimanual = { active: true, pattern: 'prayer-explosion', phase: 'blast', progress: 1 }
-          return
+        if (_prayerPhase === 'contact' && sepVel > PRAYER_VEL) {
+          _prayerPhase    = 'blast'
+          _blastExpiresAt = now + 600
+          return 'explosion'
         }
-      }
-      _bimanual = { active: true, pattern: 'prayer-explosion', phase: _prayerPhase, progress: 0.5 }
-      return
-    } else {
-      _prayerPhase = 'none'
-    }
-
-    // ── IMPLOSION: both open, approaching slowly ────────────────────────────
-    const approachVel = R.worldPos.clone().sub(L.worldPos).normalize()
-      .dot(L.velocity.clone().sub(R.velocity)) / 60
-    const maxVel = Math.max(L.velocity.length(), R.velocity.length()) / 60
-    if (approachVel > 0 && maxVel < IMPLOSION_VEL) {
-      const progress = Math.min(1, 1 - dist / 80)
-      if (dist < IMPLOSION_DIST * 100) {
-        _bimanual = { active: true, pattern: 'implosion', phase: 'vortex', progress: 1 }
+        return 'none' // contact phase — no gesture yet
       } else {
-        _bimanual = { active: true, pattern: 'implosion', phase: 'approach', progress }
+        if (_prayerPhase === 'contact') _prayerPhase = 'none'
       }
-      return
+    } else {
+      if (_prayerPhase === 'contact') _prayerPhase = 'none'
     }
-  }
 
-  // ── ORBIT: one pinch stable, other hand circling ──────────────────────────
-  const pinchSide   = L.gesture === 'pinch' ? 'left' : R.gesture === 'pinch' ? 'right' : null
-  const freeSide    = pinchSide === 'left' ? 'right' : pinchSide === 'right' ? 'left' : null
+    // ── 3. ORBIT: one pinch stable ≥ 500ms + other hand circles ≥ 180° ──────
+    const pinchSide = L.rawGesture === 'pinch' ? 'left'
+                    : R.rawGesture === 'pinch' ? 'right'
+                    : null
+    const freeSide  = pinchSide === 'left' ? 'right' : pinchSide === 'right' ? 'left' : null
 
-  if (pinchSide && freeSide) {
-    if (_orbitAnchorHand !== pinchSide) {
-      _orbitAnchorHand  = pinchSide
-      _orbitAnchorSince = now
+    if (pinchSide && freeSide) {
+      if (_orbitAnchorHand !== pinchSide) {
+        _orbitAnchorHand  = pinchSide
+        _orbitAnchorSince = now
+        _orbitTotalDelta  = 0
+        _orbitPrevAngle   = null
+      }
+
+      if (now - (_orbitAnchorSince ?? now) >= ORBIT_HOLD_MS) {
+        const anchor = _hands[pinchSide].worldPos
+        const free   = _hands[freeSide].worldPos
+        const dx     = free.x - anchor.x
+        const dy     = free.y - anchor.y
+        const angle  = Math.atan2(dy, dx)
+
+        if (_orbitPrevAngle !== null) {
+          let delta = angle - _orbitPrevAngle
+          if (delta >  Math.PI) delta -= 2 * Math.PI
+          if (delta < -Math.PI) delta += 2 * Math.PI
+          _orbitTotalDelta += Math.abs(delta)
+        }
+        _orbitPrevAngle = angle
+
+        if (_orbitTotalDelta > Math.PI) return 'orbit'
+      }
+    } else {
+      _orbitAnchorHand  = null
+      _orbitAnchorSince = null
       _orbitTotalDelta  = 0
       _orbitPrevAngle   = null
     }
 
-    if (now - (_orbitAnchorSince ?? now) > ORBIT_HOLD_MS) {
-      const anchor = _hands[pinchSide].state.worldPos
-      const free   = _hands[freeSide].state.worldPos
-      const dx = free.x - anchor.x; const dy = free.y - anchor.y
-      const angle = Math.atan2(dy, dx)
-
-      if (_orbitPrevAngle !== null) {
-        let delta = angle - _orbitPrevAngle
-        // Normalize delta to [-π, π]
-        if (delta > Math.PI)  delta -= 2 * Math.PI
-        if (delta < -Math.PI) delta += 2 * Math.PI
-        _orbitTotalDelta += Math.abs(delta)
-      }
-      _orbitPrevAngle = angle
-
-      if (_orbitTotalDelta > Math.PI) {  // > 180° total swept
-        _bimanual = { active: true, pattern: 'orbit', phase: 'orbit', progress: 1 }
-        return
-      }
-      _bimanual = { active: true, pattern: 'orbit', phase: 'anchor', progress: 0.5 }
-      return
+    // ── 4. PORTAL: both hands same height, 15–60 world units apart ───────────
+    if (
+      (L.rawGesture === 'open' || L.rawGesture === 'pinch') &&
+      (R.rawGesture === 'open' || R.rawGesture === 'pinch')
+    ) {
+      const dist  = L.worldPos.distanceTo(R.worldPos)
+      const yDiff = Math.abs(L.worldPos.y - R.worldPos.y)
+      if (dist >= 15 && dist <= 60 && yDiff < 10) return 'portal'
     }
-  } else {
-    _orbitAnchorHand  = null
-    _orbitAnchorSince = null
-    _orbitTotalDelta  = 0
-    _orbitPrevAngle   = null
+
+    return 'none'
   }
 
-  // ── PORTAL: fingertips of both hands form a rough ring ───────────────────
-  if (
-    (L.gesture === 'open' || L.gesture === 'pinch') &&
-    (R.gesture === 'open' || R.gesture === 'pinch')
-  ) {
-    const mid  = L.worldPos.clone().add(R.worldPos).multiplyScalar(0.5)
-    const dL   = L.worldPos.distanceTo(mid)
-    const yDiff = Math.abs(L.worldPos.y - R.worldPos.y)
-    // Portal = hands form a ring of radius 5–30, and both at roughly same height (y diff < 10)
-    if (dL > 5 && dL < 30 && yDiff < 10) {
-      _bimanual = { active: true, pattern: 'portal', phase: 'sustained', progress: 1 }
-      return
-    }
+  // ── Single hand ──────────────────────────────────────────────────────────────
+  const active = _hands.left.detectedThisFrame ? _hands.left : _hands.right
+
+  if (active.rawGesture === 'pinch') return 'pinch'
+
+  if (active.rawGesture === 'open') {
+    // Swipe: horizontal velocity exceeds threshold
+    if (Math.abs(active.velocity.x) > PRAYER_VEL) return 'swipe'
   }
 
-  _resetBimanual()
+  return 'none'
 }
 
-function _resetBimanual(): void {
-  const now = performance.now()
-  if (_bimanual.pattern === 'freeze' && _freezeExpiresAt !== null && now < _freezeExpiresAt) return
-  if (_prayerPhase === 'blast' && now < (_blastExpiresAt ?? 0)) return
-  _bimanual = { active: false, pattern: null, phase: 'idle', progress: 0 }
-  _freezeExpiresAt = null
+function _smooth(raw: UnifiedGesture, handCount: 0 | 1 | 2): UnifiedGesture {
+  const holdFrames = handCount === 2 ? BIMANUAL_HOLD : HOLD_FRAMES
+
+  if (handCount === 0) {
+    _noHandCount++
+    if (_noHandCount > MEMORY_FRAMES) {
+      _committed      = 'none'
+      _candidate      = 'none'
+      _candidateCount = 0
+    }
+    return _committed
+  }
+
+  _noHandCount = 0
+
+  if (raw === _candidate) {
+    _candidateCount = Math.min(_candidateCount + 1, holdFrames + 1)
+  } else {
+    _candidate      = raw
+    _candidateCount = 1
+  }
+
+  if (_candidateCount >= holdFrames) _committed = raw
+  return _committed
+}
+
+function _buildState(gesture: UnifiedGesture, handCount: 0 | 1 | 2, now: number): UnifiedGestureState {
+  let swipeSign    = 0
+  let orbitAnchor  = new THREE.Vector3()
+  let portalCenter = new THREE.Vector3()
+  let portalRadius = 0
+  let phase        = 'idle'
+
+  switch (gesture) {
+    case 'swipe': {
+      const active = _hands.left.detectedThisFrame ? _hands.left : _hands.right
+      swipeSign = Math.sign(active.velocity.x)
+      phase     = 'instant'
+      break
+    }
+    case 'explosion':
+      phase = _prayerPhase === 'blast' ? 'blast' : 'contact'
+      break
+    case 'orbit': {
+      if (_orbitAnchorHand) orbitAnchor.copy(_hands[_orbitAnchorHand].worldPos)
+      phase = 'sustained'
+      break
+    }
+    case 'portal': {
+      portalCenter = _hands.left.worldPos.clone().add(_hands.right.worldPos).multiplyScalar(0.5)
+      portalRadius = _hands.left.worldPos.distanceTo(_hands.right.worldPos) * 0.5
+      phase        = 'sustained'
+      break
+    }
+    case 'freeze':
+      phase = 'instant'
+      break
+    case 'pinch':
+      phase = 'sustained'
+      break
+    default:
+      phase = 'idle'
+  }
+
+  return { gesture, handCount, swipeSign, orbitAnchor, portalCenter, portalRadius, phase }
 }
 
 // ─── Landmark helpers ─────────────────────────────────────────────────────────
 
-function _classify(lm: any[]): HandGesture {
+function _classifyRaw(lm: any[]): RawGesture {
   const thumbTip  = lm[4]; const indexTip  = lm[8]
   const middleTip = lm[12]; const ringTip  = lm[16]; const pinkyTip = lm[20]
 
@@ -336,11 +354,7 @@ function _classify(lm: any[]): HandGesture {
 
   if (indexCurled && middleCurled && ringCurled && pinkyCurled) return 'fist'
 
-  // Point: only index extended
-  if (!indexCurled && middleCurled && ringCurled && pinkyCurled) return 'point'
-
-  const allOpen = !indexCurled && !middleCurled && !ringCurled && !pinkyCurled
-  if (allOpen) return 'open'
+  if (!indexCurled && !middleCurled && !ringCurled && !pinkyCurled) return 'open'
 
   return 'none'
 }
@@ -371,16 +385,12 @@ function _loadScript(src: string): Promise<void> {
 
 function _emptyHand(): PerHandInternal {
   return {
-    state: {
-      gesture: 'none',
-      worldPos: new THREE.Vector3(),
-      velocity: new THREE.Vector3(),
-      age: 0,
-    },
-    gestureStartTime: 0,
-    prevPos: new THREE.Vector3(),
-    prevTime: performance.now(),
-    breatheStartTime: null,
-    prevResolvedGesture: 'none',
+    worldPos:          new THREE.Vector3(),
+    velocity:          new THREE.Vector3(),
+    prevPos:           new THREE.Vector3(),
+    prevTime:          performance.now(),
+    fistSince:         null,
+    rawGesture:        'none',
+    detectedThisFrame: false,
   }
 }
