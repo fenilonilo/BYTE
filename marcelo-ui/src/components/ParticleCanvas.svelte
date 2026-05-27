@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import * as THREE from 'three'
   import * as ParticleEngine from '../lib/particle-engine'
   import * as GestureEngine from '../lib/gesture-engine'
   import { updateGestureState } from '../stores/gesture.svelte'
@@ -10,6 +11,12 @@
     directionalBeam, clearBeam, lateralWave, breathePulse, clearBreath,
     applyHandForce, clearHandForce,
   } from '../lib/particle-engine'
+
+  // Module-level guard: tracks which hands have already fired the fist burst this gesture
+  const _fistBurstFired = new Set<'left' | 'right'>()
+
+  // Module-level guard: prevents prayer-explosion shockwave from stacking across frames
+  let _blastShockwaveFired = false
 
   let canvasEl: HTMLCanvasElement
   let videoEl: HTMLVideoElement
@@ -36,9 +43,11 @@
     if (bimanual.active && bimanual.pattern) {
       switch (bimanual.pattern) {
         case 'prayer-explosion':
-          if (bimanual.phase === 'blast') {
+          if (bimanual.phase === 'blast' && !_blastShockwaveFired) {
             const mid = left.worldPos.clone().add(right.worldPos).multiplyScalar(0.5)
             shockwave(mid, 60, 8)
+            _blastShockwaveFired = true
+            setTimeout(() => { _blastShockwaveFired = false }, 600)
           }
           break
         case 'implosion':
@@ -68,6 +77,11 @@
       if (bimanual.pattern !== 'portal') clearPortal()
       if (bimanual.pattern !== 'dual-pinch') clearSplitField()
 
+      // Clear single-hand persistent effects when bimanual is active
+      clearHandForce()
+      clearBeam()
+      clearBreath()
+
       // Still apply free-hand unimanual for orbit (free hand)
       if (bimanual.pattern === 'orbit') {
         const freeHand = left.gesture !== 'pinch' ? left : right
@@ -85,19 +99,31 @@
     clearSplitField()
     clearPortal()
 
-    for (const hand of [left, right]) {
+    for (const [hand, side] of [[left, 'left'], [right, 'right']] as const) {
+      // Reset burst guard when fist gesture ends
+      if (hand.gesture !== 'fist') _fistBurstFired.delete(side)
       if (hand.gesture === 'none') continue
+
       switch (hand.gesture) {
-        case 'pinch':
         case 'fist':
+          if (!_fistBurstFired.has(side)) {
+            shockwave(hand.worldPos, 25, 5)
+            _fistBurstFired.add(side)
+          }
+          break
+        case 'pinch':
+          applyHandForce(hand.worldPos, 'pinch', hand.velocity)
+          break
         case 'open':
-          applyHandForce(hand.worldPos, hand.gesture === 'fist' ? 'attract' : hand.gesture === 'open' ? 'repel' : 'pinch', hand.velocity)
+          applyHandForce(hand.worldPos, 'repel', hand.velocity)
           break
         case 'point':
-          directionalBeam(hand.worldPos, hand.velocity.clone().normalize())
+          directionalBeam(hand.worldPos, hand.velocity.length() > 1
+            ? hand.velocity.clone().normalize()
+            : new THREE.Vector3(0, -1, 0))
           break
         case 'swipe':
-          lateralWave(hand.worldPos, Math.sign(hand.velocity.x), hand.velocity.length() / 60)
+          lateralWave(hand.worldPos, Math.sign(hand.velocity.x), Math.max(1, hand.velocity.length() / 60))
           clearBeam()
           break
         case 'breathe':
