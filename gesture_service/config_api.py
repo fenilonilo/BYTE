@@ -19,6 +19,8 @@ def build_router(
     pose_store: PoseStore,
     rebuild_knn: Callable[[], None],
     latest_gesture: dict[str, object],
+    record_start: Callable[[str, int], None],
+    record_status: Callable[[], dict[str, object]],
 ) -> APIRouter:
     router = APIRouter()
 
@@ -29,6 +31,15 @@ def build_router(
         pose_store.persist()
         rebuild_knn()
         return {"samples": len(pose_store.samples())}
+
+    @router.post("/poses/{label}/record")
+    def record(label: str, frames: int = 15) -> dict[str, bool]:
+        record_start(label, frames)
+        return {"ok": True}
+
+    @router.get("/poses/record/status")
+    def record_status_endpoint() -> dict[str, object]:
+        return record_status()
 
     @router.get("/current")
     def current() -> dict[str, object]:

@@ -16,7 +16,8 @@ from gesture_service.matcher import HandFrame
 from gesture_service.motion import classify_motion
 from gesture_service.pose import classify_pose
 
-FrameCallback = Callable[[list[HandFrame], MatLike], None]  # second arg: annotated BGR frame
+FrameCallback = Callable[[list[HandFrame], list[HandLandmarks], MatLike], None]
+# args: (per-hand classified frames, raw landmark sets, annotated BGR frame)
 
 
 @dataclass
@@ -62,11 +63,13 @@ def run_capture_loop(
             now = time.monotonic()
 
             frames: list[HandFrame] = []
+            raw_hands: list[HandLandmarks] = []
             if result.multi_hand_landmarks:
                 handed = result.multi_handedness or []
                 for i, lms in enumerate(result.multi_hand_landmarks):
                     label = handed[i].classification[0].label if i < len(handed) else "Right"
                     hand = _to_hand_landmarks(lms, label)
+                    raw_hands.append(hand)
                     pose = classify_pose(hand)
                     c = hand_center(hand)
                     center = Vec3(c.x, c.y, c.z)
@@ -80,7 +83,7 @@ def run_capture_loop(
                     )
                     drawer.draw_landmarks(frame, lms, list(mp_hands.HAND_CONNECTIONS))
 
-            on_frame(frames, frame)
+            on_frame(frames, raw_hands, frame)
     finally:
         cap.release()
         hands.close()
