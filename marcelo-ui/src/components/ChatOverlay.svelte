@@ -40,6 +40,10 @@
       onError: (msg) => {
         addMessage('assistant', `⚠ ${msg}`)
       },
+      onUserMessage: (text) => {
+        addMessage('user', text)
+        _scrollToBottom()
+      },
     })
 
     client.setAmpCallback((amp) => setAmplitude(amp))

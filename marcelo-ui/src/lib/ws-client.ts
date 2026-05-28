@@ -9,15 +9,16 @@ type ErrorCallback   = (msg: string) => void
 type AmpCallback     = (amp: number) => void
 
 interface WsClientOptions {
-  wsUrl:      string
-  ttsUrl:     string
-  sttUrl:     string
-  onState:    StateCallback
-  onChunk:    ChunkCallback
-  onInterim:  InterimCallback
-  onPreview:  PreviewCallback
-  onDone:     DoneCallback
-  onError:    ErrorCallback
+  wsUrl:         string
+  ttsUrl:        string
+  sttUrl:        string
+  onState:       StateCallback
+  onChunk:       ChunkCallback
+  onInterim:     InterimCallback
+  onPreview:     PreviewCallback
+  onDone:        DoneCallback
+  onError:       ErrorCallback
+  onUserMessage: (text: string) => void
 }
 
 const AMP_THRESHOLD  = 0.02  // amplitude above this = speech
@@ -153,6 +154,7 @@ export class WsClient {
       const { transcript } = await res.json() as { transcript: string }
       this._opts.onInterim(null)
       if (transcript.trim()) {
+        this._opts.onUserMessage(transcript)
         this.sendText(transcript)
       } else {
         this._opts.onState('idle')

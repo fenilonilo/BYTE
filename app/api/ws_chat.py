@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -19,6 +20,18 @@ from app.domain.entities import IncomingMessage
 router = APIRouter()
 
 _PREVIEW_MARKER = "## Task"
+_MD_HEADING     = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BOLD_ITALIC = re.compile(r"\*{1,3}(.+?)\*{1,3}", re.DOTALL)
+_MD_BULLET      = re.compile(r"^\s*[-*]\s+", re.MULTILINE)
+_MD_CODE_FENCE  = re.compile(r"```[^\n]*\n?(.*?)```", re.DOTALL)
+
+
+def _strip_markdown(text: str) -> str:
+    text = _MD_CODE_FENCE.sub(r"\1", text)
+    text = _MD_HEADING.sub("", text)
+    text = _MD_BOLD_ITALIC.sub(r"\1", text)
+    text = _MD_BULLET.sub("", text)
+    return text.strip()
 
 
 class _ChatPayload(BaseModel):
@@ -79,7 +92,7 @@ async def ws_chat(websocket: WebSocket) -> None:
 
             try:
                 outgoing = await use_case.execute(incoming)
-                response_text = outgoing.content
+                response_text = _strip_markdown(outgoing.content)
 
                 if (
                     dev_tool.active_project

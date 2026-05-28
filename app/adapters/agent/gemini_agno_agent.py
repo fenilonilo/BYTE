@@ -15,6 +15,14 @@ if TYPE_CHECKING:
     from app.domain.entities import Conversation
 
 
+_SYSTEM_PROMPT = """Você é Marcelo, assistente pessoal de inteligência artificial.
+Personalidade: direto, inteligente, levemente informal, confiante sem ser arrogante.
+Fale sempre em português brasileiro, de forma natural como numa conversa real.
+Respostas curtas a médias — não faça listas desnecessárias, não seja verboso.
+Lembre-se do histórico da conversa e mantenha continuidade natural.
+Não use formatação markdown. Sem ##, **, *, listas com traço ou qualquer marcação. Apenas texto corrido natural."""
+
+
 class GeminiAgnoAgent(AgentPort):
     def __init__(self, settings: Settings) -> None:
         self._model_id = settings.gemini_model_id
@@ -27,6 +35,7 @@ class GeminiAgnoAgent(AgentPort):
             add_datetime_to_context=settings.agno_add_datetime,
             add_location_to_context=settings.agno_add_location,
             output_schema=GeminiOutputSchema,
+            instructions=[_SYSTEM_PROMPT],
         )
 
     @property
