@@ -9,6 +9,22 @@ import {
 
 const SIZE = 256 // grid edge -> SIZE*SIZE particles
 
+type ParticleState = 'idle' | 'listening' | 'thinking' | 'speaking'
+
+const STATE_PARAMS: Record<ParticleState, { hue: number; spread: number; core: number; bloom: number }> = {
+  idle:      { hue: 0.78, spread: 18, core: 8, bloom: 1.8 },
+  listening: { hue: 0.60, spread: 22, core: 7, bloom: 2.2 },
+  thinking:  { hue: 0.12, spread: 26, core: 6, bloom: 2.6 },
+  speaking:  { hue: 0.35, spread: 20, core: 8, bloom: 3.0 },
+}
+
+let currentState: ParticleState = 'idle'
+let bloomPass: UnrealBloomPass
+
+export function setState(state: ParticleState): void {
+  if (STATE_PARAMS[state]) currentState = state
+}
+
 let renderer: THREE.WebGLRenderer
 let scene: THREE.Scene
 let camera: THREE.PerspectiveCamera
@@ -111,9 +127,10 @@ export function init(canvas: HTMLCanvasElement): void {
 
   composer = new EffectComposer(renderer)
   composer.addPass(new RenderPass(scene, camera))
-  composer.addPass(new UnrealBloomPass(
+  bloomPass = new UnrealBloomPass(
     new THREE.Vector2(canvas.clientWidth, canvas.clientHeight), 1.8, 0.4, 0,
-  ))
+  )
+  composer.addPass(bloomPass)
 
   clock = new THREE.Clock()
   window.addEventListener('resize', onResize)
@@ -135,6 +152,13 @@ function animate(): void {
   positionVar.material.uniforms.uDelta.value = delta
   velocityVar.material.uniforms.uDelta.value = delta
   velocityVar.material.uniforms.uTime.value = time
+
+  const sp = STATE_PARAMS[currentState]
+  const vu = velocityVar.material.uniforms
+  vu.uSpread.value += (sp.spread - vu.uSpread.value) * 0.02
+  vu.uCore.value += (sp.core - vu.uCore.value) * 0.02
+  renderUniforms.uHue.value += (sp.hue - renderUniforms.uHue.value) * 0.02
+  bloomPass.strength += (sp.bloom - bloomPass.strength) * 0.02
 
   gpu.compute()
   renderUniforms.texturePosition.value = gpu.getCurrentRenderTarget(positionVar).texture
