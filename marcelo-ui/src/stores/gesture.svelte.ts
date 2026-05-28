@@ -1,22 +1,23 @@
-import * as THREE from 'three'
-import type { UnifiedGestureState } from '../lib/types'
+import type { WireGestureEvent } from '../lib/gesture-types'
 
-export const gestureState = $state<UnifiedGestureState>({
-  gesture:      'none',
-  handCount:    0,
-  swipeSign:    0,
-  orbitAnchor:  new THREE.Vector3(),
-  portalCenter: new THREE.Vector3(),
-  portalRadius: 0,
-  phase:        'idle',
+export const gestureState = $state<WireGestureEvent>({
+  gesture: 'none',
+  phase: 'idle',
+  hands: 0,
+  params: {
+    points: [],
+    vector: { x: 0, y: 0, z: 0 },
+    center: { x: 0, y: 0, z: 0 },
+    radius: 0,
+    magnitude: 0,
+  },
+  ts: 0,
 })
 
-export function updateGestureState(next: UnifiedGestureState): void {
-  gestureState.gesture      = next.gesture
-  gestureState.handCount    = next.handCount
-  gestureState.swipeSign    = next.swipeSign
-  gestureState.orbitAnchor  = next.orbitAnchor
-  gestureState.portalCenter = next.portalCenter
-  gestureState.portalRadius = next.portalRadius
-  gestureState.phase        = next.phase
+export function updateGestureState(next: WireGestureEvent): void {
+  gestureState.gesture = next.gesture
+  gestureState.phase = next.phase
+  gestureState.hands = next.hands
+  gestureState.params = next.params
+  gestureState.ts = next.ts
 }

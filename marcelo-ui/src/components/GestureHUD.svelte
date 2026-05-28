@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { gestureState } from '../stores/gesture.svelte'
-  import type { UnifiedGesture } from '../lib/types'
 
   // Freeze countdown
   let freezeCountdown = $state(0)
@@ -11,7 +10,7 @@
   let badgeVisible = $state(false)
   let _badgeTimer: ReturnType<typeof setTimeout> | null = null
 
-  const LABELS: Record<UnifiedGesture, string> = {
+  const LABELS: Record<string, string> = {
     none:      '',
     pinch:     '👌 PINCH',
     swipe:     '🌊 ONDA',
@@ -84,10 +83,10 @@
     animation:fadeIn 100ms ease;
     display:flex;gap:8px;align-items:center;
   ">
-    {LABELS[gestureState.gesture]}
+    {LABELS[gestureState.gesture] ?? gestureState.gesture.toUpperCase()}
 
     {#if gestureState.gesture === 'swipe'}
-      <span>{gestureState.swipeSign >= 0 ? '→' : '←'}</span>
+      <span>{gestureState.params.vector.x >= 0 ? '→' : '←'}</span>
     {/if}
 
     {#if gestureState.gesture === 'orbit'}
@@ -95,18 +94,18 @@
     {/if}
 
     {#if gestureState.gesture === 'portal'}
-      <span style="opacity:0.6;font-size:9px;">r={Math.round(gestureState.portalRadius)}</span>
+      <span style="opacity:0.6;font-size:9px;">r={Math.round(gestureState.params.radius * 100)}</span>
     {/if}
 
     {#if gestureState.gesture === 'freeze' && freezeCountdown > 0}
       <span style="opacity:0.6;font-size:9px;">{freezeCountdown}s</span>
     {/if}
 
-    {#if gestureState.handCount > 0}
+    {#if gestureState.hands > 0}
       <span style="
         background:rgba(255,255,255,0.1);border-radius:10px;
         padding:1px 6px;font-size:9px;opacity:0.7;
-      ">{gestureState.handCount}✋</span>
+      ">{gestureState.hands}✋</span>
     {/if}
   </div>
 {/if}
