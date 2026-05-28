@@ -29,6 +29,7 @@ class GestureMatcher:
     def __init__(self, thresholds: Thresholds | None = None) -> None:
         self._t = thresholds or Thresholds()
         self._current: str | None = None
+        self._last_instant: dict[str, float] = {}
 
     def update(self, hands: list[HandFrame], now: float) -> GestureEvent | None:
         raw = self._classify(hands)
@@ -41,8 +42,13 @@ class GestureMatcher:
             if name is None:
                 return ended
             params = raw[1]  # type: ignore[index]
-            phase = "instant" if name in INSTANT_GESTURES else "start"
-            return GestureEvent(gesture=name, phase=phase, hands=hand_count, params=params, ts=now)
+            if name in INSTANT_GESTURES:
+                last = self._last_instant.get(name, 0.0)
+                if now - last < self._t.instant_cooldown_s:
+                    return None
+                self._last_instant[name] = now
+                return GestureEvent(gesture=name, phase="instant", hands=hand_count, params=params, ts=now)
+            return GestureEvent(gesture=name, phase="start", hands=hand_count, params=params, ts=now)
 
         if name is None:
             return None

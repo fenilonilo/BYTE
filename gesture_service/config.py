@@ -12,6 +12,7 @@ class Thresholds:
     portal_near: float = 0.15  # min inter-hand distance for portal
     portal_far: float = 0.6  # max inter-hand distance for portal
     portal_y_tol: float = 0.12  # max vertical offset between hands
+    instant_cooldown_s: float = 1.0  # min seconds between same instant gesture
 
 
 @dataclass(frozen=True, slots=True)
