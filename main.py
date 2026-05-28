@@ -10,7 +10,12 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.deps import get_event_bus, get_evolution_client, get_settings
+from app.api.deps import (
+    get_action_dispatcher,
+    get_event_bus,
+    get_evolution_client,
+    get_settings,
+)
 from app.api.gesture_ingest import router as gesture_ingest_router
 from app.api.router import router
 from app.api.voice import router as voice_router
@@ -45,6 +50,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:  # noqa: S110 — WhatsApp gateway may not be available in dev
         pass
     get_event_bus().subscribe(frontend_bridge)
+    get_event_bus().subscribe(get_action_dispatcher().handle)
     yield
 
 

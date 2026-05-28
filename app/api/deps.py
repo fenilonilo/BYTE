@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.adapters.actions.open_project import OpenProjectAction
+from app.adapters.actions.swap_model import SwapModelAction
 from app.adapters.agent.gemini_agno_agent import GeminiAgnoAgent
 from app.adapters.agent.groq_agno_agent import GroqAgnoAgent
 from app.adapters.agent.routing_agno_agent import RoutingAgnoAgent
@@ -14,12 +16,18 @@ from app.adapters.messaging.evolution_client import EvolutionClient
 from app.adapters.shell.windows_shell_adapter import WindowsShellAdapter
 from app.adapters.tools.developer_tool import DeveloperToolkit
 from app.adapters.tools.filesystem_tool import FilesystemToolkit
+from app.application.action_dispatcher import ActionDispatcher
+from app.application.binding_resolver import StaticBindingResolver
 from app.application.event_bus import InProcessEventBus
+from app.application.model_state import ModelState
+from app.application.registry import Registry
 from app.config import Settings
+from app.domain.gestures import Binding
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
+    from app.ports.action import ActionPort
     from app.ports.agent import AgentPort
     from app.ports.event_bus import EventBusPort
     from app.ports.logger import LoggerPort
@@ -58,6 +66,7 @@ def get_repo() -> RepositoryPort:
         with socket.create_connection((host, port), timeout=1):
             pass
         from app.adapters.repository.postgres_repository import PostgresRepository
+
         return PostgresRepository(get_engine())
     except OSError:
         return InMemoryRepository()
@@ -100,6 +109,31 @@ def get_agent() -> AgentPort:
 @lru_cache
 def get_event_bus() -> EventBusPort:
     return InProcessEventBus()
+
+
+@lru_cache
+def get_model_state() -> ModelState:
+    return ModelState()
+
+
+@lru_cache
+def get_action_dispatcher() -> ActionDispatcher:
+    registry: Registry[ActionPort] = Registry()
+    registry.register("swap_model", SwapModelAction(get_model_state()))
+    registry.register("open_project", OpenProjectAction(get_developer_tool()))
+
+    # Built-in default bindings (Phase 5 config will override this resolver).
+    resolver = StaticBindingResolver(
+        {
+            "freeze": Binding(
+                effect="freeze", action="swap_model", action_params={"model": "gemini"}
+            ),
+            "portal": Binding(
+                effect="portal", action="swap_model", action_params={"model": "groq"}
+            ),
+        }
+    )
+    return ActionDispatcher(registry=registry, resolver=resolver)
 
 
 @lru_cache

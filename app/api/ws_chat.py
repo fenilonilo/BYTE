@@ -6,7 +6,13 @@ from uuid import uuid4
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from app.api.deps import get_agent, get_developer_tool, get_logger, get_repo
+from app.api.deps import (
+    get_agent,
+    get_developer_tool,
+    get_logger,
+    get_model_state,
+    get_repo,
+)
 from app.application.use_cases.process_incoming_message import ProcessIncomingMessage
 from app.domain.entities import IncomingMessage
 
@@ -27,6 +33,7 @@ async def ws_chat(websocket: WebSocket) -> None:
     repo = get_repo()
     log = get_logger()
     dev_tool = get_developer_tool()
+    model_state = get_model_state()
 
     pending_prompt: str | None = None
 
@@ -67,7 +74,7 @@ async def ws_chat(websocket: WebSocket) -> None:
                 channel="ui",
                 timestamp=datetime.now(tz=UTC),
                 conversation_id=payload.session_id,
-                model_override=None,
+                model_override=model_state.active,
             )
 
             try:
