@@ -4,7 +4,8 @@ import threading
 import time
 from collections.abc import Iterator
 
-import cv2  # type: ignore[import-untyped]
+import cv2
+from cv2.typing import MatLike
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
@@ -14,7 +15,7 @@ _lock = threading.Lock()
 _latest_jpeg: bytes | None = None
 
 
-def set_latest_frame(frame_bgr: object) -> None:
+def set_latest_frame(frame_bgr: MatLike) -> None:
     global _latest_jpeg
     ok, buf = cv2.imencode(".jpg", frame_bgr)
     if ok:

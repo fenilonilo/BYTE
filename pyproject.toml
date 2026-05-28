@@ -26,7 +26,7 @@ db = [
     "aiosqlite>=0.20",
 ]
 vision = [
-    "mediapipe>=0.10.14",
+    "mediapipe==0.10.18",  # pinned: 0.10.35 dropped the legacy solutions.hands API
     "opencv-python>=4.10",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",

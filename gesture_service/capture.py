@@ -3,9 +3,12 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
-import cv2  # type: ignore[import-untyped]
-import mediapipe as mp  # type: ignore[import-untyped]
+import cv2
+from cv2.typing import MatLike
+from mediapipe.python.solutions import drawing_utils as mp_drawing
+from mediapipe.python.solutions import hands as mp_hands
 
 from gesture_service.config import CameraSettings
 from gesture_service.events import Vec3
@@ -14,7 +17,7 @@ from gesture_service.matcher import HandFrame
 from gesture_service.motion import classify_motion
 from gesture_service.pose import classify_pose
 
-FrameCallback = Callable[[list[HandFrame], object], None]  # second arg: BGR frame (cv2, untyped)
+FrameCallback = Callable[[list[HandFrame], MatLike], None]  # second arg: annotated BGR frame
 
 
 @dataclass
@@ -40,13 +43,13 @@ def run_capture_loop(
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.height)
 
-    hands = mp.solutions.hands.Hands(
+    hands = mp_hands.Hands(
         max_num_hands=2,
         model_complexity=1,
         min_detection_confidence=0.7,
         min_tracking_confidence=0.5,
     )
-    drawer = mp.solutions.drawing_utils
+    drawer = mp_drawing
     prev: dict[str, _PrevHand] = {}
 
     try:
@@ -56,7 +59,7 @@ def run_capture_loop(
                 continue
             frame = cv2.flip(frame, 1)
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = hands.process(rgb)
+            result: Any = hands.process(rgb)  # dynamic NamedTuple fields
             now = time.monotonic()
 
             frames: list[HandFrame] = []
@@ -76,7 +79,7 @@ def run_capture_loop(
                     frames.append(
                         HandFrame(pose=pose, center=center, motion=motion, handedness=side)
                     )
-                    drawer.draw_landmarks(frame, lms, mp.solutions.hands.HAND_CONNECTIONS)
+                    drawer.draw_landmarks(frame, lms, list(mp_hands.HAND_CONNECTIONS))
 
             on_frame(frames, frame)
     finally:
