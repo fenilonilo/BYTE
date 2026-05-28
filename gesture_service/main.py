@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
@@ -10,7 +11,10 @@ import uvicorn
 from fastapi import FastAPI
 
 from gesture_service.capture import run_capture_loop
+from gesture_service.config_api import build_router as build_config_router
+from gesture_service.knn import KnnClassifier
 from gesture_service.matcher import GestureMatcher, HandFrame
+from gesture_service.pose_store import PoseStore
 from gesture_service.preview import router as preview_router, set_latest_frame
 from gesture_service.publisher import EventPublisher
 
@@ -31,18 +35,31 @@ log = structlog.get_logger("gesture-service")
 _stop = threading.Event()
 _matcher = GestureMatcher()
 _publisher = EventPublisher()
+_pose_store = PoseStore(Path("data/gesture_poses.json"))
+_knn = KnnClassifier(threshold=0.6)
+_latest_gesture: dict[str, object] = {"gesture": "none", "phase": "idle"}
+
+
+def _rebuild_knn() -> None:
+    _knn._templates.clear()
+    for label, vec in _pose_store.samples():
+        _knn.add(label, vec)
 
 
 def _on_frame(frames: list[HandFrame], annotated: MatLike) -> None:
     set_latest_frame(annotated)
     event = _matcher.update(frames, now=time.monotonic())
     if event is not None:
+        _latest_gesture["gesture"] = event.gesture
+        _latest_gesture["phase"] = event.phase
         _publisher.publish(event)
         log.info("gesture", gesture=event.gesture, phase=event.phase, hands=event.hands)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    _pose_store.load()
+    _rebuild_knn()
     _publisher.start()
     thread = threading.Thread(
         target=run_capture_loop,
@@ -58,6 +75,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(title="Marcelo Gesture Service", lifespan=lifespan)
 app.include_router(preview_router)
+app.include_router(build_config_router(_pose_store, _rebuild_knn, _latest_gesture))
 
 
 def main() -> None:
