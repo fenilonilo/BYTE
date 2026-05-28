@@ -12,11 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.deps import (
     get_action_dispatcher,
+    get_binding_resolver,
     get_event_bus,
     get_evolution_client,
     get_settings,
 )
 from app.api.gesture_ingest import router as gesture_ingest_router
+from app.api.gestures_config import router as gestures_config_router
 from app.api.router import router
 from app.api.voice import router as voice_router
 from app.api.webhooks import router as webhook_router
@@ -51,6 +53,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         pass
     get_event_bus().subscribe(frontend_bridge)
     get_event_bus().subscribe(get_action_dispatcher().handle)
+    await get_binding_resolver().reload()
     yield
 
 
@@ -74,3 +77,4 @@ app.include_router(webhook_router, prefix="/api/v1")
 app.include_router(ws_chat_router)
 app.include_router(ws_gesture_router)
 app.include_router(gesture_ingest_router)
+app.include_router(gestures_config_router, prefix="/api/v1")
