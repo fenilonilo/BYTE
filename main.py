@@ -4,20 +4,22 @@ from __future__ import annotations
 import asyncio
 import sys
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.deps import get_evolution_client, get_event_bus, get_settings
+from app.api.deps import get_event_bus, get_evolution_client, get_settings
 from app.api.gesture_ingest import router as gesture_ingest_router
 from app.api.router import router
 from app.api.voice import router as voice_router
 from app.api.webhooks import router as webhook_router
 from app.api.ws_chat import router as ws_chat_router
-from app.api.ws_gesture import frontend_bridge
-from app.api.ws_gesture import router as ws_gesture_router
+from app.api.ws_gesture import frontend_bridge, router as ws_gesture_router
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 # Windows: use SelectorEventLoop to avoid ProactorEventLoop issues with asyncpg
 if sys.platform == "win32":
@@ -40,8 +42,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         await client.configure_webhook(
             webhook_url=f"{settings.webhook_base_url}/api/v1/webhook/whatsapp",
         )
-    except Exception:
-        pass  # WhatsApp gateway may not be available in dev
+    except Exception:  # noqa: S110 — WhatsApp gateway may not be available in dev
+        pass
     get_event_bus().subscribe(frontend_bridge)
     yield
 
