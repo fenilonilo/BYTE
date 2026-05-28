@@ -10,11 +10,14 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.deps import get_evolution_client, get_settings
+from app.api.deps import get_evolution_client, get_event_bus, get_settings
+from app.api.gesture_ingest import router as gesture_ingest_router
 from app.api.router import router
 from app.api.voice import router as voice_router
 from app.api.webhooks import router as webhook_router
 from app.api.ws_chat import router as ws_chat_router
+from app.api.ws_gesture import frontend_bridge
+from app.api.ws_gesture import router as ws_gesture_router
 
 # Windows: use SelectorEventLoop to avoid ProactorEventLoop issues with asyncpg
 if sys.platform == "win32":
@@ -39,6 +42,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         )
     except Exception:
         pass  # WhatsApp gateway may not be available in dev
+    get_event_bus().subscribe(frontend_bridge)
     yield
 
 
@@ -60,3 +64,5 @@ app.include_router(webhook_router, prefix="/api/v1")
 
 # WebSocket — mounted at /ws/chat (Vite proxy: /ws → ws://localhost:8000)
 app.include_router(ws_chat_router)
+app.include_router(ws_gesture_router)
+app.include_router(gesture_ingest_router)

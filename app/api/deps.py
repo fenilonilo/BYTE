@@ -14,12 +14,14 @@ from app.adapters.messaging.evolution_client import EvolutionClient
 from app.adapters.shell.windows_shell_adapter import WindowsShellAdapter
 from app.adapters.tools.developer_tool import DeveloperToolkit
 from app.adapters.tools.filesystem_tool import FilesystemToolkit
+from app.application.event_bus import InProcessEventBus
 from app.config import Settings
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from app.ports.agent import AgentPort
+    from app.ports.event_bus import EventBusPort
     from app.ports.logger import LoggerPort
     from app.ports.repository import RepositoryPort
 
@@ -93,6 +95,11 @@ def get_agent() -> AgentPort:
         groq_agent=GroqAgnoAgent(settings, tools=[fs_tool, dev_tool]),
         gemini_agent=GeminiAgnoAgent(settings),
     )
+
+
+@lru_cache
+def get_event_bus() -> EventBusPort:
+    return InProcessEventBus()
 
 
 @lru_cache
