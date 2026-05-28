@@ -116,7 +116,9 @@ def get_event_bus() -> EventBusPort:
 
 @lru_cache
 def get_model_state() -> ModelState:
-    return ModelState()
+    settings = get_settings()
+    default = None if settings.groq_api_key else "gemini"
+    return ModelState(active=default)
 
 
 @lru_cache
