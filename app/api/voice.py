@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import groq as groq_sdk
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, field_validator
 
@@ -39,3 +39,21 @@ async def text_to_speech(
         response_format="wav",
     )
     return Response(content=audio_response.read(), media_type="audio/wav")
+
+
+@router.post("/stt")
+async def speech_to_text(
+    audio: UploadFile,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, str]:
+    client = groq_sdk.Groq(api_key=settings.groq_api_key)
+    audio_bytes = await audio.read()
+    filename = audio.filename or "audio.webm"
+    content_type = audio.content_type or "audio/webm"
+    transcription = client.audio.transcriptions.create(
+        file=(filename, audio_bytes, content_type),
+        model=settings.groq_stt_model,
+        language="pt",
+        response_format="json",
+    )
+    return {"transcript": transcription.text}

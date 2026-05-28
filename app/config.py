@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     groq_tts_model: str = "canopylabs/orpheus-v1-english"
     groq_tts_voice: str = "daniel"
 
+    # Groq STT — Whisper
+    groq_stt_model: str = "whisper-large-v3-turbo"
+
     # Developer tools
     workspace_path: Path = Path("D:/Projetos/Projetos_Marcelo")
     pycharm_path: str = r"C:\Users\fenil\AppData\Local\Programs\PyCharm 2025.2.0.1\bin\pycharm.bat"

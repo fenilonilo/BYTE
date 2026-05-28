@@ -17,6 +17,7 @@
     client = new WsClient({
       wsUrl:  `ws://${window.location.host}/ws/chat`,
       ttsUrl: '/api/v1/tts',
+      sttUrl: '/api/v1/stt',
       onState: (s) => {
         particleState = s as ParticleState
         setParticleState(s as ParticleState)

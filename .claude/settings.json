@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Bash(git *)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(pyright *)",
+      "Bash(pip *)",
+      "Bash(python *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(pwd)",
+      "Bash(cd *)"
+    ]
+  }
+}

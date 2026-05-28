@@ -1,7 +1,8 @@
 let ctx: AudioContext | null = null
 
-function _getCtx(): AudioContext {
+async function _getCtx(): Promise<AudioContext> {
   if (!ctx) ctx = new AudioContext()
+  if (ctx.state === 'suspended') await ctx.resume()
   return ctx
 }
 
@@ -13,7 +14,7 @@ export async function playAndAnalyze(
   arrayBuffer: ArrayBuffer,
   onAmplitude: (amp: number) => void,
 ): Promise<void> {
-  const audioCtx = _getCtx()
+  const audioCtx = await _getCtx()
   const decoded  = await audioCtx.decodeAudioData(arrayBuffer)
 
   const source   = audioCtx.createBufferSource()
@@ -53,7 +54,9 @@ export function analyzeMicStream(
   stream: MediaStream,
   onAmplitude: (amp: number) => void,
 ): () => void {
-  const audioCtx = _getCtx()
+  if (!ctx) ctx = new AudioContext()
+  const audioCtx = ctx
+  if (audioCtx.state === 'suspended') void audioCtx.resume()
   const source   = audioCtx.createMediaStreamSource(stream)
   const analyser = audioCtx.createAnalyser()
   analyser.fftSize = 256
