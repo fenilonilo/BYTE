@@ -6,8 +6,20 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import {
   positionShader, velocityShader, renderVertexShader, renderFragmentShader,
 } from './shaders'
+import { resolveForce, FORCE_MODE, type ResolvedForce } from './effects'
+import type { WireGestureEvent } from '../gesture-types'
 
 const SIZE = 256 // grid edge -> SIZE*SIZE particles
+
+let activeForce: ResolvedForce | null = null
+
+export function applyGestureEvent(ev: WireGestureEvent): void {
+  if (ev.phase === 'end' || ev.gesture === 'none') {
+    activeForce = null
+    return
+  }
+  activeForce = resolveForce(ev)
+}
 
 type ParticleState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
@@ -159,6 +171,22 @@ function animate(): void {
   vu.uCore.value += (sp.core - vu.uCore.value) * 0.02
   renderUniforms.uHue.value += (sp.hue - renderUniforms.uHue.value) * 0.02
   bloomPass.strength += (sp.bloom - bloomPass.strength) * 0.02
+
+  const f = activeForce
+  if (f) {
+    vu.uForceMode.value = f.mode
+    vu.uForceCenter.value.set(f.center[0], f.center[1], f.center[2])
+    vu.uForceVector.value.set(f.vector[0], f.vector[1], f.vector[2])
+    vu.uForceRadius.value = f.radius
+    vu.uForceStrength.value += (f.strength - vu.uForceStrength.value) * 0.2
+    if (f.oneShot) {
+      f.strength = 0
+      if (vu.uForceStrength.value < 0.02) activeForce = null
+    }
+  } else {
+    vu.uForceMode.value = FORCE_MODE.none
+    vu.uForceStrength.value += (0 - vu.uForceStrength.value) * 0.2
+  }
 
   gpu.compute()
   renderUniforms.texturePosition.value = gpu.getCurrentRenderTarget(positionVar).texture
