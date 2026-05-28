@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from gesture_service.config import Thresholds
 from gesture_service.landmarks import HandLandmarks, distance
@@ -11,7 +11,7 @@ INDEX_PIP, MIDDLE_PIP, RING_PIP, PINKY_PIP = 6, 10, 14, 18
 _DEFAULTS = Thresholds()
 
 
-class Pose(str, Enum):
+class Pose(StrEnum):
     NONE = "none"
     FIST = "fist"
     OPEN = "open"

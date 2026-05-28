@@ -9,6 +9,9 @@ from gesture_service.pose import Pose
 
 INSTANT_GESTURES = frozenset({"swipe", "freeze"})
 
+_ONE_HAND = 1
+_TWO_HANDS = 2
+
 
 @dataclass(frozen=True, slots=True)
 class HandFrame:
@@ -39,9 +42,7 @@ class GestureMatcher:
                 return ended
             params = raw[1]  # type: ignore[index]
             phase = "instant" if name in INSTANT_GESTURES else "start"
-            return GestureEvent(
-                gesture=name, phase=phase, hands=hand_count, params=params, ts=now
-            )
+            return GestureEvent(gesture=name, phase=phase, hands=hand_count, params=params, ts=now)
 
         if name is None:
             return None
@@ -63,9 +64,9 @@ class GestureMatcher:
         )
 
     def _classify(self, hands: list[HandFrame]) -> tuple[str, GestureParams] | None:
-        if len(hands) == 1:
+        if len(hands) == _ONE_HAND:
             return self._classify_one(hands[0])
-        if len(hands) == 2:
+        if len(hands) == _TWO_HANDS:
             return self._classify_two(hands[0], hands[1])
         return None
 
@@ -92,8 +93,6 @@ class GestureMatcher:
             dist = _distance(a.center, b.center)
             y_diff = abs(a.center.y - b.center.y)
             if self._t.portal_near <= dist <= self._t.portal_far and y_diff < self._t.portal_y_tol:
-                center = Vec3(
-                    (a.center.x + b.center.x) / 2, (a.center.y + b.center.y) / 2, 0.0
-                )
+                center = Vec3((a.center.x + b.center.x) / 2, (a.center.y + b.center.y) / 2, 0.0)
                 return "portal", GestureParams(center=center, radius=dist / 2)
         return None

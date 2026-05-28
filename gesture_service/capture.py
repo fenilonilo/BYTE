@@ -7,8 +7,7 @@ from typing import Any
 
 import cv2
 from cv2.typing import MatLike
-from mediapipe.python.solutions import drawing_utils as mp_drawing
-from mediapipe.python.solutions import hands as mp_hands
+from mediapipe.python.solutions import drawing_utils as mp_drawing, hands as mp_hands
 
 from gesture_service.config import CameraSettings
 from gesture_service.events import Vec3

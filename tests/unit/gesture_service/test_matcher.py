@@ -17,7 +17,9 @@ def _swipe(vx: float) -> MotionSample:
 def _hand(
     pose: Pose, cx: float, cy: float, handed: str, motion: MotionSample | None = None
 ) -> HandFrame:
-    return HandFrame(pose=pose, center=Vec3(cx, cy, 0.0), motion=motion or _still(), handedness=handed)
+    return HandFrame(
+        pose=pose, center=Vec3(cx, cy, 0.0), motion=motion or _still(), handedness=handed
+    )
 
 
 def test_no_hands_returns_none() -> None:

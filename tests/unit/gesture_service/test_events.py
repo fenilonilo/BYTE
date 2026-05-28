@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from gesture_service.events import GestureEvent, GestureParams, Vec3
@@ -36,5 +38,5 @@ def test_gesture_event_fields() -> None:
 
 def test_gesture_event_is_frozen() -> None:
     ev = GestureEvent(gesture="none", phase="idle", hands=0, params=GestureParams(), ts=0.0)
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         ev.gesture = "x"  # type: ignore[misc]

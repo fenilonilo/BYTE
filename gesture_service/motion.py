@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from gesture_service.config import Thresholds
 from gesture_service.events import Vec3
@@ -9,7 +9,7 @@ from gesture_service.events import Vec3
 _DEFAULTS = Thresholds()
 
 
-class Motion(str, Enum):
+class Motion(StrEnum):
     NONE = "none"
     HOLD = "hold"
     SWIPE = "swipe"

@@ -22,7 +22,7 @@ class GestureParams:
 @dataclass(frozen=True, slots=True)
 class GestureEvent:
     gesture: str
-    phase: str   # 'start' | 'hold' | 'end' | 'instant' | 'idle'
-    hands: int   # 0 | 1 | 2
+    phase: str  # 'start' | 'hold' | 'end' | 'instant' | 'idle'
+    hands: int  # 0 | 1 | 2
     params: GestureParams
     ts: float

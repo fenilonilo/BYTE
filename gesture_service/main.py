@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 import structlog
 import uvicorn
-from cv2.typing import MatLike
 from fastapi import FastAPI
 
 from gesture_service.capture import run_capture_loop
 from gesture_service.matcher import GestureMatcher, HandFrame
-from gesture_service.preview import router as preview_router
-from gesture_service.preview import set_latest_frame
+from gesture_service.preview import router as preview_router, set_latest_frame
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from cv2.typing import MatLike
 
 structlog.configure(
     processors=[

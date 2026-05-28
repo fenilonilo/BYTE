@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from gesture_service.landmarks import HandLandmarks, Landmark, distance, hand_center
@@ -19,5 +21,5 @@ def test_hand_center_is_landmark_9() -> None:
 
 def test_landmark_is_frozen() -> None:
     lm = Landmark(1.0, 2.0, 3.0)
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         lm.x = 9.0  # type: ignore[misc]

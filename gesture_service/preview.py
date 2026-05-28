@@ -2,32 +2,35 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import cv2
-from cv2.typing import MatLike
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from cv2.typing import MatLike
 
 router = APIRouter()
 
 _lock = threading.Lock()
-_latest_jpeg: bytes | None = None
+_latest: dict[str, bytes | None] = {"jpeg": None}
 
 
 def set_latest_frame(frame_bgr: MatLike) -> None:
-    global _latest_jpeg
     ok, buf = cv2.imencode(".jpg", frame_bgr)
     if ok:
         with _lock:
-            _latest_jpeg = buf.tobytes()
+            _latest["jpeg"] = buf.tobytes()
 
 
 def _mjpeg_stream() -> Iterator[bytes]:
     boundary = b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
     while True:
         with _lock:
-            data = _latest_jpeg
+            data = _latest["jpeg"]
         if data is not None:
             yield boundary + data + b"\r\n"
         time.sleep(0.015)

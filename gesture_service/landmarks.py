@@ -14,8 +14,8 @@ class Landmark:
 
 @dataclass(frozen=True, slots=True)
 class HandLandmarks:
-    points: tuple[Landmark, ...]   # 21 landmarks
-    handedness: str                # 'left' | 'right'
+    points: tuple[Landmark, ...]  # 21 landmarks
+    handedness: str  # 'left' | 'right'
 
 
 def distance(a: Landmark, b: Landmark) -> float:
