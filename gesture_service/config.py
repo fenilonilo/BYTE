@@ -19,3 +19,9 @@ class CameraSettings:
     index: int = 0
     width: int = 640
     height: int = 480
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceSettings:
+    backend_ingest_url: str = "ws://127.0.0.1:8000/ws/gesture-ingest"
+    reconnect_seconds: float = 2.0

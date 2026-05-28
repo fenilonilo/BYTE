@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from gesture_service.capture import run_capture_loop
 from gesture_service.matcher import GestureMatcher, HandFrame
 from gesture_service.preview import router as preview_router, set_latest_frame
+from gesture_service.publisher import EventPublisher
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -29,17 +30,20 @@ log = structlog.get_logger("gesture-service")
 
 _stop = threading.Event()
 _matcher = GestureMatcher()
+_publisher = EventPublisher()
 
 
 def _on_frame(frames: list[HandFrame], annotated: MatLike) -> None:
     set_latest_frame(annotated)
     event = _matcher.update(frames, now=time.monotonic())
     if event is not None:
+        _publisher.publish(event)
         log.info("gesture", gesture=event.gesture, phase=event.phase, hands=event.hands)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    _publisher.start()
     thread = threading.Thread(
         target=run_capture_loop,
         kwargs={"on_frame": _on_frame, "stop": _stop.is_set},
@@ -49,6 +53,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     log.info("capture-thread-started")
     yield
     _stop.set()
+    _publisher.stop()
 
 
 app = FastAPI(title="Marcelo Gesture Service", lifespan=lifespan)
