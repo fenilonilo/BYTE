@@ -26,3 +26,10 @@ class GestureEvent:
     hands: int
     params: GestureParams
     ts: float
+
+
+@dataclass(frozen=True, slots=True)
+class Binding:
+    effect: str
+    action: str | None
+    action_params: dict[str, object]
