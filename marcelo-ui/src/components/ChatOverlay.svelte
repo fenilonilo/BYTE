@@ -4,7 +4,7 @@
   import { WsClient } from '../lib/ws-client'
   import StatusBadge from './StatusBadge.svelte'
   import type { ParticleState } from '../lib/types'
-  import { setState as setParticleState, setAmplitude } from '../lib/particle-engine'
+  import { setState as setParticleState, setAmplitude } from '../lib/gpgpu/engine'
 
   let collapsed = $state(false)
   let inputText = $state('')

@@ -32,9 +32,15 @@ const STATE_PARAMS: Record<ParticleState, { hue: number; spread: number; core: n
 
 let currentState: ParticleState = 'idle'
 let bloomPass: UnrealBloomPass
+let amplitude = 0
+let smoothAmp = 0
 
 export function setState(state: ParticleState): void {
   if (STATE_PARAMS[state]) currentState = state
+}
+
+export function setAmplitude(value: number): void {
+  amplitude = Math.max(0, Math.min(1, value))
 }
 
 let renderer: THREE.WebGLRenderer
@@ -170,7 +176,8 @@ function animate(): void {
   vu.uSpread.value += (sp.spread - vu.uSpread.value) * 0.02
   vu.uCore.value += (sp.core - vu.uCore.value) * 0.02
   renderUniforms.uHue.value += (sp.hue - renderUniforms.uHue.value) * 0.02
-  bloomPass.strength += (sp.bloom - bloomPass.strength) * 0.02
+  smoothAmp += (amplitude - smoothAmp) * 0.1
+  bloomPass.strength += (sp.bloom + smoothAmp * 1.5 - bloomPass.strength) * 0.02
 
   const f = activeForce
   if (f) {
