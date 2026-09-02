@@ -193,7 +193,7 @@ Prefix `/api/v1`. FastAPI. Everything async.
 | Route | Purpose |
 |---|---|
 | `GET /health` | Liveness. Used by the Docker healthcheck. |
-| `POST /messages` | Text in, text out. `segment` optional once the Team lands. |
+| `POST /messages` | Text in, text out. `segment` optional — omitted routes via the Team. |
 | `POST /voice` | Audio in, audio out. Not implemented yet. |
 | `WS /ws/notifications` | Proactive pushes to the device. Not implemented yet. |
 
@@ -287,8 +287,9 @@ optional — `feat(agent): add home segment adapter`.
 | Segments `home` / `agenda` / `finance` declared | done |
 | `POST /messages`, `GET /health` | done |
 | Dockerfile + compose (API only) | done |
-| Agents | `StubAgent` — echoes its segment |
-| Agno adapter + Team routing | not started |
+| Agno agents per segment (no tools yet) | done |
+| Model tier per role + cross-provider fallback | done |
+| Agno adapter + Team routing under `auto` | done |
 | Postgres + pgvector + Alembic | not started |
 | Tuya adapter | not started |
 | Google Calendar / Sheets adapters | not started |

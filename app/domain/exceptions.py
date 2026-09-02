@@ -19,3 +19,7 @@ class RegistryDuplicateError(RegistryError):
 
 class RegistryKeyError(RegistryError):
     """Raised when looking up a key that does not exist."""
+
+
+class AgentError(DomainError):
+    """Raised when an agent fails to produce a reply."""

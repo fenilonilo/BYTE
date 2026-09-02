@@ -154,3 +154,11 @@ reply = await agent.run(body.content, conversation)
 **Why:** polling adds latency for something time-sensitive. Between the two push options, FastAPI serves WebSocket natively, so it costs no broker container and no extra operational surface.
 **Trade-off:** the server now holds connection state and must handle reconnects, which a broker would have handled. Undelivered reminders are persisted and replayed on reconnect rather than dropped.
 **Revisit when:** the device sleeps deeply enough to miss pushes, or more than one client connects. That is when MQTT earns its container — not before.
+
+### ADR-013: Model tier per role, cross-provider fallback (2026-09-02)
+**Context:** every agent ran on one model from one vendor. Byte answers by voice, so a trivial "apaga a luz" pays the same latency and price as a question that actually needs reasoning, and a single provider outage takes the whole assistant down.
+**Decision:** each role gets a tier fixed at build time — the routing Team and `home` on Groq (fastest), `agenda` and `finance` on Gemini — and every tier declares an Agno `FallbackConfig`. `on_error` prefers another provider first; `on_rate_limit` prefers the same provider's other tier first. Models are configured as `<provider>:<model_id>` strings, which Agno resolves natively.
+**Why:** the difficulty of a segment's work is known when the segment is written, so paying an LLM hop to classify difficulty at runtime buys nothing and costs latency on every utterance — the same reasoning ADR-010 used against a hand-written router. Splitting the two fallback lists follows the failure modes: a 429 means that model is busy while the provider is up, an error may mean it is not.
+**Trade-off:** a request whose difficulty is unusual for its segment gets the wrong tier. Accepted — retuning is one env var, and the tier table lives in one dict.
+**Consequence:** Anthropic is not wired in; there is no key for it. Adding it later is a config string, not a code change. `google-genai` and `groq` join the `agents` extra.
+**Note:** the free Gemini tier serves no `pro` model — `gemini-2.5-pro` is closed to new accounts and `gemini-3.1-pro-preview` has a zero quota — so the heavy tier is `gemini-3.7-flash`. Revisit when the account is paid.

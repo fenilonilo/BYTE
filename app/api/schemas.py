@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class IncomingMessageSchema(BaseModel):
     content: str
-    segment: str
+    segment: str = "auto"
     conversation_id: str | None = None
 
 

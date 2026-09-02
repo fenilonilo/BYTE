@@ -10,7 +10,7 @@ from app.api.deps import get_agents, get_logger, get_repo
 from app.api.schemas import IncomingMessageSchema, MessageSchema
 from app.application.use_cases.process_incoming_message import ProcessIncomingMessage
 from app.domain.entities import IncomingMessage
-from app.domain.exceptions import RegistryKeyError
+from app.domain.exceptions import AgentError, RegistryKeyError
 
 if TYPE_CHECKING:
     from app.application.registry import Registry
@@ -50,7 +50,14 @@ async def receive_message(
         conversation_id=conversation_id,
     )
     use_case = ProcessIncomingMessage(agent=agent, repo=repo, log=log)
-    reply = await use_case.execute(incoming)
+    try:
+        reply = await use_case.execute(incoming)
+    except AgentError as exc:
+        log.error("agent.run.failed", conversation_id=conversation_id, segment=body.segment)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Agent failed to produce a reply",
+        ) from exc
     return MessageSchema(
         id=reply.id,
         role=reply.role,

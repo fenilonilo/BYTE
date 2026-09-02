@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from app.adapters.agent.stub_agent import StubAgent
+from app.adapters.agent.agno_agent import build_agents
 from app.adapters.logging.structlog_logger import StructlogLogger
 from app.adapters.repository.in_memory_repository import InMemoryRepository
 from app.application.registry import Registry
@@ -33,6 +33,6 @@ def get_repo() -> RepositoryPort:
 @lru_cache
 def get_agents() -> Registry[AgentPort]:
     registry: Registry[AgentPort] = Registry()
-    for segment in get_settings().segments:
-        registry.register(segment, StubAgent(segment))
+    for name, agent in build_agents(get_settings()).items():
+        registry.register(name, agent)
     return registry
