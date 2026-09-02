@@ -4,40 +4,56 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import get_llm, get_logger, get_repo
-from app.api.schemas import IncomingMessageSchema, OutgoingMessageSchema
+from app.api.deps import get_agents, get_logger, get_repo
+from app.api.schemas import IncomingMessageSchema, MessageSchema
 from app.application.use_cases.process_incoming_message import ProcessIncomingMessage
 from app.domain.entities import IncomingMessage
+from app.domain.exceptions import RegistryKeyError
 
 if TYPE_CHECKING:
-    from app.ports.llm import LLMPort
+    from app.application.registry import Registry
+    from app.ports.agent import AgentPort
     from app.ports.logger import LoggerPort
     from app.ports.repository import RepositoryPort
 
 router = APIRouter()
 
 
-@router.post("/messages", response_model=OutgoingMessageSchema)
+@router.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@router.post("/messages", response_model=MessageSchema)
 async def receive_message(
     body: IncomingMessageSchema,
-    llm: LLMPort = Depends(get_llm),
+    agents: Registry[AgentPort] = Depends(get_agents),
     repo: RepositoryPort = Depends(get_repo),
     log: LoggerPort = Depends(get_logger),
-) -> OutgoingMessageSchema:
-    use_case = ProcessIncomingMessage(llm=llm, repo=repo, log=log)
+) -> MessageSchema:
+    try:
+        agent = agents.get(body.segment)
+    except RegistryKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown segment: {body.segment!r}",
+        ) from exc
+
+    conversation_id = body.conversation_id or str(uuid4())
     incoming = IncomingMessage(
         id=str(uuid4()),
-        sender=body.sender,
         content=body.content,
-        channel=body.channel,
+        segment=body.segment,
         timestamp=datetime.now(tz=UTC),
-        conversation_id=body.conversation_id,
+        conversation_id=conversation_id,
     )
-    outgoing = await use_case.execute(incoming)
-    return OutgoingMessageSchema(
-        content=outgoing.content,
-        channel=outgoing.channel,
-        recipient=outgoing.recipient,
+    use_case = ProcessIncomingMessage(agent=agent, repo=repo, log=log)
+    reply = await use_case.execute(incoming)
+    return MessageSchema(
+        id=reply.id,
+        role=reply.role,
+        content=reply.content,
+        conversation_id=conversation_id,
     )

@@ -18,29 +18,23 @@ class Message:
 @dataclass(frozen=True, slots=True)
 class IncomingMessage:
     id: str
-    sender: str
     content: str
-    channel: str
+    segment: str
     timestamp: datetime
     conversation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class OutgoingMessage:
-    content: str
-    channel: str
-    recipient: str
-
-
-@dataclass(frozen=True, slots=True)
 class Conversation:
     id: str
+    segment: str
     messages: tuple[Message, ...]
     created_at: datetime
 
     def with_message(self, msg: Message) -> Conversation:
         return Conversation(
             id=self.id,
+            segment=self.segment,
             messages=(*self.messages, msg),
             created_at=self.created_at,
         )

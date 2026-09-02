@@ -4,26 +4,29 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.domain.entities import Conversation, IncomingMessage, Message, OutgoingMessage
+from app.domain.entities import Conversation, IncomingMessage, Message
 
 if TYPE_CHECKING:
-    from app.ports.llm import LLMPort
+    from app.ports.agent import AgentPort
     from app.ports.logger import LoggerPort
     from app.ports.repository import RepositoryPort
 
 
 class ProcessIncomingMessage:
-    def __init__(self, llm: LLMPort, repo: RepositoryPort, log: LoggerPort) -> None:
-        self._llm = llm
+    """Runs one message through the agent bound to its segment and persists the exchange."""
+
+    def __init__(self, agent: AgentPort, repo: RepositoryPort, log: LoggerPort) -> None:
+        self._agent = agent
         self._repo = repo
         self._log = log
 
-    async def execute(self, msg: IncomingMessage) -> OutgoingMessage:
+    async def execute(self, msg: IncomingMessage) -> Message:
         conv_id = msg.conversation_id or str(uuid4())
         conversation = await self._repo.get(conv_id)
         if conversation is None:
             conversation = Conversation(
                 id=conv_id,
+                segment=msg.segment,
                 messages=(),
                 created_at=datetime.now(tz=UTC),
             )
@@ -36,11 +39,8 @@ class ProcessIncomingMessage:
         )
         conversation = conversation.with_message(user_msg)
 
-        self._log.info("llm.complete.start", conversation_id=conv_id)
-        response_text = await self._llm.complete(
-            prompt=msg.content,
-            conversation=conversation,
-        )
+        self._log.info("agent.run.start", conversation_id=conv_id, segment=msg.segment)
+        response_text = await self._agent.run(message=msg.content, conversation=conversation)
 
         assistant_msg = Message(
             id=str(uuid4()),
@@ -51,10 +51,6 @@ class ProcessIncomingMessage:
         conversation = conversation.with_message(assistant_msg)
 
         await self._repo.save(conversation)
-        self._log.info("llm.complete.done", conversation_id=conv_id)
+        self._log.info("agent.run.done", conversation_id=conv_id, segment=msg.segment)
 
-        return OutgoingMessage(
-            content=response_text,
-            channel=msg.channel,
-            recipient=msg.sender,
-        )
+        return assistant_msg

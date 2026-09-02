@@ -7,9 +7,9 @@
 | Kind | Style | Example |
 |---|---|---|
 | Module | `snake_case` | `process_message.py` |
-| Package | `snake_case` | `messaging` |
-| Class | `PascalCase` | `MessagingPort` |
-| Function/method | `snake_case` | `send_message` |
+| Package | `snake_case` | `agent` |
+| Class | `PascalCase` | `AgentPort` |
+| Function/method | `snake_case` | `run_agent` |
 | Constant | `UPPER_SNAKE` | `DEFAULT_TIMEOUT_S` |
 | Private | leading `_` | `_internal_state` |
 | Type var | single upper letter | `T`, `K`, `V` |
@@ -18,8 +18,8 @@
 
 | Kind | Suffix | Example |
 |---|---|---|
-| Port (ABC) | `Port` | `MessagingPort`, `LLMPort` |
-| Adapter | adapter target | `WhatsAppAdapter`, `OpenAILLM` |
+| Port (ABC) | `Port` | `AgentPort`, `RepositoryPort` |
+| Adapter | adapter target | `AgnoAgent`, `PostgresRepository` |
 | Pydantic schema | `Schema` | `IncomingMessageSchema` |
 | Domain entity | none | `Message`, `Conversation` |
 | Use case | verb phrase | `ProcessIncomingMessage` |
@@ -55,7 +55,7 @@ from datetime import datetime
 @dataclass(frozen=True, slots=True)
 class Message:
     id: str
-    sender: str
+    role: str
     content: str
     timestamp: datetime
 ```
@@ -70,14 +70,11 @@ Rules:
 
 ```python
 from abc import ABC, abstractmethod
-from app.domain.entities import OutgoingMessage
+from app.domain.entities import Conversation
 
-class MessagingPort(ABC):
+class AgentPort(ABC):
     @abstractmethod
-    async def send(self, message: OutgoingMessage) -> None: ...
-
-    @abstractmethod
-    async def receive(self) -> AsyncIterator[IncomingMessage]: ...
+    async def run(self, message: str, conversation: Conversation) -> str: ...
 ```
 
 Rules:
@@ -89,12 +86,12 @@ Rules:
 
 ```python
 class ProcessIncomingMessage:
-    def __init__(self, llm: LLMPort, repo: RepositoryPort, log: LoggerPort) -> None:
-        self._llm = llm
+    def __init__(self, agent: AgentPort, repo: RepositoryPort, log: LoggerPort) -> None:
+        self._agent = agent
         self._repo = repo
         self._log = log
 
-    async def execute(self, msg: IncomingMessage) -> OutgoingMessage:
+    async def execute(self, msg: IncomingMessage) -> Message:
         ...
 ```
 
@@ -106,7 +103,7 @@ Rules:
 ## Adapters
 
 - Translate external lib types ↔ domain entities at the boundary.
-- Wrap external exceptions: `try: ... except VendorError as e: raise MessagingError(...) from e`.
+- Wrap external exceptions: `try: ... except AgnoError as e: raise AgentError(...) from e`.
 - No domain logic inside adapters.
 
 ## Errors
@@ -114,7 +111,7 @@ Rules:
 ```python
 # app/domain/exceptions.py
 class DomainError(Exception): ...
-class MessageError(DomainError): ...
+class AgentError(DomainError): ...
 class RegistryError(DomainError): ...
 class RegistryDuplicateError(RegistryError): ...
 class RegistryKeyError(RegistryError): ...
@@ -122,7 +119,7 @@ class RegistryKeyError(RegistryError): ...
 
 Rules:
 - All raise paths through `DomainError` subclasses.
-- Adapters define their own subclass of `DomainError` (e.g., `MessagingError`).
+- Adapters define their own subclass of `DomainError` (e.g., `AgentError`).
 - Never raise `Exception` or `RuntimeError` directly in app code.
 
 ## Async
@@ -159,22 +156,22 @@ Rules:
 Conventional Commits. Examples:
 
 ```
-feat(messaging): add Telegram adapter
+feat(agent): add sales segment adapter
 fix(registry): case-insensitive lookup ignored unicode
 refactor(application): extract prompt strategy
 test(domain): add Message equality cases
 chore(deps): bump pydantic to 2.10
-docs: ADR-006 add caching strategy
+docs: ADR-009 add caching strategy
 ```
 
 Body (optional) explains *why*. Footer for breaking changes:
 
 ```
-BREAKING CHANGE: MessagingPort.send is now async.
+BREAKING CHANGE: AgentPort.run now returns a Message.
 ```
 
 ## Pull request / branch (when applicable)
 
-- Branch: `<type>/<short-slug>` — `feat/telegram-adapter`, `fix/registry-case`.
+- Branch: `<type>/<short-slug>` — `feat/sales-agent`, `fix/registry-case`.
 - One concern per PR. If it touches > 3 layers, split it.
 - PR description: what + why + how to verify. Link to ADR if architectural.

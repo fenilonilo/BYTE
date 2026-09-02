@@ -7,6 +7,8 @@ if TYPE_CHECKING:
     from app.domain.entities import Conversation
 
 
-class LLMPort(ABC):
+class AgentPort(ABC):
+    """One agent, one segment. The adapter owns the framework (Agno) and the model."""
+
     @abstractmethod
-    async def complete(self, prompt: str, conversation: Conversation) -> str: ...
+    async def run(self, message: str, conversation: Conversation) -> str: ...

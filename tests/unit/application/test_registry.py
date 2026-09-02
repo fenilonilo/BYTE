@@ -27,17 +27,17 @@ def test_get_missing_key_raises() -> None:
 
 def test_lookup_case_insensitive() -> None:
     registry: Registry[str] = Registry()
-    registry.register("WhatsApp", "adapter")
-    assert registry.get("whatsapp") == "adapter"
-    assert registry.get("WHATSAPP") == "adapter"
-    assert registry.get("WhatsApp") == "adapter"
+    registry.register("Sales", "agent")
+    assert registry.get("sales") == "agent"
+    assert registry.get("SALES") == "agent"
+    assert registry.get("Sales") == "agent"
 
 
 def test_register_duplicate_case_insensitive() -> None:
     registry: Registry[str] = Registry()
-    registry.register("TELEGRAM", "adapter")
+    registry.register("SUPPORT", "agent")
     with pytest.raises(RegistryDuplicateError):
-        registry.register("telegram", "other")
+        registry.register("support", "other")
 
 
 def test_registry_stores_same_instance() -> None:
