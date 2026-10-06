@@ -4,15 +4,20 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+# Locked dependencies: regenerate with the pip-compile command in the README.
+COPY requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
+
 COPY app ./app
 COPY main.py ./
 
-RUN pip install --no-cache-dir ".[api,openai,thinq,tuya,spotify]"
+RUN useradd --system --no-create-home --uid 10001 byte
+USER byte
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+    CMD python -c "import os, ssl, urllib.request as u; tls = os.environ.get('BYTE_TLS_CERT'); u.urlopen(('https' if tls else 'http') + '://localhost:8000/api/v1/health', context=ssl._create_unverified_context() if tls else None)"
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# TLS is on when BYTE_TLS_CERT and BYTE_TLS_KEY are set (required for LAN exposure).
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port 8000 ${BYTE_TLS_CERT:+--ssl-certfile \"$BYTE_TLS_CERT\" --ssl-keyfile \"$BYTE_TLS_KEY\"}"]

@@ -7,8 +7,8 @@
 | Kind | Style | Example |
 |---|---|---|
 | Module | `snake_case` | `process_message.py` |
-| Package | `snake_case` | `agent` |
-| Class | `PascalCase` | `AgentPort` |
+| Package | `snake_case` | `memory` |
+| Class | `PascalCase` | `ChatModelPort` |
 | Function/method | `snake_case` | `run_agent` |
 | Constant | `UPPER_SNAKE` | `DEFAULT_TIMEOUT_S` |
 | Private | leading `_` | `_internal_state` |
@@ -18,11 +18,11 @@
 
 | Kind | Suffix | Example |
 |---|---|---|
-| Port (ABC) | `Port` | `AgentPort`, `RepositoryPort` |
-| Adapter | adapter target | `AgnoAgent`, `PostgresRepository` |
+| Port (ABC) | `Port` | `ChatModelPort`, `ConversationStorePort` |
+| Adapter | adapter target | `OpenAIChatModel`, `InMemoryHome` |
 | Pydantic schema | `Schema` | `IncomingMessageSchema` |
-| Domain entity | none | `Message`, `Conversation` |
-| Use case | verb phrase | `ProcessIncomingMessage` |
+| Domain entity | none | `Message`, `Device` |
+| Use case | verb phrase | `ProcessChatMessage` |
 | Exception | `Error` | `RegistryDuplicateError` |
 
 ## Files & layout
@@ -70,11 +70,14 @@ Rules:
 
 ```python
 from abc import ABC, abstractmethod
-from app.domain.entities import Conversation
+from app.domain.model import ModelMessage, ModelTurn
+from app.domain.tools import ToolSpec
 
-class AgentPort(ABC):
+class ChatModelPort(ABC):
     @abstractmethod
-    async def run(self, message: str, conversation: Conversation) -> str: ...
+    async def complete(
+        self, messages: Sequence[ModelMessage], tools: Sequence[ToolSpec]
+    ) -> ModelTurn: ...
 ```
 
 Rules:
@@ -85,13 +88,12 @@ Rules:
 ## Use cases
 
 ```python
-class ProcessIncomingMessage:
-    def __init__(self, agent: AgentPort, repo: RepositoryPort, log: LoggerPort) -> None:
-        self._agent = agent
-        self._repo = repo
-        self._log = log
+class ProcessChatMessage:
+    def __init__(self, model: ChatModelPort, store: ConversationStorePort, ...) -> None:
+        self._model = model
+        self._store = store
 
-    async def execute(self, msg: IncomingMessage) -> Message:
+    async def execute(self, conversation_id: str, text: str, segment: str | None) -> ChatReply:
         ...
 ```
 
@@ -103,7 +105,7 @@ Rules:
 ## Adapters
 
 - Translate external lib types ↔ domain entities at the boundary.
-- Wrap external exceptions: `try: ... except AgnoError as e: raise AgentError(...) from e`.
+- Wrap external exceptions: `try: ... except OpenAIError as e: raise AgentError(...) from e`.
 - No domain logic inside adapters.
 
 ## Errors
@@ -112,6 +114,7 @@ Rules:
 # app/domain/exceptions.py
 class DomainError(Exception): ...
 class AgentError(DomainError): ...
+class LiveSessionError(DomainError): ...
 class RegistryError(DomainError): ...
 class RegistryDuplicateError(RegistryError): ...
 class RegistryKeyError(RegistryError): ...
@@ -156,7 +159,7 @@ Rules:
 Conventional Commits. Examples:
 
 ```
-feat(agent): add sales segment adapter
+feat(live): add realtime session adapter
 fix(registry): case-insensitive lookup ignored unicode
 refactor(application): extract prompt strategy
 test(domain): add Message equality cases
@@ -167,11 +170,11 @@ docs: ADR-009 add caching strategy
 Body (optional) explains *why*. Footer for breaking changes:
 
 ```
-BREAKING CHANGE: AgentPort.run now returns a Message.
+BREAKING CHANGE: ChatModelPort.complete now returns a ModelTurn.
 ```
 
 ## Pull request / branch (when applicable)
 
-- Branch: `<type>/<short-slug>` — `feat/sales-agent`, `fix/registry-case`.
+- Branch: `<type>/<short-slug>` — `feat/live-mode`, `fix/registry-case`.
 - One concern per PR. If it touches > 3 layers, split it.
 - PR description: what + why + how to verify. Link to ADR if architectural.

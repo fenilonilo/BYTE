@@ -2,10 +2,14 @@
 
 A personal assistant backend for one person, running headless in Docker on a home
 server. It controls lights, an air conditioner and music, manages a calendar and tracks
-monthly expenses. Chat today (`POST /api/v1/messages`); a live spoken mode comes next.
+monthly expenses, through two modes:
+
+- **chat** — `POST /api/v1/messages`: a text message in, a text reply out.
+- **live** — `WS /api/v1/live`: a spoken conversation; the agent runs tools while it talks.
 
 One agent holds every tool. Every outside resource (the model provider, the smart
-home, the calendar, the expense sheet, storage) is an adapter behind a port.
+home, the calendar, the expense sheet, storage) is an adapter behind a port. The
+live client is a custom ESP32-S3, but the protocol is plain WebSocket: any client works.
 
 No GUI, no computer vision, no chat-channel adapters, no multi-user support.
 
@@ -29,6 +33,26 @@ boot log says which adapter is active (`adapters.selected`).
 | Lights | Tuya, over the LAN (`tinytuya`) | `BYTE_TUYA_LIGHTS`: JSON of name → `device_id`, `address`, `local_key`, `version` |
 | Air conditioner | LG ThinQ | `BYTE_THINQ_ACCESS_SECRET` (personal access token), `BYTE_THINQ_COUNTRY` |
 | Music | Spotify (Premium) | `BYTE_SPOTIFY_CLIENT_ID`, `BYTE_SPOTIFY_REFRESH_TOKEN` (get it with `python scripts/spotify_login.py`), `BYTE_SPOTIFY_DEVICE` |
+
+### Expose it on the LAN (for the ESP32)
+
+Only together with TLS, because the bearer token would otherwise travel in cleartext.
+
+```bash
+mkdir -p certs
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=byte" \
+  -keyout certs/byte.key -out certs/byte.crt \
+  -addext "subjectAltName=IP:192.168.0.10"          # the server's LAN IP
+```
+
+Give the server a fixed DHCP reservation for that IP, pin `certs/byte.crt` in the
+firmware, then set in `.env`:
+
+```
+BYTE_PUBLISH_HOST=192.168.0.10
+BYTE_TLS_CERT=/certs/byte.crt
+BYTE_TLS_KEY=/certs/byte.key
+```
 
 ## Chat
 
@@ -57,6 +81,29 @@ conditioner on or off) never run on the first request: the reply carries the exa
 `pending_confirmation`, and only the user's very next message, if it is a clear
 "sim", executes it.
 
+## Live protocol
+
+`WS /api/v1/live` with `Authorization: Bearer <token>` on the upgrade request.
+
+| Direction | Frame | Meaning |
+|---|---|---|
+| client → server | JSON `{"type":"start","segment"?,"conversation_id"?}` | first frame |
+| server → client | JSON `{"type":"ready","conversation_id","audio":{"format":"pcm16","rate":24000,"channels":1}}` | provider session is open; start streaming |
+| both | binary | PCM16 mono 24 kHz audio |
+| server → client | JSON `transcript`, `turn_done`, `interrupt`, `error {code}`, `closed {reason}` | events |
+| client → server | JSON `{"type":"played","audio_end_ms":N}` | after `interrupt`: how much of the reply was actually played |
+
+Firmware requirements: upsample 16 → 24 kHz, echo cancellation (or mute the mic
+while playing), buffer microphone audio until `ready`, pin the server certificate,
+and do not auto-reconnect after close code `4000` (another client took over).
+One live session at a time; a session ends after 60 s without speech or 10 minutes.
+
+Try it without hardware:
+
+```bash
+python scripts/live_probe.py question.wav reply.wav --token "$BYTE_API_TOKEN"
+```
+
 ## Develop
 
 ```bash
@@ -65,13 +112,20 @@ ruff check . && pyright && pytest
 pytest -m integration        # hits the real OpenAI API (needs BYTE_OPENAI_API_KEY)
 ```
 
+Regenerate the locked dependencies used by the Docker image:
+
+```bash
+pip-compile --extra api --extra openai --extra thinq --extra tuya --extra spotify \
+  --strip-extras -o requirements.lock pyproject.toml
+```
+
 ## Status
 
-Chat is built end to end. Lights (Tuya), the air conditioner (ThinQ) and music (Spotify)
-have real adapters; the calendar and the expenses are still **in memory**, so the whole
-flow (tools, confirmation) also runs with no device at all. Not built yet: live voice, the
-Google Calendar and Google Sheets adapters, Postgres persistence (history is in memory
-and lost on restart) and the reminder scheduler.
+Chat and live are built end to end. Lights (Tuya), the air conditioner (ThinQ) and music
+(Spotify) have real adapters; the calendar and the expenses are still **in memory**, so
+the whole flow (tools, confirmation, barge-in) also runs with no device at all. Not built
+yet: the Google Calendar and Google Sheets adapters, Postgres persistence (history is in
+memory and lost on restart), the Gemini Live adapter and the reminder scheduler.
 
 See `CLAUDE.md` for the rules, `docs/ARCHITECTURE.md` for the decisions and
 `docs/superpowers/specs/` for the design.
