@@ -155,6 +155,7 @@ async def test_server_audio_is_played() -> None:
 async def test_mic_is_muted_while_speaking_and_for_the_echo_tail() -> None:
     rig = Rig()
     await rig.go_live()
+    await arm(rig)
     rig.speaker.is_busy = True
     await rig.session.on_frame(FRAME)
     assert rig.socket.audio() == []
@@ -177,27 +178,79 @@ async def test_interrupt_flushes_playback_and_reports_played_ms() -> None:
     assert {"type": "played", "audio_end_ms": 1234} in rig.socket.events()
 
 
+async def arm(rig: Rig) -> None:
+    rig.socket.push({"type": "turn_done"})
+    await settle()
+
+
 async def test_idle_timeout_closes_the_link() -> None:
     rig = Rig()
     await rig.go_live()
+    await arm(rig)
     rig.clock.advance(9)
     await rig.session.on_frame(FRAME)
     await settle()
     assert rig.socket.closed
     assert rig.session.state == "idle"
     assert "voice.idle_close" in rig.log.names()
+    assert rig.detector.resets == 1
+    assert rig.speaker.cleared >= 1
+
+
+async def test_no_idle_close_before_the_first_turn_done() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.clock.advance(20)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert not rig.socket.closed
 
 
 async def test_server_events_count_as_activity() -> None:
     rig = Rig()
     await rig.go_live()
+    await arm(rig)
     rig.clock.advance(7)
-    rig.socket.push({"type": "transcript", "role": "user", "text": "ignored", "final": True})
+    rig.socket.push({"type": "transcript", "role": "assistant", "text": "ignored", "final": True})
     await settle()
     rig.clock.advance(7)
     await rig.session.on_frame(FRAME)
     await settle()
     assert not rig.socket.closed
+
+
+async def test_agent_audio_disarms_idle() -> None:
+    rig = Rig()
+    await rig.go_live()
+    await arm(rig)
+    rig.socket.push(b"")
+    await settle()
+    rig.clock.advance(20)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert not rig.socket.closed
+
+
+async def test_user_transcript_disarms_idle() -> None:
+    rig = Rig()
+    await rig.go_live()
+    await arm(rig)
+    rig.socket.push({"type": "transcript", "role": "user", "text": "x", "final": False})
+    await settle()
+    rig.clock.advance(20)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert not rig.socket.closed
+
+
+async def test_idle_close_fires_once() -> None:
+    rig = Rig()
+    await rig.go_live()
+    await arm(rig)
+    rig.clock.advance(9)
+    await rig.session.on_frame(FRAME)
+    await rig.session.on_frame(FRAME)
+    assert rig.log.names().count("voice.idle_close") == 1
 
 
 async def test_long_agent_speech_is_not_idle_closed() -> None:

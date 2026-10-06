@@ -84,6 +84,7 @@ class VoiceSession:
         self._link: asyncio.Task[None] | None = None
         self._last_activity = 0.0
         self._unmute_at = 0.0
+        self._idle_armed = False
 
     @property
     def state(self) -> State:
@@ -129,6 +130,7 @@ class VoiceSession:
         """Process one server message; True means the session is over."""
         self._last_activity = self._clock()
         if isinstance(message, bytes):
+            self._idle_armed = False
             if self._state == "live":
                 self._speaker.play(message)
             return False
@@ -138,6 +140,10 @@ class VoiceSession:
             await self._go_live()
         elif kind == "interrupt":
             await self._send_played()
+        elif kind == "turn_done":
+            self._idle_armed = True
+        elif kind == "transcript" and event.get("role") == "user":
+            self._idle_armed = False
         elif kind == "error":
             self._log.warning("voice.server_error", code=event.get("code"))
             return True
@@ -167,7 +173,10 @@ class VoiceSession:
             return
         if now < self._unmute_at:
             return
-        if now - self._last_activity > self._cfg.idle_seconds:
+        # ponytail: no local VAD, so a user utterance that starts after a turn and runs past
+        # idle_seconds is cut; raise BYTE_VOICE_IDLE_SECONDS or add an energy VAD if that bites
+        if self._idle_armed and now - self._last_activity > self._cfg.idle_seconds:
+            self._idle_armed = False
             self._log.info("voice.idle_close")
             if self._ws is not None:
                 with contextlib.suppress(Exception):
@@ -185,6 +194,7 @@ class VoiceSession:
         self._state = "idle"
         self._buffer.clear()
         self._unmute_at = 0.0
+        self._idle_armed = False
         self._speaker.clear()
         self._detector.reset()
         if ws is not None:
