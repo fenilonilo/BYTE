@@ -63,3 +63,17 @@ logs/
 # Misc
 .cache/
 node_modules/
+
+# tinytuya wizard output (contains local keys)
+devices.json
+tinytuya.json
+tuya-raw.json
+snapshot.json
+
+# Local TLS material and per-user tool settings
+certs/
+.idea/
+.claude/settings.local.json
+
+# wake word training clips (the trained models/ei_byte.onnx is tracked)
+wakeword_data/

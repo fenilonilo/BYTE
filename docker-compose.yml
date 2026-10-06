@@ -2,7 +2,10 @@ services:
   api:
     build: .
     ports:
-      - "127.0.0.1:8000:8000"
+      # Loopback by default. Set BYTE_PUBLISH_HOST=<LAN IP> only together with TLS (see README).
+      - "${BYTE_PUBLISH_HOST:-127.0.0.1}:8000:8000"
     env_file:
       - .env
+    volumes:
+      - ./certs:/certs:ro
     restart: unless-stopped

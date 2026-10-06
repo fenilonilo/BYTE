@@ -1,0 +1,20 @@
+[Unit]
+Description=Byte voice client (wake word + live conversation)
+After=network-online.target docker.service sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=byte
+SupplementaryGroups=audio
+WorkingDirectory=/opt/byte
+ExecStart=/opt/byte/.venv/bin/python -m voice.main
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

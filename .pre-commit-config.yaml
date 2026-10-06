@@ -20,11 +20,6 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.389
-    hooks:
-      - id: pyright
-
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.6.0
     hooks:
@@ -34,9 +29,17 @@ repos:
 
   - repo: local
     hooks:
+      # Runs in the project environment: an isolated pyright env cannot resolve fastapi/openai
+      # and would report every import as unknown under strict mode.
+      - id: pyright
+        name: pyright (project environment)
+        entry: pyright
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: pytest-fast
         name: pytest (unit only)
-        entry: pytest -m "not integration and not slow" -q
+        entry: pytest -q
         language: system
         pass_filenames: false
         stages: [pre-push]
