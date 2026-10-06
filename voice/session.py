@@ -138,6 +138,12 @@ class VoiceSession:
             await self._go_live()
         elif kind == "interrupt":
             await self._send_played()
+        elif kind == "error":
+            self._log.warning("voice.server_error", code=event.get("code"))
+            return True
+        elif kind == "closed":
+            self._log.info("voice.server_closed", reason=event.get("reason"))
+            return True
         return False
 
     async def _go_live(self) -> None:
@@ -160,6 +166,12 @@ class VoiceSession:
             self._last_activity = now
             return
         if now < self._unmute_at:
+            return
+        if now - self._last_activity > self._cfg.idle_seconds:
+            self._log.info("voice.idle_close")
+            if self._ws is not None:
+                with contextlib.suppress(Exception):
+                    await self._ws.close()  # ends _serve's receive loop, which runs _finish
             return
         with contextlib.suppress(Exception):  # the receive loop sees a dead socket and ends us
             await self._send(upsample_16k_to_24k(frame))

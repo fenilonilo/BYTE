@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -9,6 +10,9 @@ from tests.fakes.clock import FakeClock
 from tests.fakes.logger import RecordingLogger
 from tests.fakes.voice import FakeDetector, FakeSocket, FakeSpeaker
 from voice.session import SessionConfig, VoiceSession, upsample_16k_to_24k
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 FRAME = np.zeros(1280, dtype=np.int16).tobytes()  # 80 ms at 16 kHz
 
@@ -171,3 +175,119 @@ async def test_interrupt_flushes_playback_and_reports_played_ms() -> None:
     await settle()
     assert rig.speaker.cleared == 1
     assert {"type": "played", "audio_end_ms": 1234} in rig.socket.events()
+
+
+async def test_idle_timeout_closes_the_link() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.clock.advance(9)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert rig.socket.closed
+    assert rig.session.state == "idle"
+    assert "voice.idle_close" in rig.log.names()
+
+
+async def test_server_events_count_as_activity() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.clock.advance(7)
+    rig.socket.push({"type": "transcript", "role": "user", "text": "ignored", "final": True})
+    await settle()
+    rig.clock.advance(7)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert not rig.socket.closed
+
+
+async def test_long_agent_speech_is_not_idle_closed() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.speaker.is_busy = True
+    for _ in range(300):  # 24 s of agent audio, longer than idle_seconds
+        rig.clock.advance(0.08)
+        await rig.session.on_frame(FRAME)
+    rig.speaker.is_busy = False
+    rig.clock.advance(0.31)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert not rig.socket.closed
+    assert len(rig.socket.audio()) == 1
+
+
+async def test_server_close_returns_to_idle_and_resets_the_detector() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.socket.end()
+    await settle()
+    assert rig.session.state == "idle"
+    assert rig.detector.resets == 1
+    assert rig.speaker.cleared >= 1
+    await rig.wake()  # a new wake word opens a fresh session
+    assert len(rig.sockets) == 2
+
+
+async def test_error_event_ends_the_session_and_logs_only_the_code() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.socket.push({"type": "error", "code": "session_limit"})
+    await settle()
+    assert rig.socket.closed
+    assert rig.session.state == "idle"
+    assert ("warning", "voice.server_error", {"code": "session_limit"}) in rig.log.events
+
+
+async def test_closed_event_ends_the_session() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.socket.push({"type": "closed", "reason": "idle"})
+    await settle()
+    assert rig.session.state == "idle"
+
+
+async def test_malformed_server_message_ends_the_session() -> None:
+    rig = Rig()
+    await rig.wake()
+    rig.socket.push("not json")
+    await settle()
+    assert rig.session.state == "idle"
+    assert rig.socket.closed
+
+
+async def test_connect_failure_returns_to_idle_and_can_retry() -> None:
+    rig = Rig(connect_error=OSError("refused"))
+    await rig.wake()
+    assert rig.session.state == "idle"
+    assert ("warning", "voice.link_failed", {"error": "OSError"}) in rig.log.events
+    rig.connect_error = None
+    await rig.wake()
+    assert len(rig.sockets) == 1
+
+
+async def test_send_failure_on_a_dead_socket_does_not_crash_the_mic_loop() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.socket.closed = True  # peer vanished, receive loop has not noticed yet
+    await rig.session.on_frame(FRAME)  # must not raise
+    assert rig.socket.audio() == []
+
+
+async def test_detector_is_not_called_while_live() -> None:
+    rig = Rig()
+    await rig.go_live()
+    calls = rig.detector.calls
+    await rig.session.on_frame(FRAME)
+    assert rig.detector.calls == calls
+
+
+async def test_run_closes_the_link_when_the_mic_ends() -> None:
+    rig = Rig()
+    rig.detector.wake_next = True
+
+    async def mic() -> AsyncIterator[bytes]:
+        yield FRAME
+        await settle()
+
+    await rig.session.run(mic())
+    assert rig.socket.closed
+    assert rig.session.state == "idle"
