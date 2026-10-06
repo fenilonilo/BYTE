@@ -138,3 +138,36 @@ async def test_odd_length_frame_is_dropped_without_crashing() -> None:
     await rig.session.on_frame(b"\x00\x00\x00")
     assert rig.socket.audio() == []
     assert rig.session.state == "live"
+
+
+async def test_server_audio_is_played() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.socket.push(b"\x01\x00" * 10)
+    await settle()
+    assert rig.speaker.played == [b"\x01\x00" * 10]
+
+
+async def test_mic_is_muted_while_speaking_and_for_the_echo_tail() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.speaker.is_busy = True
+    await rig.session.on_frame(FRAME)
+    assert rig.socket.audio() == []
+    rig.speaker.is_busy = False
+    rig.clock.advance(0.1)
+    await rig.session.on_frame(FRAME)  # inside the 0.3 s tail
+    assert rig.socket.audio() == []
+    rig.clock.advance(0.3)
+    await rig.session.on_frame(FRAME)
+    assert len(rig.socket.audio()) == 1
+
+
+async def test_interrupt_flushes_playback_and_reports_played_ms() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.speaker.played_ms = 1234
+    rig.socket.push({"type": "interrupt"})
+    await settle()
+    assert rig.speaker.cleared == 1
+    assert {"type": "played", "audio_end_ms": 1234} in rig.socket.events()

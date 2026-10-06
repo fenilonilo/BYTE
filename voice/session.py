@@ -129,10 +129,15 @@ class VoiceSession:
         """Process one server message; True means the session is over."""
         self._last_activity = self._clock()
         if isinstance(message, bytes):
+            if self._state == "live":
+                self._speaker.play(message)
             return False
         event = cast("dict[str, object]", json.loads(message))
-        if event.get("type") == "ready":
+        kind = event.get("type")
+        if kind == "ready":
             await self._go_live()
+        elif kind == "interrupt":
+            await self._send_played()
         return False
 
     async def _go_live(self) -> None:
@@ -143,7 +148,19 @@ class VoiceSession:
         self._state = "live"
         self._log.info("voice.live")
 
+    async def _send_played(self) -> None:
+        played_ms = self._speaker.clear()
+        await self._send(json.dumps({"type": "played", "audio_end_ms": played_ms}))
+
     async def _relay(self, frame: bytes) -> None:
+        now = self._clock()
+        if self._speaker.busy():
+            # ponytail: half-duplex, no barge-in; upgrade to AEC or a headset with hardware AEC
+            self._unmute_at = now + self._cfg.echo_tail_seconds
+            self._last_activity = now
+            return
+        if now < self._unmute_at:
+            return
         with contextlib.suppress(Exception):  # the receive loop sees a dead socket and ends us
             await self._send(upsample_16k_to_24k(frame))
 
