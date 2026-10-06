@@ -48,3 +48,10 @@ def test_registry_stores_same_instance() -> None:
     registry: Registry[MyService] = Registry()
     registry.register("svc", svc)
     assert registry.get("svc") is svc
+
+
+def test_values_returns_every_registered_instance() -> None:
+    registry: Registry[str] = Registry()
+    registry.register("a", "one")
+    registry.register("B", "two")
+    assert registry.values() == ("one", "two")

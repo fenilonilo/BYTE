@@ -16,3 +16,6 @@ class Registry[T]:
         if normalized not in self._store:
             raise RegistryKeyError(f"Key not found: {key!r}")
         return self._store[normalized]
+
+    def values(self) -> tuple[T, ...]:
+        return tuple(self._store.values())
