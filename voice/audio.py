@@ -15,6 +15,7 @@ MIC_RATE = 16_000
 SPEAKER_RATE = 24_000
 FRAME_SAMPLES = 1280  # 80 ms at 16 kHz, the chunk openWakeWord expects
 BYTES_PER_SECOND = SPEAKER_RATE * 2
+MIC_STALL_SECONDS = 5.0  # frames arrive every 80 ms; silence this long means the device is gone
 
 
 def _device(name: str | None) -> int | str | None:
@@ -38,7 +39,7 @@ async def microphone_frames(device: str | None) -> AsyncIterator[bytes]:
         callback=on_audio,
     ):
         while True:
-            yield await queue.get()
+            yield await asyncio.wait_for(queue.get(), timeout=MIC_STALL_SECONDS)
 
 
 class Speaker:

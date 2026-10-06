@@ -66,3 +66,20 @@ def test_threshold_must_be_between_zero_and_one(
     monkeypatch.setenv("BYTE_VOICE_THRESHOLD", value)
     with pytest.raises(ConfigError, match="threshold"):
         load_voice_settings()
+
+
+@pytest.mark.parametrize(
+    "url", ["ws://127.0.0.1:9/x", "ws://localhost/x", "wss://192.168.1.10:8000/api/v1/live"]
+)
+def test_safe_urls_are_accepted(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
+    monkeypatch.setenv("BYTE_VOICE_URL", url)
+    assert load_voice_settings().url == url
+
+
+@pytest.mark.parametrize("url", ["ws://192.168.1.10:8000/api/v1/live", "http://127.0.0.1/x"])
+def test_cleartext_remote_or_non_ws_urls_are_rejected(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    monkeypatch.setenv("BYTE_VOICE_URL", url)
+    with pytest.raises(ConfigError, match="url"):
+        load_voice_settings()

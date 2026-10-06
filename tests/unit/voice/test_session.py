@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -315,6 +316,20 @@ async def test_connect_failure_returns_to_idle_and_can_retry() -> None:
     rig.connect_error = None
     await rig.wake()
     assert len(rig.sockets) == 1
+
+
+class _StatusError(Exception):
+    def __init__(self) -> None:
+        super().__init__("rejected")
+        self.response = SimpleNamespace(status_code=403)
+
+
+async def test_connect_failure_logs_the_http_status() -> None:
+    rig = Rig(connect_error=_StatusError())
+    await rig.wake()
+    assert ("warning", "voice.link_failed", {"error": "_StatusError", "status": 403}) in (
+        rig.log.events
+    )
 
 
 async def test_send_failure_on_a_dead_socket_does_not_crash_the_mic_loop() -> None:

@@ -53,6 +53,8 @@ def main() -> None:
             asyncio.run(run())
     except ConfigError as exc:
         sys.exit(f"config error: {exc}")
+    except TimeoutError:
+        sys.exit("microphone stopped delivering audio")
 
 
 if __name__ == "__main__":

@@ -122,7 +122,11 @@ class VoiceSession:
                 if await self._handle(message):
                     break
         except Exception as exc:  # any failure must end in IDLE, or the daemon stays deaf
-            self._log.warning("voice.link_failed", error=type(exc).__name__)
+            fields: dict[str, str | int] = {"error": type(exc).__name__}
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if isinstance(status, int):
+                fields["status"] = status
+            self._log.warning("voice.link_failed", **fields)
         finally:
             await self._finish()
 

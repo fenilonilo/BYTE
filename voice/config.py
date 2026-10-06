@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,6 +35,16 @@ class VoiceSettings(BaseSettings):
     def _token_is_long_enough(cls, value: SecretStr) -> SecretStr:
         if len(value.get_secret_value()) < MIN_TOKEN_LENGTH:
             raise ValueError(f"must be at least {MIN_TOKEN_LENGTH} characters")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def _url_keeps_the_token_private(cls, value: str) -> str:
+        parts = urlsplit(value)
+        if parts.scheme not in ("ws", "wss"):
+            raise ValueError("must be a ws:// or wss:// URL")
+        if parts.scheme == "ws" and parts.hostname not in ("127.0.0.1", "::1", "localhost"):
+            raise ValueError("non-loopback URLs must use wss://")
         return value
 
     @field_validator("wake_model")
