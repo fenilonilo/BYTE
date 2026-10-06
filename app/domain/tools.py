@@ -21,6 +21,7 @@ class ToolCall:
     id: str
     name: str
     arguments: str
+    signature: bytes = b""  # opaque provider token that must travel back with the call (Gemini)
 
 
 @dataclass(frozen=True, slots=True)

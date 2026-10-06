@@ -4,9 +4,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from app.adapters.gemini.chat_model import GeminiChatModel
+from app.adapters.gemini.live_session import GeminiLiveSessionAdapter
 from app.adapters.memory.in_memory_climate import InMemoryClimate
 from app.adapters.memory.in_memory_light import InMemoryLight
 from app.adapters.memory.in_memory_music import InMemoryMusic
+from app.adapters.openai.live_session import OpenAILiveSessionAdapter
 from app.adapters.spotify.spotify_music import SpotifyMusic
 from app.adapters.thinq.thinq_climate import ThinQClimate
 from app.adapters.tuya.tuya_light import TuyaLight
@@ -72,3 +75,23 @@ def test_the_tool_registry_uses_whatever_adapters_were_selected(
     monkeypatch.setenv("BYTE_TUYA_LIGHTS", LAMP)
     names = {t.spec.name for t in deps.get_tools().values()}
     assert {"set_light", "set_climate", "play_music", "delete_event", "add_expense"} <= names
+
+
+@pytest.mark.unit
+def test_live_provider_picks_the_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert isinstance(deps.get_live_port(), OpenAILiveSessionAdapter)
+    deps.get_settings.cache_clear()
+    deps.get_live_port.cache_clear()
+    monkeypatch.setenv("BYTE_LIVE_PROVIDER", "gemini")
+    monkeypatch.setenv("BYTE_GEMINI_API_KEY", "g-test")
+    assert isinstance(deps.get_live_port(), GeminiLiveSessionAdapter)
+
+
+@pytest.mark.unit
+def test_chat_provider_picks_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    deps.get_settings.cache_clear()
+    monkeypatch.setenv("BYTE_CHAT_PROVIDER", "gemini")
+    monkeypatch.setenv("BYTE_LIVE_PROVIDER", "gemini")
+    monkeypatch.setenv("BYTE_GEMINI_API_KEY", "g-test")
+    monkeypatch.delenv("BYTE_OPENAI_API_KEY")
+    assert isinstance(deps.get_chat_model(), GeminiChatModel)

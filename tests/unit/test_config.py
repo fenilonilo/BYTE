@@ -51,10 +51,11 @@ def test_empty_openai_key_refuses_to_boot(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_missing_secrets_are_named(monkeypatch: pytest.MonkeyPatch) -> None:
-    with pytest.raises(ConfigError) as info:
+    with pytest.raises(ConfigError, match="api_token"):
         load_settings()
-    assert "api_token" in str(info.value)
-    assert "openai_api_key" in str(info.value)
+    monkeypatch.setenv("BYTE_API_TOKEN", GOOD_TOKEN)
+    with pytest.raises(ConfigError, match="openai_api_key"):
+        load_settings()
 
 
 @pytest.mark.unit
@@ -64,3 +65,23 @@ def test_unknown_log_level_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BYTE_LOG_LEVEL", "LOUD")
     with pytest.raises(ConfigError, match="log_level"):
         load_settings()
+
+
+@pytest.mark.unit
+def test_gemini_live_provider_needs_its_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BYTE_API_TOKEN", GOOD_TOKEN)
+    monkeypatch.setenv("BYTE_OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("BYTE_LIVE_PROVIDER", "gemini")
+    with pytest.raises(ConfigError, match="gemini_api_key"):
+        load_settings()
+    monkeypatch.setenv("BYTE_GEMINI_API_KEY", "g-test")
+    assert load_settings().live_provider == "gemini"
+
+
+@pytest.mark.unit
+def test_google_only_boots_without_an_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BYTE_API_TOKEN", GOOD_TOKEN)
+    monkeypatch.setenv("BYTE_CHAT_PROVIDER", "gemini")
+    monkeypatch.setenv("BYTE_LIVE_PROVIDER", "gemini")
+    monkeypatch.setenv("BYTE_GEMINI_API_KEY", "g-test")
+    assert load_settings().openai_api_key is None

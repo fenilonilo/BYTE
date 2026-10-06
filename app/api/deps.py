@@ -25,6 +25,8 @@ from app.application.use_cases.run_live_session import LiveLimits, RunLiveSessio
 from app.config import Settings, load_settings
 
 if TYPE_CHECKING:
+    from google import genai
+
     from app.application.registry import Registry
     from app.application.tool import Tool
     from app.ports.calendar import CalendarPort
@@ -141,6 +143,7 @@ def get_runner() -> ToolRunner:
 @lru_cache
 def get_openai() -> AsyncOpenAI:
     settings = get_settings()
+    assert settings.openai_api_key is not None  # Settings refuses to boot without it
     return AsyncOpenAI(
         api_key=settings.openai_api_key.get_secret_value(),
         timeout=settings.chat_timeout_seconds,
@@ -148,13 +151,35 @@ def get_openai() -> AsyncOpenAI:
 
 
 @lru_cache
+def get_gemini() -> genai.Client:
+    settings = get_settings()
+    assert settings.gemini_api_key is not None  # Settings refuses to boot without it
+    from google import genai  # noqa: PLC0415 - optional extra
+
+    return genai.Client(api_key=settings.gemini_api_key.get_secret_value())
+
+
+@lru_cache
 def get_chat_model() -> ChatModelPort:
-    return OpenAIChatModel(get_openai(), get_settings().chat_model)
+    settings = get_settings()
+    if settings.chat_provider == "gemini":
+        from app.adapters.gemini.chat_model import GeminiChatModel  # noqa: PLC0415 - optional extra
+
+        return GeminiChatModel(get_gemini(), settings.gemini_chat_model)
+    return OpenAIChatModel(get_openai(), settings.chat_model)
 
 
 @lru_cache
 def get_live_port() -> LiveSessionPort:
     settings = get_settings()
+    if settings.live_provider == "gemini":
+        from app.adapters.gemini.live_session import (  # noqa: PLC0415 - optional extra
+            GeminiLiveSessionAdapter,
+        )
+
+        return GeminiLiveSessionAdapter(
+            get_gemini(), settings.gemini_live_model, voice=settings.gemini_voice
+        )
     return OpenAILiveSessionAdapter(get_openai(), settings.live_model, vad=settings.live_vad)
 
 

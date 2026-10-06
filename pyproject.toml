@@ -21,6 +21,9 @@ api = [
 openai = [
     "openai>=2.35",
 ]
+gemini = [
+    "google-genai>=2.0",
+]
 thinq = [
     "thinqconnect>=1.0.14",
     "aiohttp>=3.9",
@@ -144,7 +147,7 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["app", "voice"]
-omit = ["app/adapters/openai/**", "app/ports/**", "voice/audio.py", "voice/wake.py"]  # openai: integration only; ports: pure ABCs; voice/audio+wake: hardware and model, tested by hand
+omit = ["app/adapters/openai/**", "app/adapters/gemini/live_session.py", "app/ports/**", "voice/audio.py", "voice/wake.py"]  # openai + gemini session: integration only; ports: pure ABCs; voice/audio+wake: hardware and model, tested by hand
 
 [tool.coverage.report]
 exclude_lines = [

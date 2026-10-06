@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, SecretStr, ValidationError, field_validator
+from pydantic import BaseModel, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.exceptions import ConfigError
@@ -21,16 +21,22 @@ class Settings(BaseSettings):
     app_name: str = "byte"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     api_token: SecretStr
-    openai_api_key: SecretStr
+    openai_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
+    chat_provider: Literal["openai", "gemini"] = "openai"
     chat_model: str = "gpt-4.1-mini"
+    gemini_chat_model: str = "gemini-3.1-flash-lite"
     chat_timeout_seconds: float = 30.0
     tool_timeout_seconds: float = 10.0
     max_steps: int = 6
     history_limit: int = 20
     max_conversations: int = 50
+    live_provider: Literal["openai", "gemini"] = "openai"
     live_model: str = "gpt-realtime-2.1-mini"
+    gemini_live_model: str = "gemini-3.1-flash-live-preview"
+    gemini_voice: str = "Charon"
     live_vad: Literal["server_vad", "semantic_vad"] = "server_vad"
-    live_idle_seconds: float = 60.0
+    live_idle_seconds: float = 30.0
     live_max_seconds: float = 600.0
     live_transcript_wait_seconds: float = 2.0
     live_pace_factor: float = 0.9
@@ -61,10 +67,19 @@ class Settings(BaseSettings):
 
     @field_validator("openai_api_key")
     @classmethod
-    def _key_is_not_empty(cls, value: SecretStr) -> SecretStr:
-        if not value.get_secret_value().strip():
+    def _key_is_not_empty(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and not value.get_secret_value().strip():
             raise ValueError("must not be empty")
         return value
+
+    @model_validator(mode="after")
+    def _providers_have_their_keys(self) -> Settings:
+        providers = {self.chat_provider, self.live_provider}
+        if "openai" in providers and self.openai_api_key is None:
+            raise ValueError("openai_api_key is required when a provider is openai")
+        if "gemini" in providers and self.gemini_api_key is None:
+            raise ValueError("gemini_api_key is required when a provider is gemini")
+        return self
 
 
 def load_settings() -> Settings:
