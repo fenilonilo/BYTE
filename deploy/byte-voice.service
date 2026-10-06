@@ -8,7 +8,6 @@ Type=simple
 User=byte
 SupplementaryGroups=audio
 WorkingDirectory=/opt/byte
-EnvironmentFile=/opt/byte/.env
 ExecStart=/opt/byte/.venv/bin/python -m voice.main
 Restart=always
 RestartSec=3

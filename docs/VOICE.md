@@ -44,9 +44,13 @@ openWakeWord is installed with `--no-deps` because its `tflite-runtime` dependen
 for Python 3.12/3.13 and is not needed with the onnx framework.
 
 Put the settings in `/opt/byte/.env` (copy `.env.example`; at minimum `BYTE_API_TOKEN` and
-`BYTE_VOICE_WAKE_MODEL`). Then install the service:
+`BYTE_VOICE_WAKE_MODEL`). The daemon reads this file itself from its working directory; the unit
+does not inject it into the environment. Lock it down (it holds the API token; only its owner
+should read it, and the `byte` user must own it), then install the service:
 
 ```bash
+sudo chown byte:byte /opt/byte/.env
+sudo chmod 600 /opt/byte/.env   # holds the API token: readable only by its owner
 sudo cp deploy/byte-voice.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now byte-voice
