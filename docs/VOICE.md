@@ -3,7 +3,7 @@
 ## What it is
 
 `voice/` is a small daemon that runs on the machine with the microphone and speaker (an Ubuntu
-Server laptop). It listens for the wake word "Byte" locally with openWakeWord; nothing leaves the
+Server laptop). It listens for the wake word "Ei Byte" locally with openWakeWord; nothing leaves the
 machine while idle. After the wake word it opens `WS /live` on the Byte API, streams microphone
 audio, and plays the agent's reply. The microphone is muted while the agent speaks (half-duplex,
 no barge-in). Once the agent finishes a turn, the client closes the session after
@@ -72,19 +72,96 @@ codecs often cannot capture at 16 kHz on raw `hw:` devices. Use a `plughw:CARD=.
 With the built-in mic and speaker, half-duplex means you cannot interrupt the agent while it
 talks. A USB speakerphone or headset with hardware echo cancellation is the planned upgrade.
 
-## Training the "Byte" wake word
+## Training the "Ei Byte" wake word (local)
 
-Use openWakeWord's automatic training notebook (in the openWakeWord repository, run on Colab;
-the plan names it `notebooks/automatic_model_training.ipynb`, from memory). Check the
-openWakeWord repository README for current notebook and API names before following these steps.
+The wake word is **"Ei Byte"** (two words fire far less on TV and conversation than "Byte"
+alone). The trained model, `models/ei_byte.onnx`, is committed; this section is how it was made
+and how to redo it.
 
-1. Set the target phrase to `byte`.
-2. Also train and test spelling variants that match pt-BR pronunciation (for example `baiti`,
-   `bait`) and compare them.
-3. The notebook outputs an `.onnx` file. Copy it to `/opt/byte/models/byte.onnx` and set
-   `BYTE_VOICE_WAKE_MODEL=/opt/byte/models/byte.onnx`.
-4. Optional: record 20 to 30 real samples of your own voice and train a custom verifier model
-   (see the openWakeWord README) to cut false triggers.
+**Why not the Colab notebook.** openWakeWord's notebook generates its clips with Piper TTS, whose
+`piper-phonemize` package has no wheel for the Python 3.13 that Colab runs now, so the first cell
+fails. It is also English-only. `train.py` can skip generation (`--generate_clips` is a separate
+flag), so we feed it our own pt-BR clips and train locally.
+
+Needs: an NVIDIA GPU (the first model took about 25 minutes on an RTX 4060 8 GB), about 30 GB of
+free disk, the `uv`-managed Python 3.12, and internet for the datasets. Commands below are
+for Git Bash; `<T>` is a training directory outside the repository, for example
+`D:/Projetos/Byte/wakeword_train`.
+
+### 1. Clips
+
+```bash
+pip install edge-tts soundfile sounddevice scipy numpy
+python scripts/wakeword_clips.py          # ~900 synthetic pt-BR clips -> wakeword_data/ (30-60 min)
+```
+
+`wakeword_clips.py` uses Microsoft Edge TTS (online; only the phrases leave the machine) with the
+three pt-BR voices, varying rate and pitch, plus near-miss negatives ("Ei Pedro", "bate aqui").
+Edit `POSITIVE` there if you pronounce the name differently.
+
+Then record **your own voice**; there are only three pt-BR voices, so these clips matter most. Each
+command plays three low beeps, then a high beep before every take. Say the phrase right after it.
+Takes with no clear speech are dropped and repeated.
+
+```bash
+python scripts/wakeword_record.py pos s1_normal 20     # normal voice, close to the mic
+python scripts/wakeword_record.py pos s2_other 20      # the other pronunciation
+python scripts/wakeword_record.py pos s3_far 20        # far from the mic, quieter
+python scripts/wakeword_record.py pos s4_loud 20       # fast, louder, calling out
+python scripts/wakeword_record.py neg s5_speech 90     # talk freely, TV on; never say the phrase
+```
+
+### 2. Training environment and data
+
+```bash
+T=D:/Projetos/Byte/wakeword_train; mkdir -p $T/data && cd $T
+"$HOME/AppData/Roaming/uv/python/cpython-3.12.0-windows-x86_64-none/python.exe" -m venv venv
+./venv/Scripts/python.exe -m pip install torch==2.5.0 torchaudio==2.5.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+./venv/Scripts/python.exe -m pip install "numpy<2" "scipy==1.14.1" soundfile pyyaml tqdm requests \
+    huggingface_hub datasets mutagen==1.47.0 torchinfo torchmetrics audiomentations \
+    torch_audiomentations pronouncing onnx onnxruntime speechbrain acoustics
+./venv/Scripts/python.exe -m pip install --no-deps openwakeword
+B=https://huggingface.co/datasets/davidscripka/openwakeword_features/resolve/main
+curl -L -o data/validation_set_features.npy $B/validation_set_features.npy             # 185 MB
+curl -L -o data/acav100m.npy $B/openwakeword_features_ACAV100M_2000_hrs_16bit.npy      # 17 GB
+curl -L -o data/esc50.zip https://github.com/karolpiczak/ESC-50/archive/master.zip     # 600 MB
+curl -L -o base_config.yml \
+    https://raw.githubusercontent.com/dscripka/openWakeWord/main/examples/custom_model.yml
+```
+
+`scipy` stays at 1.14.1: `acoustics` imports `scipy.special.sph_harm`, removed in scipy 1.17.
+Python 3.12 and torch 2.5 are what openWakeWord's training code was written against.
+
+### 3. Prepare and train
+
+```bash
+cd <repo>
+$T/venv/Scripts/python.exe scripts/wakeword_train.py prepare $T
+$T/venv/Scripts/python.exe scripts/wakeword_train.py train $T      # about 25 minutes
+cp $T/ei_byte.onnx models/ei_byte.onnx
+```
+
+`prepare` splits the clips 85/15, removes identical TTS renders before the split, peak-normalises
+your negatives, cuts them to 2 s, and writes each clip as several on-disk copies (your voice
+counts 4x more): `train.py` makes one augmentation pass over the files, so `augmentation_rounds`
+alone does nothing. `train` runs a patched copy of openWakeWord's `train.py` (written to
+`<T>/train_patched.py`) with three Windows fixes: `num_workers=0` (the workers cannot pickle
+lambdas under `spawn`), a `trim_mmap` that does not rewrite a file still memory-mapped, and no
+tflite export (it needs tensorflow). The script stops if upstream `train.py` changed.
+
+Set `BYTE_VOICE_WAKE_MODEL=models/ei_byte.onnx` (on the laptop: `/opt/byte/models/ei_byte.onnx`).
+
+### 4. Check the model
+
+Offline, on clips held out of training, the first model scored above 0.5 on 12/12 of the owner's
+test takes and 41/44 synthetic ones, with 0/91 negatives above 0.5. Those clips come from the same
+sessions as the training clips, so treat the result as optimistic. Live, on the microphone: every
+phrase fired with scores of 0.8 to 0.95, and 60 seconds of normal speech gave no trigger (peak
+0.10). Not yet measured: distance, a quiet voice, hours of TV, and near-miss words.
+
+To retrain after more problems appear, record more clips with `wakeword_record.py` (it never
+overwrites earlier takes) and run `prepare` and `train` again.
 
 ## Tuning
 

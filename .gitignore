@@ -74,3 +74,6 @@ snapshot.json
 certs/
 .idea/
 .claude/settings.local.json
+
+# wake word training clips (the trained models/ei_byte.onnx is tracked)
+wakeword_data/
