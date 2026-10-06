@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 MAX_CONTENT_CHARS = 4000
@@ -23,3 +25,13 @@ class MessageSchema(BaseModel):
     content: str
     conversation_id: str
     pending_confirmation: PendingConfirmationSchema | None = None
+
+
+class LiveStartSchema(BaseModel):
+    """First frame a live client sends."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    type: Literal["start"]
+    segment: str = "auto"
+    conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")

@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     max_steps: int = 6
     history_limit: int = 20
     max_conversations: int = 50
+    live_model: str = "gpt-realtime-2.1-mini"
+    live_vad: Literal["server_vad", "semantic_vad"] = "server_vad"
+    live_idle_seconds: float = 60.0
+    live_max_seconds: float = 600.0
+    live_transcript_wait_seconds: float = 2.0
+    live_pace_factor: float = 0.9
+    live_max_frame_bytes: int = 65536
     # Real devices. Leave a group unset and Byte runs against the in-memory adapter instead.
     thinq_access_secret: SecretStr | None = None
     thinq_country: str = "BR"
