@@ -309,6 +309,7 @@ expense adapters. What is left is replacing those adapters with real ones.
 | In-memory Home / Calendar / Expenses adapters | done |
 | `WS /live` + OpenAI Realtime adapter | done |
 | TLS, LAN exposure, locked dependencies, non-root image | done |
+| Voice client (`voice/`): wake word "Byte", `/live` over the laptop mic and speaker | in progress (Spec 2: code done, hardware checks pending) |
 | Tuya, Google Calendar / Sheets adapters | not started (later spec) |
 | Gemini Live adapter, A/B against OpenAI | not started (later spec) |
 | Postgres + pgvector + Alembic | not started (later spec) |
