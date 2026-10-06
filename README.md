@@ -107,7 +107,12 @@ python scripts/live_probe.py question.wav reply.wav --token "$BYTE_API_TOKEN"
 ## Develop
 
 ```bash
-pip install -e ".[api,openai,thinq,tuya,spotify,dev]"
+pip install -e ".[api,openai,thinq,tuya,spotify,voice,dev]"
+# openWakeWord: --no-deps because its tflite-runtime dependency has no Python 3.12+ wheel
+# and is not needed with onnx
+pip install --no-deps openwakeword
+pip install onnxruntime tqdm scikit-learn requests
+python -c "import openwakeword; openwakeword.utils.download_models()"
 ruff check . && pyright && pytest
 pytest -m integration        # hits the real OpenAI API (needs BYTE_OPENAI_API_KEY)
 ```
