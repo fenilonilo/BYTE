@@ -19,7 +19,7 @@ Every task's requirements include these (values copied from the spec and `CLAUDE
 - Domain entities are `@dataclass(frozen=True, slots=True)`; Pydantic only in `api/` and `config.py`.
 - Every outside resource (model provider, lights, air conditioner, music, calendar, expenses, storage) is an adapter behind a port; no SDK type crosses a port. The OpenAI SDK appears only in `adapters/openai/`.
 - **The owner's device work is the base and is not redesigned:** `LightPort`, `ClimatePort`, `MusicPort`, their domain types (`LightChange`, `ClimateChange`, `PlaybackChange`...), their adapters and in-memory fakes, and the `thinq_*` / `tuya_lights` / `spotify_*` settings stay as they are. The agent's home and music tools are built **on** those ports.
-- Segments are `home` (lights, air conditioner), `music`, `agenda`, `finance`. Only `delete_event` and `add_expense` require confirmation.
+- Segments are `home` (lights, air conditioner), `music`, `agenda`, `finance`. Confirmation: `delete_event` and `add_expense` always; `set_climate` only when it switches the unit on or off (`Tool.needs_confirmation(args)`); lights and music never. A lamp is not switched on or off twice within 5 s; the model only plays or queues a `uri` returned by `search_music` or `list_playlists`.
 - Chat limits: the model sees the **last 20 messages**; at most **6 tool steps** per request; **10 s** per tool; tool output truncated to **2,000** characters; **30 s** per chat request (exceeding it raises `AgentError` -> 502).
 - Confirmation: one pending action per conversation, **60 s** expiry, valid for the **very next** user utterance only; executed only through the argument-free `confirm_action()`; `is_affirmative` matches whole words, accepts 5 words or fewer, deny list wins.
 - API: prefix `/api/v1`; every route except `GET /health` needs `Authorization: Bearer <token>`; `content` is 1-4,000 characters; `conversation_id` matches `^[A-Za-z0-9_-]{1,64}$`; an unknown `segment` is **404**, never a fallback.
@@ -604,7 +604,7 @@ git commit -m "feat(domain): add tool, model and world types and the pt-BR affir
 
 **Interfaces:**
 - Consumes: Task 1 domain types (`CalendarEvent`, `Expense`), the existing `Message`, `EventNotFoundError`.
-- Produces: `CalendarPort.list_events(day) / create_event(key, title, start, duration_minutes) / delete_event(event_id)`; `ExpensesPort.add_expense(key, amount_cents, category, description, day) / month_total(year, month)`; `ConversationStorePort.recent(conversation_id, limit) / append(conversation_id, messages)`; `InMemoryCalendar()`, `InMemoryExpenses()`, `InMemoryConversationStore(max_conversations=50)`, named like your `InMemoryLight/Climate/Music` and living in the same package. Each port has a contract suite in `tests/contracts/` that the future Google adapters must also pass. Test helpers `seed_event(calendar)` and `events_on_day(calendar)` (`tests/fakes/events.py`): one `dentista` appointment on 2026-10-06, the thing the tests delete.
+- Produces: `CalendarPort.list_events(day) / create_event(key, title, start, duration_minutes) / delete_event(event_id)`; `ExpensesPort.add_expense(key, amount_cents, category, description, day) / month_total(year, month)`; `ConversationStorePort.recent(conversation_id, limit) / append(conversation_id, messages)`; `InMemoryCalendar()`, `InMemoryExpenses()`, `InMemoryConversationStore(max_conversations=50)`, named like your `InMemoryLight/Climate/Music` and living in the same package. Each port has a contract suite in `tests/contracts/` that the future Google adapters must also pass. Test helpers `seed_event(calendar)` and `events_on_day(calendar)` (`tests/fakes/events.py`): one `dentista` appointment on 2026-10-06, the thing the tests delete; and `FakeClock` (`tests/fakes/clock.py`, callable, `.advance(seconds)`), the injectable clock the lamp guard and the pending actions are tested with.
 
 Your lights, air conditioner and music already have ports and in-memory adapters, so this task only adds the three ports the agent still needs. The contract suites are abstract classes (`make()` returns the adapter under test); the concrete `Test...` classes in `test_memory_adapters.py` run them against the in-memory adapters.
 
@@ -644,7 +644,28 @@ async def events_on_day(calendar: CalendarPort) -> tuple[CalendarEvent, ...]:
     return await calendar.list_events(EVENT_DAY)
 ```
 
-- [ ] **Step 4: Create `tests/contracts/calendar_contract.py`**
+- [ ] **Step 4: Create `tests/fakes/clock.py`**
+
+Create `tests/fakes/clock.py`:
+
+```python
+from __future__ import annotations
+
+
+class FakeClock:
+    """Injectable monotonic clock: tests advance time instead of sleeping."""
+
+    def __init__(self, start: float = 1000.0) -> None:
+        self.t = start
+
+    def __call__(self) -> float:
+        return self.t
+
+    def advance(self, seconds: float) -> None:
+        self.t += seconds
+```
+
+- [ ] **Step 5: Create `tests/contracts/calendar_contract.py`**
 
 Create `tests/contracts/calendar_contract.py`:
 
@@ -706,7 +727,7 @@ class CalendarPortContract(ABC):
             await self.make().delete_event("nope")
 ```
 
-- [ ] **Step 5: Create `tests/contracts/expenses_contract.py`**
+- [ ] **Step 6: Create `tests/contracts/expenses_contract.py`**
 
 Create `tests/contracts/expenses_contract.py`:
 
@@ -744,7 +765,7 @@ class ExpensesPortContract(ABC):
         assert await ledger.month_total(2026, 10) == 5000
 ```
 
-- [ ] **Step 6: Create `tests/contracts/conversation_store_contract.py`**
+- [ ] **Step 7: Create `tests/contracts/conversation_store_contract.py`**
 
 Create `tests/contracts/conversation_store_contract.py`:
 
@@ -794,7 +815,7 @@ class ConversationStorePortContract(ABC):
         assert [m.id for m in await store.recent("a", 20)] == ["m1"]
 ```
 
-- [ ] **Step 7: Create `tests/unit/adapters/test_memory_adapters.py`**
+- [ ] **Step 8: Create `tests/unit/adapters/test_memory_adapters.py`**
 
 Create `tests/unit/adapters/test_memory_adapters.py`:
 
@@ -848,7 +869,7 @@ class TestInMemoryConversationStore(ConversationStorePortContract):
         assert [m.id for m in await store.recent("a", 20)] == ["m3"]
 ```
 
-- [ ] **Step 8: Run the tests and watch them fail**
+- [ ] **Step 9: Run the tests and watch them fail**
 
 ```bash
 python -m pytest tests/unit/adapters/test_memory_adapters.py -q --no-cov
@@ -856,7 +877,7 @@ python -m pytest tests/unit/adapters/test_memory_adapters.py -q --no-cov
 
 Expected: FAIL — collection error (`ModuleNotFoundError`/`ImportError`): the new code does not exist yet.
 
-- [ ] **Step 9: Create `app/ports/calendar.py`**
+- [ ] **Step 10: Create `app/ports/calendar.py`**
 
 Create `app/ports/calendar.py`:
 
@@ -887,7 +908,7 @@ class CalendarPort(ABC):
         """Raises EventNotFoundError for an unknown id."""
 ```
 
-- [ ] **Step 10: Create `app/ports/expenses.py`**
+- [ ] **Step 11: Create `app/ports/expenses.py`**
 
 Create `app/ports/expenses.py`:
 
@@ -915,7 +936,7 @@ class ExpensesPort(ABC):
         """Total in cents."""
 ```
 
-- [ ] **Step 11: Create `app/ports/conversation_store.py`**
+- [ ] **Step 12: Create `app/ports/conversation_store.py`**
 
 Create `app/ports/conversation_store.py`:
 
@@ -941,11 +962,11 @@ class ConversationStorePort(ABC):
         """Atomically add whole messages; creates the conversation if it is unknown."""
 ```
 
-- [ ] **Step 12: Create `app/adapters/memory/__init__.py`**
+- [ ] **Step 13: Create `app/adapters/memory/__init__.py`**
 
 Create the empty file `app/adapters/memory/__init__.py`.
 
-- [ ] **Step 13: Create `app/adapters/memory/in_memory_calendar.py`**
+- [ ] **Step 14: Create `app/adapters/memory/in_memory_calendar.py`**
 
 Create `app/adapters/memory/in_memory_calendar.py`:
 
@@ -992,7 +1013,7 @@ class InMemoryCalendar(CalendarPort):
             raise EventNotFoundError(f"Unknown event: {event_id!r}")
 ```
 
-- [ ] **Step 14: Create `app/adapters/memory/in_memory_expenses.py`**
+- [ ] **Step 15: Create `app/adapters/memory/in_memory_expenses.py`**
 
 Create `app/adapters/memory/in_memory_expenses.py`:
 
@@ -1036,7 +1057,7 @@ class InMemoryExpenses(ExpensesPort):
         )
 ```
 
-- [ ] **Step 15: Create `app/adapters/memory/in_memory_conversation_store.py`**
+- [ ] **Step 16: Create `app/adapters/memory/in_memory_conversation_store.py`**
 
 Create `app/adapters/memory/in_memory_conversation_store.py`:
 
@@ -1075,7 +1096,7 @@ class InMemoryConversationStore(ConversationStorePort):
             self._data.popitem(last=False)
 ```
 
-- [ ] **Step 16: Run the tests and watch them pass**
+- [ ] **Step 17: Run the tests and watch them pass**
 
 ```bash
 python -m pytest tests/unit/adapters/test_memory_adapters.py -q --no-cov
@@ -1083,7 +1104,7 @@ python -m pytest tests/unit/adapters/test_memory_adapters.py -q --no-cov
 
 Expected: PASS.
 
-- [ ] **Step 17: Commit**
+- [ ] **Step 18: Commit**
 
 ```bash
 git add app/ports/calendar.py \
@@ -1096,7 +1117,7 @@ git add app/ports/calendar.py \
 git commit -m "feat(adapters): add calendar, expenses and conversation-store ports with in-memory adapters"
 ```
 
-### Task 3: `Tool`, argument helpers, the fifteen tools and the catalog
+### Task 3: `Tool`, argument helpers, the sixteen tools and the catalog
 
 **Files:**
 - Create: `app/application/tool.py`, `app/application/tools/__init__.py`, `args.py`, `lights.py`, `climate.py`, `music.py`, `agenda.py`, `finance.py`, `catalog.py`
@@ -1105,11 +1126,13 @@ git commit -m "feat(adapters): add calendar, expenses and conversation-store por
 
 **Interfaces:**
 - Consumes: your `LightPort`, `ClimatePort`, `MusicPort` and their domain types (`LightChange`, `ClimateChange`, `PlaybackChange`...); Task 2 ports; Task 1 `ToolSpec` and errors; the existing `Registry[T]`.
-- Produces: `Tool` (ABC: class attribute `spec: ToolSpec`, `async execute(args, key) -> str`, `summarize(args) -> str`); `object_schema(properties, required=None)`, `str_arg`, `int_arg`, `date_arg`, `datetime_arg`, `opt_str`, `opt_int`, `opt_float`, `opt_bool`, `opt_enum`; `build_tool_registry(light, climate, music, calendar, expenses) -> Registry[Tool]` with `list_lights`, `set_light`, `list_climates`, `set_climate` (segment `home`); `music_state`, `search_music`, `play_music`, `control_music`, `queue_music`, `list_playlists` (segment `music`); `list_events`, `create_event`, `delete_event` (confirms) (segment `agenda`); `add_expense` (confirms), `month_total` (segment `finance`); `Registry.values()`.
+- Produces: `Tool` (ABC: class attribute `spec: ToolSpec`, `async execute(args, key) -> str`, `summarize(args) -> str`, `needs_confirmation(args) -> bool`, which defaults to `spec.requires_confirmation`); `object_schema(properties, required=None)`, `str_arg`, `int_arg`, `date_arg`, `datetime_arg`, `opt_str`, `opt_int`, `opt_float`, `opt_bool`, `opt_enum`; `KnownUris`; `build_tool_registry(light, climate, music, calendar, expenses, now=time.monotonic) -> Registry[Tool]` with `list_lights`, `set_light` (5 s toggle guard), `list_climates`, `set_climate` (confirms only when `power` is present) (segment `home`); `music_state`, `list_music_devices`, `search_music`, `list_playlists`, `play_music`, `control_music`, `queue_music` (uris must come from a search or the playlists) (segment `music`); `list_events`, `create_event`, `delete_event` (confirms) (segment `agenda`); `add_expense` (confirms), `month_total` (segment `finance`); `Registry.values()`.
 
 Tools hold ports, never SDKs, and the model never names a raw device id: it passes the **name** you configured (`lampada`, `ar-condicionado`, ...) and your adapters validate it (`UnknownLightDeviceError` and friends). Partial updates map straight onto your `LightChange`, `ClimateChange` and `PlaybackChange`, whose own validation (ranges, "choose one look", empty change) becomes the `erro: ...` text the model reads.
 
-**Which tools ask for confirmation** is a product decision made here: only `delete_event` and `add_expense`, the two that destroy or write data you cannot undo by voice. Switching a light, the air conditioner or the music does not ask, because asking "desligar a lâmpada?" every time would make the assistant tiresome. To change that, set `requires_confirmation=True` and add a `summarize()` on the tool you want guarded; nothing else changes.
+**Which calls ask for confirmation** follows your own notes: `delete_event` and `add_expense` always do (data you cannot undo by voice), and `set_climate` does **only when it switches the unit on or off** (`AR_Controle.md`: a physical action), through `Tool.needs_confirmation(args)`, so "põe o ar em 22" does not ask but "liga o ar" does. Lights and music never ask (`Lampada_Controle.md`, `Spotfy_Controle.md`: nothing destructive).
+
+Three more rules from those notes live in the tools: a lamp is not switched on and off again within 5 s (`Lampada_Controle.md`: rapid toggling can reset it into pairing mode; the guard counts only explicit `power` changes and only after a successful one); the model can only play or queue a `uri` that `search_music` or `list_playlists` returned (`Spotfy_Controle.md`: the uri is never invented); and a unit reporting an error says so in its description. Scenes for the lamp and liking tracks are not exposed (YAGNI, as the notes say).
 
 - [ ] **Step 1: Create `tests/unit/application/tools/__init__.py`**
 
@@ -1122,6 +1145,7 @@ Create `tests/unit/application/tools/test_tools.py`:
 ```python
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -1141,6 +1165,7 @@ from app.application.tools.args import (
     str_arg,
 )
 from app.application.tools.catalog import build_tool_registry
+from app.application.tools.climate import describe_climate
 from app.domain.climate import ClimateMode
 from app.domain.exceptions import (
     ClimateError,
@@ -1151,6 +1176,7 @@ from app.domain.exceptions import (
     UnknownLightDeviceError,
     UnknownMusicDeviceError,
 )
+from tests.fakes.clock import FakeClock
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -1169,13 +1195,19 @@ WHITE = "modo white, brilho 100%, temperatura de cor 50%"
 
 
 @pytest.fixture
-def registry() -> Registry[Tool]:
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture
+def registry(clock: FakeClock) -> Registry[Tool]:
     return build_tool_registry(
         InMemoryLight(("lampada", "quarto")),
         InMemoryClimate(),
         InMemoryMusic(),
         InMemoryCalendar(),
         InMemoryExpenses(),
+        now=clock,
     )
 
 
@@ -1186,7 +1218,7 @@ async def run(
 
 
 @pytest.mark.unit
-def test_catalog_has_fifteen_tools_in_four_segments(registry: Registry[Tool]) -> None:
+def test_catalog_has_sixteen_tools_in_four_segments(registry: Registry[Tool]) -> None:
     specs = [t.spec for t in registry.values()]
     assert {s.name for s in specs} == {
         "list_lights",
@@ -1194,11 +1226,12 @@ def test_catalog_has_fifteen_tools_in_four_segments(registry: Registry[Tool]) ->
         "list_climates",
         "set_climate",
         "music_state",
+        "list_music_devices",
         "search_music",
+        "list_playlists",
         "play_music",
         "control_music",
         "queue_music",
-        "list_playlists",
         "list_events",
         "create_event",
         "delete_event",
@@ -1209,9 +1242,22 @@ def test_catalog_has_fifteen_tools_in_four_segments(registry: Registry[Tool]) ->
 
 
 @pytest.mark.unit
-def test_only_irreversible_data_changes_require_confirmation(registry: Registry[Tool]) -> None:
+def test_irreversible_data_changes_always_ask(registry: Registry[Tool]) -> None:
     flagged = {t.spec.name for t in registry.values() if t.spec.requires_confirmation}
     assert flagged == {"delete_event", "add_expense"}
+
+
+@pytest.mark.unit
+def test_the_air_conditioner_asks_only_when_it_is_switched_on_or_off(
+    registry: Registry[Tool],
+) -> None:
+    climate = registry.get("set_climate")
+    assert climate.needs_confirmation({"name": "ar-condicionado", "power": True}) is True
+    assert climate.needs_confirmation({"name": "ar-condicionado", "power": False}) is True
+    assert (
+        climate.needs_confirmation({"name": "ar-condicionado", "target_temperature": 22}) is False
+    )
+    assert registry.get("set_light").needs_confirmation({"name": "lampada", "power": True}) is False
 
 
 @pytest.mark.unit
@@ -1260,6 +1306,33 @@ async def test_bad_light_requests(
 
 
 @pytest.mark.unit
+async def test_a_lamp_is_not_switched_again_within_five_seconds(
+    registry: Registry[Tool], clock: FakeClock
+) -> None:
+    await run(registry, "set_light", {"name": "lampada", "power": True})
+    clock.advance(4.9)
+    with pytest.raises(LightError, match="aguarde"):
+        await run(registry, "set_light", {"name": "lampada", "power": False})
+    await run(registry, "set_light", {"name": "lampada", "brightness": 20})  # not a toggle
+    await run(registry, "set_light", {"name": "quarto", "power": True})  # another lamp
+    clock.advance(0.2)
+    assert (await run(registry, "set_light", {"name": "lampada", "power": False})).startswith(
+        "lampada: desligada"
+    )
+
+
+@pytest.mark.unit
+async def test_a_failed_switch_does_not_start_the_waiting_period(
+    registry: Registry[Tool],
+) -> None:
+    with pytest.raises(UnknownLightDeviceError):
+        await run(registry, "set_light", {"name": "cofre", "power": True})
+    assert (await run(registry, "set_light", {"name": "lampada", "power": True})).startswith(
+        "lampada: ligada"
+    )
+
+
+@pytest.mark.unit
 async def test_climate(registry: Registry[Tool]) -> None:
     assert await run(registry, "list_climates", {}) == (
         "ar-condicionado: desligado, modo cool, alvo 24°C, ambiente 25°C, ventilador auto"
@@ -1274,6 +1347,26 @@ async def test_climate(registry: Registry[Tool]) -> None:
     )
     timer = await run(registry, "set_climate", {"name": "ar-condicionado", "stop_in_minutes": 30})
     assert timer.startswith("ar-condicionado: ligado")
+    await run(registry, "set_climate", {"name": "ar-condicionado", "display_light": False})
+
+
+@pytest.mark.unit
+def test_climate_confirmation_summary_comes_from_code(registry: Registry[Tool]) -> None:
+    climate = registry.get("set_climate")
+    assert climate.summarize({"name": "ar-condicionado", "power": True}) == (
+        "Ligar ar-condicionado"
+    )
+    assert climate.summarize({"name": "ar-condicionado", "power": False}) == (
+        "Desligar ar-condicionado"
+    )
+    both = climate.summarize({"name": "ar-condicionado", "power": True, "target_temperature": 22})
+    assert both == "Ligar ar-condicionado e aplicar os outros ajustes pedidos"
+
+
+@pytest.mark.unit
+async def test_a_unit_reporting_an_error_says_so() -> None:
+    state = replace(await InMemoryClimate().get_state("ar-condicionado"), has_error=True)
+    assert describe_climate("ar-condicionado", state).endswith("ATENÇÃO: o aparelho reporta erro")
 
 
 @pytest.mark.unit
@@ -1299,23 +1392,36 @@ async def test_music(registry: Registry[Tool]) -> None:
     assert await run(registry, "music_state", {}) == (
         "pausado: nada no aparelho nest mini, volume 50%"
     )
+    assert await run(registry, "list_music_devices", {}) == "nest mini"
     assert await run(registry, "search_music", {"query": "queen"}) == (
         "spotify:track:1 | Bohemian Rhapsody Queen"
     )
     assert await run(registry, "search_music", {"query": "xyz"}) == "nada encontrado"
     assert await run(registry, "list_playlists", {}) == "spotify:playlist:1 | Treino"
+    await run(registry, "search_music", {"query": "aquarela"})
     playing = await run(registry, "play_music", {"uri": "spotify:track:2"})
     assert playing == "tocando: Aquarela Toquinho no aparelho nest mini, volume 50%"
     louder = await run(registry, "control_music", {"volume": 20, "shuffle": True})
     assert louder == "tocando: Aquarela Toquinho no aparelho nest mini, volume 20%"
-    assert await run(registry, "queue_music", {"uri": "spotify:track:1"}) == "adicionada à fila"
+    assert await run(registry, "queue_music", {"uri": "spotify:track:2"}) == "adicionada à fila"
+    assert (await run(registry, "play_music", {})).startswith("tocando")
+
+
+@pytest.mark.unit
+async def test_the_model_cannot_play_a_uri_it_never_searched_for(
+    registry: Registry[Tool],
+) -> None:
+    for tool in ("play_music", "queue_music"):
+        with pytest.raises(MusicError, match="search_music"):
+            await run(registry, tool, {"uri": "spotify:track:2"})
+    await run(registry, "list_playlists", {})  # playlists count as "returned by the API" too
+    assert (await run(registry, "play_music", {"uri": "spotify:playlist:1"})).startswith("tocando")
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("tool", "args", "error"),
     [
-        ("play_music", {"uri": "spotify:track:999"}, MusicError),
         ("play_music", {"device": "geladeira"}, UnknownMusicDeviceError),
         ("control_music", {}, MusicError),
         ("control_music", {"volume": 101}, MusicError),
@@ -1547,6 +1653,10 @@ class Tool(ABC):
     def summarize(self, args: Mapping[str, object]) -> str:
         """Code-generated, human-readable description used to ask for confirmation."""
         return self.spec.name
+
+    def needs_confirmation(self, args: Mapping[str, object]) -> bool:
+        """Static by default. Override when only some calls of the tool are sensitive."""
+        return self.spec.requires_confirmation
 ```
 
 - [ ] **Step 7: Create `app/application/tools/__init__.py`**
@@ -1666,6 +1776,7 @@ Create `app/application/tools/lights.py`:
 ```python
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 from app.application.tool import Tool
@@ -1675,14 +1786,18 @@ from app.application.tools.args import (
     opt_int,
     str_arg,
 )
+from app.domain.exceptions import LightError
 from app.domain.light import Color, LightChange, LightMode
 from app.domain.tools import ToolSpec
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from app.domain.light import LightState
     from app.ports.light import LightPort
+
+# Switching the same lamp on and off in quick succession can reset it into pairing mode.
+MIN_TOGGLE_SECONDS = 5.0
 
 
 def describe_light(name: str, state: LightState) -> str:
@@ -1720,7 +1835,7 @@ class SetLight(Tool):
         description=(
             "Muda uma luz. Só informe o que mudar. Escolha um visual: branco (brightness "
             "e/ou color_temperature) ou cor (hue, com saturation e brightness). "
-            "Escolher um visual liga a luz."
+            "Escolher um visual liga a luz. Não ligue e desligue a mesma luz em sequência rápida."
         ),
         parameters=object_schema(
             {
@@ -1738,11 +1853,14 @@ class SetLight(Tool):
         segment="home",
     )
 
-    def __init__(self, light: LightPort) -> None:
+    def __init__(self, light: LightPort, now: Callable[[], float] = time.monotonic) -> None:
         self._light = light
+        self._now = now
+        self._last_toggle: dict[str, float] = {}
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         name = str_arg(args, "name")
+        power = opt_bool(args, "power")
         hue = opt_int(args, "hue")
         brightness = opt_int(args, "brightness")
         color = None
@@ -1754,14 +1872,26 @@ class SetLight(Tool):
                 100 if brightness is None else brightness,
             )
         change = LightChange(
-            power=opt_bool(args, "power"),
+            power=power,
             brightness=None if color is not None else brightness,
             color_temperature=opt_int(args, "color_temperature"),
             color=color,
             timer_minutes=opt_int(args, "timer_minutes"),
             do_not_disturb=opt_bool(args, "do_not_disturb"),
         )
-        return describe_light(name, await self._light.apply(name, change))
+        if power is not None:
+            self._guard_toggle(name)
+        state = await self._light.apply(name, change)
+        if power is not None:
+            self._last_toggle[name.lower()] = self._now()
+        return describe_light(name, state)
+
+    def _guard_toggle(self, name: str) -> None:
+        last = self._last_toggle.get(name.lower())
+        if last is not None and self._now() - last < MIN_TOGGLE_SECONDS:
+            raise LightError(
+                "aguarde alguns segundos antes de ligar ou desligar a mesma luz de novo"
+            )
 ```
 
 - [ ] **Step 10: Create `app/application/tools/climate.py`**
@@ -1793,11 +1923,12 @@ if TYPE_CHECKING:
 
 
 def describe_climate(name: str, state: ClimateState) -> str:
-    return (
+    text = (
         f"{name}: {'ligado' if state.power else 'desligado'}, modo {state.mode.value}, "
         f"alvo {state.target_temperature:g}°C, ambiente {state.current_temperature:g}°C, "
         f"ventilador {state.fan_speed.value}"
     )
+    return f"{text}, ATENÇÃO: o aparelho reporta erro" if state.has_error else text
 
 
 class ListClimates(Tool):
@@ -1818,9 +1949,14 @@ class ListClimates(Tool):
 
 
 class SetClimate(Tool):
+    """Turning the unit on or off is physical, so that (and only that) asks for confirmation."""
+
     spec = ToolSpec(
         name="set_climate",
-        description="Muda um ar-condicionado. Só informe o que mudar.",
+        description=(
+            "Muda um ar-condicionado. Só informe o que mudar. Ligar ou desligar (power) exige "
+            "confirmação do usuário. Um aparelho desligado recusa ajustes: ligue-o antes."
+        ),
         parameters=object_schema(
             {
                 "name": ("string", "Nome do aparelho, como em list_climates."),
@@ -1830,6 +1966,7 @@ class SetClimate(Tool):
                 "fan_speed": ("string", "auto, low, mid, high ou nature."),
                 "swing": ("boolean", "Oscilação das aletas."),
                 "power_save": ("boolean", "Modo economia."),
+                "display_light": ("boolean", "Luz do display do aparelho."),
                 "stop_in_minutes": ("integer", "Desliga em N minutos; 0 cancela."),
                 "start_in_minutes": ("integer", "Liga em N minutos; 0 cancela."),
                 "sleep_in_minutes": ("integer", "Modo dormir por N minutos; 0 cancela."),
@@ -1842,6 +1979,15 @@ class SetClimate(Tool):
     def __init__(self, climate: ClimatePort) -> None:
         self._climate = climate
 
+    def needs_confirmation(self, args: Mapping[str, object]) -> bool:
+        return opt_bool(args, "power") is not None
+
+    def summarize(self, args: Mapping[str, object]) -> str:
+        verb = "Ligar" if opt_bool(args, "power") else "Desligar"
+        others = [k for k, v in args.items() if k not in ("name", "power") and v is not None]
+        extra = " e aplicar os outros ajustes pedidos" if others else ""
+        return f"{verb} {str_arg(args, 'name')}{extra}"
+
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         name = str_arg(args, "name")
         change = ClimateChange(
@@ -1851,6 +1997,7 @@ class SetClimate(Tool):
             fan_speed=opt_enum(args, "fan_speed", FanSpeed),
             swing=opt_bool(args, "swing"),
             power_save=opt_bool(args, "power_save"),
+            display_light=opt_bool(args, "display_light"),
             stop_in_minutes=opt_int(args, "stop_in_minutes"),
             start_in_minutes=opt_int(args, "start_in_minutes"),
             sleep_in_minutes=opt_int(args, "sleep_in_minutes"),
@@ -1876,6 +2023,7 @@ from app.application.tools.args import (
     opt_str,
     str_arg,
 )
+from app.domain.exceptions import MusicError
 from app.domain.music import MediaKind, PlaybackChange, Repeat, Skip
 from app.domain.tools import ToolSpec
 
@@ -1884,6 +2032,28 @@ if TYPE_CHECKING:
 
     from app.domain.music import MusicItem, PlaybackState
     from app.ports.music import MusicPort
+
+
+class KnownUris:
+    """URIs the model may play: only ones that a search or the playlists returned.
+
+    The model must never invent a uri; it asks for one first (oldest forgotten past `limit`)."""
+
+    def __init__(self, limit: int = 200) -> None:
+        self._limit = limit
+        self._uris: dict[str, None] = {}
+
+    def remember(self, items: tuple[MusicItem, ...]) -> None:
+        for item in items:
+            self._uris.pop(item.uri, None)
+            self._uris[item.uri] = None
+        while len(self._uris) > self._limit:
+            del self._uris[next(iter(self._uris))]
+
+    def require(self, uri: str) -> str:
+        if uri not in self._uris:
+            raise MusicError("uri desconhecida: use search_music ou list_playlists primeiro")
+        return uri
 
 
 def describe_playback(state: PlaybackState) -> str:
@@ -1912,6 +2082,21 @@ class MusicState(Tool):
         return describe_playback(await self._music.state())
 
 
+class ListMusicDevices(Tool):
+    spec = ToolSpec(
+        name="list_music_devices",
+        description="Lista os aparelhos onde a música pode tocar (pelo nome).",
+        parameters=object_schema({}),
+        segment="music",
+    )
+
+    def __init__(self, music: MusicPort) -> None:
+        self._music = music
+
+    async def execute(self, args: Mapping[str, object], key: str) -> str:
+        return "; ".join(await self._music.devices()) or "nenhum aparelho disponível"
+
+
 class SearchMusic(Tool):
     spec = ToolSpec(
         name="search_music",
@@ -1926,37 +2111,61 @@ class SearchMusic(Tool):
         segment="music",
     )
 
-    def __init__(self, music: MusicPort) -> None:
+    def __init__(self, music: MusicPort, known: KnownUris) -> None:
         self._music = music
+        self._known = known
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         kind = opt_enum(args, "kind", MediaKind) or MediaKind.TRACK
-        return describe_items(await self._music.search(str_arg(args, "query"), kind))
+        items = await self._music.search(str_arg(args, "query"), kind)
+        self._known.remember(items)
+        return describe_items(items)
+
+
+class ListPlaylists(Tool):
+    spec = ToolSpec(
+        name="list_playlists",
+        description="Lista as playlists do usuário. Devolve 'uri | nome'.",
+        parameters=object_schema({}),
+        segment="music",
+    )
+
+    def __init__(self, music: MusicPort, known: KnownUris) -> None:
+        self._music = music
+        self._known = known
+
+    async def execute(self, args: Mapping[str, object], key: str) -> str:
+        items = await self._music.playlists()
+        self._known.remember(items)
+        return describe_items(items)
 
 
 class PlayMusic(Tool):
     spec = ToolSpec(
         name="play_music",
         description=(
-            "Toca uma uri (de search_music ou list_playlists) ou retoma a reprodução se uri "
-            "não for informada. 'device' move a reprodução para outro aparelho."
+            "Toca uma uri devolvida por search_music ou list_playlists, ou retoma a reprodução "
+            "se uri não for informada. 'device' move a reprodução para outro aparelho."
         ),
         parameters=object_schema(
             {
-                "uri": ("string", "Uri a tocar."),
-                "device": ("string", "Aparelho de destino."),
+                "uri": ("string", "Uri a tocar (nunca invente uma)."),
+                "device": ("string", "Nome do aparelho de destino."),
             },
             required=[],
         ),
         segment="music",
     )
 
-    def __init__(self, music: MusicPort) -> None:
+    def __init__(self, music: MusicPort, known: KnownUris) -> None:
         self._music = music
+        self._known = known
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
-        state = await self._music.play(opt_str(args, "uri"), opt_str(args, "device"))
-        return describe_playback(state)
+        uri = opt_str(args, "uri")
+        if uri is not None:
+            self._known.require(uri)
+        return describe_playback(await self._music.play(uri, opt_str(args, "device")))
 
 
 class ControlMusic(Tool):
@@ -1997,32 +2206,18 @@ class ControlMusic(Tool):
 class QueueMusic(Tool):
     spec = ToolSpec(
         name="queue_music",
-        description="Adiciona uma uri à fila de reprodução.",
-        parameters=object_schema({"uri": ("string", "Uri a enfileirar.")}),
+        description="Adiciona à fila uma uri devolvida por search_music ou list_playlists.",
+        parameters=object_schema({"uri": ("string", "Uri a enfileirar (nunca invente uma).")}),
         segment="music",
     )
 
-    def __init__(self, music: MusicPort) -> None:
+    def __init__(self, music: MusicPort, known: KnownUris) -> None:
         self._music = music
+        self._known = known
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
-        await self._music.queue(str_arg(args, "uri"))
+        await self._music.queue(self._known.require(str_arg(args, "uri")))
         return "adicionada à fila"
-
-
-class ListPlaylists(Tool):
-    spec = ToolSpec(
-        name="list_playlists",
-        description="Lista as playlists do usuário. Devolve 'uri | nome'.",
-        parameters=object_schema({}),
-        segment="music",
-    )
-
-    def __init__(self, music: MusicPort) -> None:
-        self._music = music
-
-    async def execute(self, args: Mapping[str, object], key: str) -> str:
-        return describe_items(await self._music.playlists())
 ```
 
 - [ ] **Step 12: Create `app/application/tools/agenda.py`**
@@ -2207,6 +2402,7 @@ Create `app/application/tools/catalog.py`:
 ```python
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 from app.application.registry import Registry
@@ -2216,6 +2412,8 @@ from app.application.tools.finance import AddExpense, MonthTotal
 from app.application.tools.lights import ListLights, SetLight
 from app.application.tools.music import (
     ControlMusic,
+    KnownUris,
+    ListMusicDevices,
     ListPlaylists,
     MusicState,
     PlayMusic,
@@ -2224,6 +2422,8 @@ from app.application.tools.music import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from app.application.tool import Tool
     from app.ports.calendar import CalendarPort
     from app.ports.climate import ClimatePort
@@ -2238,19 +2438,22 @@ def build_tool_registry(
     music: MusicPort,
     calendar: CalendarPort,
     expenses: ExpensesPort,
+    now: Callable[[], float] = time.monotonic,
 ) -> Registry[Tool]:
+    known = KnownUris()
     registry: Registry[Tool] = Registry()
     tools: tuple[Tool, ...] = (
         ListLights(light),
-        SetLight(light),
+        SetLight(light, now),
         ListClimates(climate),
         SetClimate(climate),
         MusicState(music),
-        SearchMusic(music),
-        PlayMusic(music),
+        ListMusicDevices(music),
+        SearchMusic(music, known),
+        ListPlaylists(music, known),
+        PlayMusic(music, known),
         ControlMusic(music),
-        QueueMusic(music),
-        ListPlaylists(music),
+        QueueMusic(music, known),
         ListEvents(calendar),
         CreateEvent(calendar),
         DeleteEvent(calendar),
@@ -2284,7 +2487,7 @@ git commit -m "feat(application): add Tool, argument helpers and the light, clim
 ### Task 4: `PendingActionStore`: one pending action, valid for the very next utterance
 
 **Files:**
-- Create: `app/application/pending_actions.py`, `tests/fakes/clock.py`
+- Create: `app/application/pending_actions.py`
 - Test: `tests/unit/application/test_pending_actions.py`
 
 **Interfaces:**
@@ -2293,28 +2496,7 @@ git commit -m "feat(application): add Tool, argument helpers and the light, clim
 
 The rule that closes the confirmation holes: `on_user_utterance` is called for **every** user utterance. The first one after `create` arms the action (and records its text); any later one drops it. `confirm` is synchronous, so check-and-pop is atomic and two parallel `confirm_action` calls cannot both win.
 
-- [ ] **Step 1: Create `tests/fakes/clock.py`**
-
-Create `tests/fakes/clock.py`:
-
-```python
-from __future__ import annotations
-
-
-class FakeClock:
-    """Injectable monotonic clock: tests advance time instead of sleeping."""
-
-    def __init__(self, start: float = 1000.0) -> None:
-        self.t = start
-
-    def __call__(self) -> float:
-        return self.t
-
-    def advance(self, seconds: float) -> None:
-        self.t += seconds
-```
-
-- [ ] **Step 2: Create `tests/unit/application/test_pending_actions.py`**
+- [ ] **Step 1: Create `tests/unit/application/test_pending_actions.py`**
 
 Create `tests/unit/application/test_pending_actions.py`:
 
@@ -2414,7 +2596,7 @@ def test_a_new_request_replaces_the_old_one() -> None:
     assert action.key == "key-2"
 ```
 
-- [ ] **Step 3: Run the tests and watch them fail**
+- [ ] **Step 2: Run the tests and watch them fail**
 
 ```bash
 python -m pytest tests/unit/application/test_pending_actions.py -q --no-cov
@@ -2422,7 +2604,7 @@ python -m pytest tests/unit/application/test_pending_actions.py -q --no-cov
 
 Expected: FAIL — collection error (`ModuleNotFoundError`/`ImportError`): the new code does not exist yet.
 
-- [ ] **Step 4: Create `app/application/pending_actions.py`**
+- [ ] **Step 3: Create `app/application/pending_actions.py`**
 
 Create `app/application/pending_actions.py`:
 
@@ -2497,7 +2679,7 @@ class PendingActionStore:
         return action, ""
 ```
 
-- [ ] **Step 5: Run the tests and watch them pass**
+- [ ] **Step 4: Run the tests and watch them pass**
 
 ```bash
 python -m pytest tests/unit/application/test_pending_actions.py -q --no-cov
@@ -2505,11 +2687,10 @@ python -m pytest tests/unit/application/test_pending_actions.py -q --no-cov
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add app/application/pending_actions.py \
-  tests/fakes/clock.py \
   tests/unit/application/test_pending_actions.py
 git commit -m "feat(application): add PendingActionStore with next-utterance-only confirmation"
 ```
@@ -2811,18 +2992,50 @@ async def test_specs_always_include_confirm_action_and_respect_the_segment() -> 
     assert runner.segments() == frozenset({"home", "agenda"})
 
 
-def real_tools_runner() -> tuple[ToolRunner, PendingActionStore, InMemoryCalendar]:
+def real_tools_runner() -> tuple[ToolRunner, PendingActionStore, InMemoryCalendar, InMemoryClimate]:
     calendar = InMemoryCalendar()
+    climate = InMemoryClimate()
     registry = build_tool_registry(
-        InMemoryLight(), InMemoryClimate(), InMemoryMusic(), calendar, InMemoryExpenses()
+        InMemoryLight(), climate, InMemoryMusic(), calendar, InMemoryExpenses()
     )
     pending = PendingActionStore(FakeClock())
-    return ToolRunner(registry, pending, RecordingLogger()), pending, calendar
+    return ToolRunner(registry, pending, RecordingLogger()), pending, calendar, climate
+
+
+@pytest.mark.unit
+async def test_switching_the_air_conditioner_on_asks_first_and_applies_everything_once() -> None:
+    runner, pending, _, climate = real_tools_runner()
+    args = '{"name": "ar-condicionado", "power": true, "target_temperature": 22}'
+
+    asked = await runner.run(call("set_climate", args), CID, None)
+
+    assert asked.output.startswith("needs_confirmation:")
+    assert "Ligar ar-condicionado e aplicar os outros ajustes pedidos" in asked.output
+    assert (await climate.get_state("ar-condicionado")).power is False
+
+    pending.on_user_utterance(CID, "pode sim")
+    done = await runner.run(call(CONFIRM_ACTION), CID, None)
+
+    state = await climate.get_state("ar-condicionado")
+    assert (state.power, state.target_temperature) == (True, 22.0)
+    assert done.output.startswith("ar-condicionado: ligado")
+
+
+@pytest.mark.unit
+async def test_adjusting_the_air_conditioner_without_switching_it_does_not_ask() -> None:
+    runner, _, _, climate = real_tools_runner()
+
+    result = await runner.run(
+        call("set_climate", '{"name": "ar-condicionado", "target_temperature": 21}'), CID, None
+    )
+
+    assert not result.output.startswith("needs_confirmation:")
+    assert (await climate.get_state("ar-condicionado")).target_temperature == 21.0
 
 
 @pytest.mark.unit
 async def test_end_to_end_with_the_real_agenda_tools() -> None:
-    runner, pending, calendar = real_tools_runner()
+    runner, pending, calendar, _ = real_tools_runner()
     event = await seed_event(calendar)
 
     asked = await runner.run(call("delete_event", f'{{"event_id": "{event.id}"}}'), CID, None)
@@ -2838,7 +3051,7 @@ async def test_end_to_end_with_the_real_agenda_tools() -> None:
 
 @pytest.mark.unit
 async def test_unknown_device_from_the_model_becomes_error_text_not_a_crash() -> None:
-    runner, _, _ = real_tools_runner()
+    runner, _, _, _ = real_tools_runner()
 
     result = await runner.run(call("set_light", '{"name": "cofre", "power": true}'), CID, None)
 
@@ -2949,7 +3162,7 @@ class ToolRunner:
             return "erro: ferramenta fora do segmento"
         try:
             args = _parse(call.arguments)
-            if not tool.spec.requires_confirmation:
+            if not tool.needs_confirmation(args):
                 return await self._execute(tool, args, key=call.id)
             summary = tool.summarize(args)
         except DomainError as exc:
@@ -5385,7 +5598,7 @@ LIGHTS = _LampEnv().tuya_lights
 python -m pytest
 ```
 
-Expected: PASS — 255 passed, 3 deselected (the integration tests), coverage above 80% (about 90%).
+Expected: PASS — 262 passed, 3 deselected (the integration tests), coverage above 80% (about 90%).
 
 - [ ] **Step 28: Commit**
 
@@ -5466,8 +5679,8 @@ Send `conversation_id` on later calls to continue the conversation. `segment`
 (`home`, `music`, `agenda`, `finance`) is an optional filter over the tools; omitted or
 `auto` means all of them; an unknown segment returns `404`.
 
-Sensitive actions (deleting a calendar event, recording an expense) never run on the
-first request: the reply carries the exact action in
+Sensitive actions (deleting a calendar event, recording an expense, switching the air
+conditioner on or off) never run on the first request: the reply carries the exact action in
 `pending_confirmation`, and only the user's very next message, if it is a clear
 "sim", executes it.
 
@@ -5516,7 +5729,7 @@ In `docs/superpowers/specs/2026-10-05-personal-agent-chat-live-design.md`, repla
 with:
 
 ```markdown
-> **Amendment (2026-10-05, found while planning):** the owner had already built real adapters behind `LightPort`, `ClimatePort` and `MusicPort` (Tuya on the LAN, LG ThinQ, Spotify). The demo `HomePort` of §1 is dropped: the `home` and new `music` tools use those ports, and `music` is a fourth segment. Only `delete_event` and `add_expense` require confirmation by default; switching lights, the air conditioner or the music does not (flip `requires_confirmation` on a `ToolSpec` to change that). Wherever this spec says `HomePort`, read `LightPort` / `ClimatePort`.
+> **Amendment (2026-10-05, found while planning):** the owner had already built real adapters behind `LightPort`, `ClimatePort` and `MusicPort` (Tuya on the LAN, LG ThinQ, Spotify). The demo `HomePort` of §1 is dropped: the `home` and new `music` tools use those ports, and `music` is a fourth segment. Following the owner's notes (`AR_Controle.md`, `Lampada_Controle.md`, `Spotfy_Controle.md`): `delete_event` and `add_expense` always require confirmation, `set_climate` only when it switches the unit on or off (`Tool.needs_confirmation`), lights and music never; a lamp is not switched twice within 5 s; the model only plays uris returned by a search or the playlists. Wherever this spec says `HomePort`, read `LightPort` / `ClimatePort`.
 
 ## 0. Intent (agreed with owner)
 ```
@@ -5582,8 +5795,10 @@ with:
 ```markdown
 wins). Any other utterance drops the pending action. 60 s expiry. An agent
   must not learn that it can act first and apologise later. Today `delete_event` and
-  `add_expense` are the flagged tools; switching a light, the air conditioner or the music
-  does not ask (set `requires_confirmation` on a `ToolSpec` to change that).
+  `add_expense` always ask, and `set_climate` asks whenever it switches the air
+  conditioner on or off (`Tool.needs_confirmation`); lights and music never ask. The
+  lamp is never switched twice within 5 s, and the model only plays a `uri` that a
+  search or the playlists returned.
 ```
 
 - [ ] **Step 8: Edit `CLAUDE.md`**
@@ -5638,7 +5853,7 @@ target, not the code.
 python -m pytest
 ```
 
-Expected: PASS — 255 passed, 3 deselected.
+Expected: PASS — 262 passed, 3 deselected.
 
 - [ ] **Step 10: Smoke-test the real service (needs a real OpenAI key for the last call)**
 
@@ -5661,7 +5876,7 @@ Expected: `{"status":"ok"}`, then `401`, then a JSON reply in Brazilian Portugue
 ruff check . && ruff format --check . && pyright && pytest
 ```
 
-Expected: `ruff` clean, `pyright` 0 errors (8 warnings remain, all in `spotify_music.py` and `tuya_light.py`), `255 passed, 3 deselected`.
+Expected: `ruff` clean, `pyright` 0 errors (8 warnings remain, all in `spotify_music.py` and `tuya_light.py`), `262 passed, 3 deselected`.
 
 - [ ] **Step 12: Commit**
 
@@ -5676,7 +5891,7 @@ git commit -m "docs: describe the chat release in README, CLAUDE.md and the spec
 
 ## Done when
 
-- `ruff check . && ruff format --check . && pyright && pytest` is clean: **255 passed, 3 deselected**, coverage about 90%, `pyright` 0 errors.
+- `ruff check . && ruff format --check . && pyright && pytest` is clean: **262 passed, 3 deselected**, coverage about 90%, `pyright` 0 errors.
 - `POST /api/v1/messages` answers `401` without the token, `422` on invalid input, `404` on an unknown segment, and a Portuguese reply with `pending_confirmation` when a sensitive tool was requested.
 - The agent can switch a light, the air conditioner and the music through your adapters (or their in-memory fakes), and the boot log shows which one is live.
 - No Agno, Groq or Gemini dependency is left in `pyproject.toml`, and the service refuses to start with a short token.

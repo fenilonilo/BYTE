@@ -2869,8 +2869,8 @@ Send `conversation_id` on later calls to continue the conversation. `segment`
 (`home`, `music`, `agenda`, `finance`) is an optional filter over the tools; omitted or
 `auto` means all of them; an unknown segment returns `404`.
 
-Sensitive actions (deleting a calendar event, recording an expense) never run on the
-first request: the reply carries the exact action in
+Sensitive actions (deleting a calendar event, recording an expense, switching the air
+conditioner on or off) never run on the first request: the reply carries the exact action in
 `pending_confirmation`, and only the user's very next message, if it is a clear
 "sim", executes it.
 
@@ -3003,7 +3003,7 @@ Chat (`POST /messages`) and live (`WS /live`) share the registry, the runner and
 - **Factory Method as a class** — Registry already plays factory. A separate `ToolFactory` adds a layer with no behavior.
 - **Singleton** — `lru_cache` on a DI provider gives the same effect with zero ceremony and no global state.
 - **Repository + UnitOfWork combo** — too heavy for a single-aggregate backend. We start with a simple `ConversationStorePort`. Revisit if multi-aggregate transactions appear.
-- **Sub-agents, Teams, agent-to-agent handoff** — one owner and about fifteen tools do not need routing. Cross-segment work is the single agent calling two tools. Keeps the call graph a line, not a mesh.
+- **Sub-agents, Teams, agent-to-agent handoff** — one owner and about sixteen tools do not need routing. Cross-segment work is the single agent calling two tools. Keeps the call graph a line, not a mesh.
 
 ## Decisions log (ADRs)
 
@@ -3101,7 +3101,7 @@ Chat (`POST /messages`) and live (`WS /live`) share the registry, the runner and
 ### ADR-014: One agent, own tool loop, OpenAI behind ports (2026-10-05)
 **Context:** the Agno Team routed each utterance to a per-segment agent. The owner wants two modes — chat and a live spoken conversation that executes tools mid-conversation — for one person, with every outside integration as an adapter.
 **Decision:** one agent holding every tool, a small tool loop in `ProcessChatMessage`, and OpenAI behind `ChatModelPort` (chat) and `LiveSessionPort` (Realtime, `gpt-realtime-2.1-mini`). Agno, the Team, `AgentPort` and `Registry[AgentPort]` are removed. Gemini Live is the planned second `LiveSessionPort` adapter.
-**Why:** with one owner and about fifteen tools the routing hop is latency with no gain, and Agno cannot do speech-to-speech, so live would have bypassed it and defined every tool twice. At personal scale the price gap between providers is $10-40 per month, so quality (tool-call reliability, pt-BR, latency) decides, settled by an A/B day.
+**Why:** with one owner and about sixteen tools the routing hop is latency with no gain, and Agno cannot do speech-to-speech, so live would have bypassed it and defined every tool twice. At personal scale the price gap between providers is $10-40 per month, so quality (tool-call reliability, pt-BR, latency) decides, settled by an A/B day.
 **Trade-off:** cross-provider fallback is gone for now; the OpenAI SDK's default retries cover 429/5xx. A second provider returns with its own adapter.
 **Consequence:** supersedes ADR-007, 008, 009, 010 and 013. `segment` is an optional tool filter; an unknown segment still fails with 404.
 
@@ -3390,7 +3390,7 @@ expense adapters. What is left is replacing those adapters with real ones.
 python -m pytest
 ```
 
-Expected: PASS — 289 passed, 4 deselected (the integration tests), coverage above 80% (about 92%).
+Expected: PASS — 296 passed, 4 deselected (the integration tests), coverage above 80% (about 92%).
 
 - [ ] **Step 13: Generate the locked dependencies**
 
@@ -3499,7 +3499,8 @@ git commit -m "chore: lock dependencies, run as non-root with TLS flags, untrack
 ### Deviations from the spec (decided while planning, all conservative)
 
 - **The home tools use your ports.** The spec's demo `HomePort` is dropped: `home` (lights, air conditioner) and a new `music` segment sit on `LightPort`, `ClimatePort` and `MusicPort`. Plan 1 Task 9 records this as an amendment in the spec.
-- **Confirmation defaults:** only `delete_event` and `add_expense` ask. Switching a light, the air conditioner or the music does not (one `requires_confirmation=True` and a `summarize()` flips it for any tool). The spec's "turning off something that is running" is read as "something dangerous", not as every lamp.
+- **Confirmation follows your device notes, per call.** `delete_event` and `add_expense` always ask; `set_climate` asks only when it switches the unit on or off (`AR_Controle.md`: physical action) through the new `Tool.needs_confirmation(args)`, so adjusting the temperature does not ask; lights and music never ask (`Lampada_Controle.md`, `Spotfy_Controle.md`). The spec's "turning off something that is running" is read as "something physical that matters", not as every lamp.
+- **Rules from the notes enforced in the tools:** a lamp is not switched on or off twice within 5 s (rapid toggling can reset it into pairing mode); the model can only play or queue a `uri` that a search or the playlists returned; a unit that reports an error says so. Not exposed, as the notes say (YAGNI): lamp scenes, liking tracks.
 - **A device group with nothing configured falls back to your in-memory adapter** instead of failing at the first request, and the boot log names the adapter in use, so a missing variable is visible.
 - **Order:** the spec's migration step 1 (remove Agno) happens in Plan 1 Task 8, not first: old and new code coexist, green, until the API switches in one task.
 - **Transcripts are saved per message** (`append` on each user and assistant transcript), not "at turn end": same result, simpler and no data lost if the socket drops mid-turn.
@@ -3508,7 +3509,7 @@ git commit -m "chore: lock dependencies, run as non-root with TLS flags, untrack
 
 ## Done when
 
-- `ruff check . && ruff format --check . && pyright && pytest` is clean: **289 passed, 4 deselected**, coverage about 92%, `pyright` 0 errors.
+- `ruff check . && ruff format --check . && pyright && pytest` is clean: **296 passed, 4 deselected**, coverage about 92%, `pyright` 0 errors.
 - The Docker image builds with your three device extras, runs as user `10001`, reports `healthy`, and (with a certificate) serves `wss://` to a client that pins it.
 - `scripts/live_probe.py` completes a turn against the real provider, and `pytest -m integration` passes with a real key (and your lamp).
 - Remaining work: Google Calendar/Sheets adapters to replace the in-memory calendar and expenses, Postgres persistence, the Gemini Live adapter, and the reminder scheduler: each its own spec.
