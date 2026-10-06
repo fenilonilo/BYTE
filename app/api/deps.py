@@ -1,27 +1,42 @@
 from __future__ import annotations
 
+import time
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from app.adapters.agent.agno_agent import build_agents
+from fastapi import Depends
+from openai import AsyncOpenAI
+
 from app.adapters.logging.structlog_logger import StructlogLogger
-from app.adapters.repository.in_memory_repository import InMemoryRepository
-from app.application.registry import Registry
-from app.config import Settings
-from app.domain.exceptions import ClimateError, LightError, MusicError
+from app.adapters.memory.in_memory_calendar import InMemoryCalendar
+from app.adapters.memory.in_memory_climate import InMemoryClimate
+from app.adapters.memory.in_memory_conversation_store import InMemoryConversationStore
+from app.adapters.memory.in_memory_expenses import InMemoryExpenses
+from app.adapters.memory.in_memory_light import InMemoryLight
+from app.adapters.memory.in_memory_music import InMemoryMusic
+from app.adapters.openai.chat_model import OpenAIChatModel
+from app.application.pending_actions import PendingActionStore
+from app.application.tool_runner import ToolRunner
+from app.application.tools.catalog import build_tool_registry
+from app.application.use_cases.process_chat_message import ProcessChatMessage
+from app.config import Settings, load_settings
 
 if TYPE_CHECKING:
-    from app.ports.agent import AgentPort
+    from app.application.registry import Registry
+    from app.application.tool import Tool
+    from app.ports.calendar import CalendarPort
+    from app.ports.chat_model import ChatModelPort
     from app.ports.climate import ClimatePort
+    from app.ports.conversation_store import ConversationStorePort
+    from app.ports.expenses import ExpensesPort
     from app.ports.light import LightPort
     from app.ports.logger import LoggerPort
     from app.ports.music import MusicPort
-    from app.ports.repository import RepositoryPort
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return load_settings()
 
 
 @lru_cache
@@ -30,42 +45,30 @@ def get_logger() -> LoggerPort:
 
 
 @lru_cache
-def get_repo() -> RepositoryPort:
-    return InMemoryRepository()
+def get_store() -> ConversationStorePort:
+    return InMemoryConversationStore(get_settings().max_conversations)
 
 
 @lru_cache
-def get_agents() -> Registry[AgentPort]:
-    registry: Registry[AgentPort] = Registry()
-    for name, agent in build_agents(get_settings()).items():
-        registry.register(name, agent)
-    return registry
+def get_pending() -> PendingActionStore:
+    return PendingActionStore(time.monotonic)
 
 
-@lru_cache
-def get_climate() -> ClimatePort:
-    from app.adapters.thinq.thinq_climate import ThinQClimate  # noqa: PLC0415 - optional extra
-
-    settings = get_settings()
-    if settings.thinq_access_secret is None:
-        raise ClimateError("BYTE_THINQ_ACCESS_SECRET is not set")
-    return ThinQClimate(
-        settings.thinq_access_secret.get_secret_value(),
-        settings.thinq_country,
-        settings.thinq_client_id,
-    )
+# The three device groups pick the real adapter when it is configured and the in-memory one
+# otherwise, so the whole service runs without hardware. The lifespan logs which one is active.
+# Real adapters are imported lazily: their packages live in optional extras (tuya, thinq, spotify).
 
 
 @lru_cache
 def get_light() -> LightPort:
+    lights = get_settings().tuya_lights
+    if not lights:
+        return InMemoryLight()
     from app.adapters.tuya.tuya_light import (  # noqa: PLC0415 - optional extra
         TuyaLight,
         TuyaLightDevice,
     )
 
-    lights = get_settings().tuya_lights
-    if not lights:
-        raise LightError("BYTE_TUYA_LIGHTS is not set")
     return TuyaLight(
         {
             name: TuyaLightDevice(s.device_id, s.address, s.local_key.get_secret_value(), s.version)
@@ -75,14 +78,91 @@ def get_light() -> LightPort:
 
 
 @lru_cache
-def get_music() -> MusicPort:
-    from app.adapters.spotify.spotify_music import SpotifyMusic  # noqa: PLC0415 - optional extra
+def get_climate() -> ClimatePort:
+    settings = get_settings()
+    if settings.thinq_access_secret is None:
+        return InMemoryClimate()
+    from app.adapters.thinq.thinq_climate import ThinQClimate  # noqa: PLC0415 - optional extra
 
+    return ThinQClimate(
+        settings.thinq_access_secret.get_secret_value(),
+        settings.thinq_country,
+        settings.thinq_client_id,
+    )
+
+
+@lru_cache
+def get_music() -> MusicPort:
     settings = get_settings()
     if settings.spotify_client_id is None or settings.spotify_refresh_token is None:
-        raise MusicError("BYTE_SPOTIFY_CLIENT_ID / BYTE_SPOTIFY_REFRESH_TOKEN not set")
+        return InMemoryMusic()
+    from app.adapters.spotify.spotify_music import SpotifyMusic  # noqa: PLC0415 - optional extra
+
     return SpotifyMusic(
         settings.spotify_client_id,
         settings.spotify_refresh_token.get_secret_value(),
         settings.spotify_device,
+    )
+
+
+@lru_cache
+def get_calendar() -> CalendarPort:
+    # ponytail: in memory until the Google Calendar adapter exists
+    return InMemoryCalendar()
+
+
+@lru_cache
+def get_expenses() -> ExpensesPort:
+    # ponytail: in memory until the Google Sheets adapter exists
+    return InMemoryExpenses()
+
+
+@lru_cache
+def get_tools() -> Registry[Tool]:
+    return build_tool_registry(
+        get_light(), get_climate(), get_music(), get_calendar(), get_expenses()
+    )
+
+
+@lru_cache
+def get_runner() -> ToolRunner:
+    return ToolRunner(
+        get_tools(),
+        get_pending(),
+        get_logger(),
+        tool_timeout=get_settings().tool_timeout_seconds,
+    )
+
+
+@lru_cache
+def get_openai() -> AsyncOpenAI:
+    settings = get_settings()
+    return AsyncOpenAI(
+        api_key=settings.openai_api_key.get_secret_value(),
+        timeout=settings.chat_timeout_seconds,
+    )
+
+
+@lru_cache
+def get_chat_model() -> ChatModelPort:
+    return OpenAIChatModel(get_openai(), get_settings().chat_model)
+
+
+def get_process_chat(
+    model: ChatModelPort = Depends(get_chat_model),
+    store: ConversationStorePort = Depends(get_store),
+    runner: ToolRunner = Depends(get_runner),
+    pending: PendingActionStore = Depends(get_pending),
+    log: LoggerPort = Depends(get_logger),
+    settings: Settings = Depends(get_settings),
+) -> ProcessChatMessage:
+    return ProcessChatMessage(
+        model,
+        store,
+        runner,
+        pending,
+        log,
+        max_steps=settings.max_steps,
+        history_limit=settings.history_limit,
+        timeout_seconds=settings.chat_timeout_seconds,
     )

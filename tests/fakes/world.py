@@ -12,6 +12,7 @@ from app.application.pending_actions import PendingActionStore
 from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
 from app.application.use_cases.process_chat_message import ProcessChatMessage
+from app.config import Settings
 from app.domain.model import ModelTurn
 from app.domain.tools import ToolCall
 from tests.fakes.chat_model import ScriptedChatModel
@@ -20,6 +21,12 @@ from tests.fakes.logger import RecordingLogger
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+TOKEN = "t" * 32
+
+
+def make_settings() -> Settings:
+    return Settings.model_validate({"api_token": TOKEN, "openai_api_key": "sk-test"})
 
 
 class World:

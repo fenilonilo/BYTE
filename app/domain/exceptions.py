@@ -5,10 +5,6 @@ class DomainError(Exception):
     """Base for all domain errors."""
 
 
-class MessageError(DomainError):
-    """Errors related to message processing."""
-
-
 class RegistryError(DomainError):
     """Base for registry errors."""
 

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, SecretStr
+from typing import Literal
+
+from pydantic import BaseModel, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.domain.exceptions import ConfigError
+
+MIN_TOKEN_LENGTH = 32
 
 
 class TuyaLightSettings(BaseModel):
@@ -13,14 +19,16 @@ class TuyaLightSettings(BaseModel):
 
 class Settings(BaseSettings):
     app_name: str = "byte"
-    log_level: str = "INFO"
-    segments: list[str] = ["home", "agenda", "finance"]
-    router_model: str = "groq:openai/gpt-oss-120b"
-    fast_model: str = "groq:openai/gpt-oss-20b"
-    balanced_model: str = "google:gemini-3.5-flash"
-    heavy_model: str = "google:gemini-3.7-flash"
-    gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
-    groq_api_key: SecretStr | None = Field(default=None, validation_alias="GROQ_API_KEY")
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    api_token: SecretStr
+    openai_api_key: SecretStr
+    chat_model: str = "gpt-4.1-mini"
+    chat_timeout_seconds: float = 30.0
+    tool_timeout_seconds: float = 10.0
+    max_steps: int = 6
+    history_limit: int = 20
+    max_conversations: int = 50
+    # Real devices. Leave a group unset and Byte runs against the in-memory adapter instead.
     thinq_access_secret: SecretStr | None = None
     thinq_country: str = "BR"
     thinq_client_id: str = "byte-thinq-client"
@@ -33,4 +41,32 @@ class Settings(BaseSettings):
         env_prefix="BYTE_",
         env_file=".env",
         env_file_encoding="utf-8",
+        env_ignore_empty=True,
+        extra="ignore",
     )
+
+    @field_validator("api_token")
+    @classmethod
+    def _token_is_long_enough(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < MIN_TOKEN_LENGTH:
+            raise ValueError(f"must be at least {MIN_TOKEN_LENGTH} characters")
+        return value
+
+    @field_validator("openai_api_key")
+    @classmethod
+    def _key_is_not_empty(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("must not be empty")
+        return value
+
+
+def load_settings() -> Settings:
+    """Build Settings or raise ConfigError naming the bad fields, never their values."""
+    try:
+        return Settings()  # pyright: ignore[reportCallIssue]
+    except ValidationError as exc:
+        problems = ", ".join(
+            f"{'.'.join(str(part) for part in err['loc'])}: {err['msg']}"
+            for err in exc.errors(include_input=False, include_url=False)
+        )
+        raise ConfigError(f"invalid settings ({problems})") from exc

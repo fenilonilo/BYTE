@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import pytest
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.adapters.tuya.tuya_light import TuyaLight, TuyaLightDevice
-from app.config import Settings
+from app.config import TuyaLightSettings  # noqa: TC001 - pydantic resolves it at runtime
 from app.domain.light import Color, LightChange, LightMode, LightState
 
-LIGHTS = Settings().tuya_lights
+
+class _LampEnv(BaseSettings):
+    """Just the lamp config: this test needs neither the API token nor the OpenAI key."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="BYTE_", env_file=".env", env_ignore_empty=True, extra="ignore"
+    )
+    tuya_lights: dict[str, TuyaLightSettings] = {}
+
+
+LIGHTS = _LampEnv().tuya_lights
 
 pytestmark = [
     pytest.mark.integration,

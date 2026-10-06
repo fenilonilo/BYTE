@@ -8,7 +8,7 @@ COPY pyproject.toml README.md ./
 COPY app ./app
 COPY main.py ./
 
-RUN pip install --no-cache-dir ".[api,agents]"
+RUN pip install --no-cache-dir ".[api,openai,thinq,tuya,spotify]"
 
 EXPOSE 8000
 
