@@ -3,11 +3,16 @@ from __future__ import annotations
 import pytest
 
 from app.domain.exceptions import (
+    AgentError,
+    ConfigError,
     DomainError,
+    EventNotFoundError,
+    LiveSessionError,
     MessageError,
     RegistryDuplicateError,
     RegistryError,
     RegistryKeyError,
+    ToolArgumentError,
 )
 
 
@@ -34,3 +39,11 @@ def test_registry_duplicate_error_is_registry_error() -> None:
 
 def test_registry_key_error_is_registry_error() -> None:
     assert issubclass(RegistryKeyError, RegistryError)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [AgentError, LiveSessionError, ConfigError, ToolArgumentError, EventNotFoundError],
+)
+def test_other_errors_are_domain_errors(error: type[DomainError]) -> None:
+    assert issubclass(error, DomainError)

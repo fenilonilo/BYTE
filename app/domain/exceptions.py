@@ -47,3 +47,19 @@ class MusicError(DomainError):
 
 class UnknownMusicDeviceError(MusicError):
     """Raised when a playback device name is not available."""
+
+
+class LiveSessionError(DomainError):
+    """Raised when a live (voice) session cannot be opened or breaks."""
+
+
+class ConfigError(DomainError):
+    """Raised at boot when settings are invalid."""
+
+
+class ToolArgumentError(DomainError):
+    """Raised when the model passes missing or mistyped tool arguments."""
+
+
+class EventNotFoundError(DomainError):
+    """Raised when a calendar event id does not exist."""
