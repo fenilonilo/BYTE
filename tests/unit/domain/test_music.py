@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from app.domain.exceptions import MusicError
 from app.domain.music import PlaybackChange, PlaybackState, Repeat, Skip
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 STATE = PlaybackState(True, None, 5000, 10000, 50, False, Repeat.OFF, "nest")
 
@@ -13,10 +18,17 @@ def test_empty_change_rejected() -> None:
         PlaybackChange()
 
 
-@pytest.mark.parametrize("kw", [{"volume": 101}, {"volume": -1}, {"seek_ms": -1}])
-def test_bounds_rejected(kw: dict[str, int]) -> None:
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: PlaybackChange(volume=101),
+        lambda: PlaybackChange(volume=-1),
+        lambda: PlaybackChange(seek_ms=-1),
+    ],
+)
+def test_bounds_rejected(build: Callable[[], PlaybackChange]) -> None:
     with pytest.raises(MusicError):
-        PlaybackChange(**kw)
+        build()
 
 
 def test_apply_fields() -> None:
