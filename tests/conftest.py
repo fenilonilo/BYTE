@@ -23,6 +23,8 @@ _CACHED = (
     deps.get_runner,
     deps.get_openai,
     deps.get_chat_model,
+    deps.get_live_slot,
+    deps.get_live_port,
 )
 
 

@@ -15,10 +15,13 @@ from app.adapters.memory.in_memory_expenses import InMemoryExpenses
 from app.adapters.memory.in_memory_light import InMemoryLight
 from app.adapters.memory.in_memory_music import InMemoryMusic
 from app.adapters.openai.chat_model import OpenAIChatModel
+from app.adapters.openai.live_session import OpenAILiveSessionAdapter
+from app.api.live_slot import LiveSlot
 from app.application.pending_actions import PendingActionStore
 from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
 from app.application.use_cases.process_chat_message import ProcessChatMessage
+from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
 from app.config import Settings, load_settings
 
 if TYPE_CHECKING:
@@ -30,6 +33,7 @@ if TYPE_CHECKING:
     from app.ports.conversation_store import ConversationStorePort
     from app.ports.expenses import ExpensesPort
     from app.ports.light import LightPort
+    from app.ports.live_session import LiveSessionPort
     from app.ports.logger import LoggerPort
     from app.ports.music import MusicPort
 
@@ -148,6 +152,17 @@ def get_chat_model() -> ChatModelPort:
     return OpenAIChatModel(get_openai(), get_settings().chat_model)
 
 
+@lru_cache
+def get_live_port() -> LiveSessionPort:
+    settings = get_settings()
+    return OpenAILiveSessionAdapter(get_openai(), settings.live_model, vad=settings.live_vad)
+
+
+@lru_cache
+def get_live_slot() -> LiveSlot:
+    return LiveSlot()
+
+
 def get_process_chat(
     model: ChatModelPort = Depends(get_chat_model),
     store: ConversationStorePort = Depends(get_store),
@@ -165,4 +180,27 @@ def get_process_chat(
         max_steps=settings.max_steps,
         history_limit=settings.history_limit,
         timeout_seconds=settings.chat_timeout_seconds,
+    )
+
+
+def get_run_live_session(
+    live: LiveSessionPort = Depends(get_live_port),
+    store: ConversationStorePort = Depends(get_store),
+    runner: ToolRunner = Depends(get_runner),
+    pending: PendingActionStore = Depends(get_pending),
+    log: LoggerPort = Depends(get_logger),
+    settings: Settings = Depends(get_settings),
+) -> RunLiveSession:
+    return RunLiveSession(
+        live,
+        store,
+        runner,
+        pending,
+        log,
+        now=time.monotonic,
+        limits=LiveLimits(
+            idle_seconds=settings.live_idle_seconds,
+            max_seconds=settings.live_max_seconds,
+            transcript_wait_seconds=settings.live_transcript_wait_seconds,
+        ),
     )
