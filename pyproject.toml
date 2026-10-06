@@ -23,6 +23,16 @@ agents = [
     "google-genai>=1.0",
     "groq>=0.13",
 ]
+thinq = [
+    "thinqconnect>=1.0.14",
+    "aiohttp>=3.9",
+]
+tuya = [
+    "tinytuya>=1.17",
+]
+spotify = [
+    "aiohttp>=3.9",
+]
 db = [
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.30",

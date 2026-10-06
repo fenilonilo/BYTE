@@ -63,3 +63,9 @@ logs/
 # Misc
 .cache/
 node_modules/
+
+# tinytuya wizard output (contains local keys)
+devices.json
+tinytuya.json
+tuya-raw.json
+snapshot.json
