@@ -297,10 +297,8 @@ optional — `feat(live): add realtime session adapter`.
 
 ## Current state
 
-Spec 1 is delivered in two plans. **Plan 1 (chat) is done**: one agent with tools,
-code-enforced confirmation, OpenAI chat, bearer auth, fail-fast boot. **Plan 2 (live voice
-and hardening) is next**; until it lands, `WS /live` and TLS in this file describe the
-target, not the code.
+Spec 1 is done: chat and live voice run end to end on in-memory home, calendar and
+expense adapters. What is left is replacing those adapters with real ones.
 
 | Piece | Status |
 |---|---|
@@ -308,11 +306,11 @@ target, not the code.
 | Domain types, ports, `Tool`, `ToolRunner`, confirmation | done |
 | OpenAI `ChatModelPort` + chat loop, `POST /messages` | done |
 | Auth (bearer), input limits, boot validation, JSON logs | done |
-| Tuya lights, LG ThinQ air conditioner, Spotify music (+ in-memory fakes) | done |
-| In-memory Calendar / Expenses adapters | done |
-| `WS /live` + OpenAI Realtime adapter | not started (Plan 2) |
-| TLS, LAN exposure, locked dependencies, non-root image | not started (Plan 2) |
-| Google Calendar / Sheets adapters | not started (later spec) |
+| In-memory Home / Calendar / Expenses adapters | done |
+| `WS /live` + OpenAI Realtime adapter | done |
+| TLS, LAN exposure, locked dependencies, non-root image | done |
+| Tuya, Google Calendar / Sheets adapters | not started (later spec) |
+| Gemini Live adapter, A/B against OpenAI | not started (later spec) |
 | Postgres + pgvector + Alembic | not started (later spec) |
 | Scheduler + `/ws/notifications` | not started (later spec) |
 

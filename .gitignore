@@ -69,3 +69,8 @@ devices.json
 tinytuya.json
 tuya-raw.json
 snapshot.json
+
+# Local TLS material and per-user tool settings
+certs/
+.idea/
+.claude/settings.local.json
