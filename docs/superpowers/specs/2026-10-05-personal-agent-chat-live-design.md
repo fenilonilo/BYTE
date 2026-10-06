@@ -1,7 +1,9 @@
 # Byte — Personal agent: chat + live, tools as adapters (Spec 1)
 
-Status: **DRAFT v3 — reviewer rounds 1-2 applied; awaiting owner review.** Not approved. No implementation before approval.
+Status: **Approved by the owner (2026-10-05).** Plan 1 (chat) implemented; Plan 2 (live voice and hardening) pending.
 Date: 2026-10-05 · Branch: `feat/agno-team-routing` (to be renamed) · Author: Claude + owner
+
+> **Amendment (2026-10-05, found while planning):** the owner had already built real adapters behind `LightPort`, `ClimatePort` and `MusicPort` (Tuya on the LAN, LG ThinQ, Spotify). The demo `HomePort` of §1 is dropped: the `home` and new `music` tools use those ports, and `music` is a fourth segment. Following the owner's notes (`AR_Controle.md`, `Lampada_Controle.md`, `Spotfy_Controle.md`): `delete_event` and `add_expense` always require confirmation, `set_climate` only when it switches the unit on or off (`Tool.needs_confirmation`), lights and music never; a lamp is not switched twice within 5 s; the model only plays uris returned by a search or the playlists. Wherever this spec says `HomePort`, read `LightPort` / `ClimatePort`.
 
 ## 0. Intent (agreed with owner)
 

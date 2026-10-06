@@ -44,7 +44,8 @@ filter (`segment` omitted or `auto` = all tools; unknown segment = `404`).
 
 | Segment | Tools talk to | Via port |
 |---|---|---|
-| `home` | Lights, plugs, sensors, scenes (Tuya Cloud) | `HomePort` |
+| `home` | Lights (Tuya, local network) and the air conditioner (LG ThinQ) | `LightPort`, `ClimatePort` |
+| `music` | Spotify playback on a Spotify Connect device | `MusicPort` |
 | `agenda` | Events, appointments (Google Calendar) | `CalendarPort` |
 | `finance` | Monthly expenses, bills (Google Sheets) | `ExpensesPort` |
 
@@ -89,7 +90,9 @@ live:  WS /live ⇄ RunLiveSession ⇄ LiveSessionPort ⇄ ToolRunner
 | Target | Via | Notes |
 |---|---|---|
 | Model provider | OpenAI (chat + Realtime) behind `ChatModelPort` / `LiveSessionPort` | Second adapter planned: Gemini Live. |
-| Tuya | Tuya Cloud API | Devices are physical. See **Safety**. |
+| Tuya | `tinytuya` over the local network (device id, address, local key) | Lights are physical. Keys come from the environment. |
+| LG ThinQ | ThinQ Connect personal access token | The air conditioner. |
+| Spotify | Web API with a refresh token (Premium) | Playback on a Connect device; `scripts/spotify_login.py` gets the token. |
 | Google Calendar | OAuth 2.0 | Google is the system of record, not our DB. |
 | Google Sheets | OAuth 2.0 | The expense spreadsheet you already use. |
 
@@ -115,7 +118,7 @@ real limit is hit; mark the swap with a `ponytail:` comment then.
 This service controls physical devices in a home and reads personal financial
 data. Hard requirements, not polish:
 
-- **Authentication**: every route and the WebSocket require
+- **Authentication**: every route except `GET /health`, and the WebSocket, require
   `Authorization: Bearer <token>`. `BYTE_API_TOKEN` is at least 32 characters;
   the app refuses to boot otherwise. Compare with `hmac.compare_digest`. Never
   put the token in a query string.
@@ -134,7 +137,11 @@ data. Hard requirements, not polish:
   `confirm_action()`, and only if the **very next user utterance** after the
   request is affirmative (`is_affirmative`, whole-word pt-BR matcher, deny list
   wins). Any other utterance drops the pending action. 60 s expiry. An agent
-  must not learn that it can act first and apologise later.
+  must not learn that it can act first and apologise later. Today `delete_event` and
+  `add_expense` always ask, and `set_climate` asks whenever it switches the air
+  conditioner on or off (`Tool.needs_confirmation`); lights and music never ask. The
+  lamp is never switched twice within 5 s, and the model only plays a `uri` that a
+  search or the playlists returned.
 - **Bound the blast radius of tools.** A tool addresses a known device list or
   the configured spreadsheet, never an id the model names.
 - **Tools are idempotent**, and execution is shielded from cancellation: a
@@ -290,20 +297,22 @@ optional — `feat(live): add realtime session adapter`.
 
 ## Current state
 
-The repository is **mid-migration**. Code is on the old design (Agno Team +
-`Registry[AgentPort]`, `POST /messages`, `GET /health`); this file and the Spec
-describe the target. Migration order is in the spec (§4).
+Spec 1 is delivered in two plans. **Plan 1 (chat) is done**: one agent with tools,
+code-enforced confirmation, OpenAI chat, bearer auth, fail-fast boot. **Plan 2 (live voice
+and hardening) is next**; until it lands, `WS /live` and TLS in this file describe the
+target, not the code.
 
 | Piece | Status |
 |---|---|
-| Hexagonal skeleton, in-memory store, structlog | done (old shape) |
-| Agno agents + Team routing | **to be removed** (Spec 1) |
-| Domain types, ports, `Tool`, `ToolRunner`, confirmation | not started |
-| OpenAI `ChatModelPort` + chat loop | not started |
-| Auth, TLS, input limits, boot validation | not started |
-| `WS /live` + OpenAI Realtime adapter | not started |
-| In-memory Home / Calendar / Expenses adapters | not started |
-| Tuya, Google Calendar / Sheets adapters | not started (later spec) |
+| Hexagonal skeleton, structlog, in-memory store | done |
+| Domain types, ports, `Tool`, `ToolRunner`, confirmation | done |
+| OpenAI `ChatModelPort` + chat loop, `POST /messages` | done |
+| Auth (bearer), input limits, boot validation, JSON logs | done |
+| Tuya lights, LG ThinQ air conditioner, Spotify music (+ in-memory fakes) | done |
+| In-memory Calendar / Expenses adapters | done |
+| `WS /live` + OpenAI Realtime adapter | not started (Plan 2) |
+| TLS, LAN exposure, locked dependencies, non-root image | not started (Plan 2) |
+| Google Calendar / Sheets adapters | not started (later spec) |
 | Postgres + pgvector + Alembic | not started (later spec) |
 | Scheduler + `/ws/notifications` | not started (later spec) |
 
