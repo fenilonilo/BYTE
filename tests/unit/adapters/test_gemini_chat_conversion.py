@@ -38,16 +38,23 @@ def test_system_goes_elsewhere_and_a_tool_batch_is_one_user_turn() -> None:
 
 
 @pytest.mark.unit
-def test_tools_become_one_declaration_list() -> None:
+def test_tools_become_one_declaration_list_plus_web_search() -> None:
     spec = ToolSpec(
         name="set_light",
         description="Liga.",
         parameters={"type": "object", "properties": {}},
         segment="home",
     )
-    (tool,) = to_gemini_tools([spec])
+    tool, search = to_gemini_tools([spec])
     (declaration,) = tool.function_declarations or []
     assert (declaration.name, declaration.parameters_json_schema) == (
         "set_light",
         {"type": "object", "properties": {}},
     )
+    assert search.google_search is not None
+
+
+@pytest.mark.unit
+def test_web_search_stays_when_a_segment_has_no_tools() -> None:
+    (search,) = to_gemini_tools([])
+    assert search.google_search is not None

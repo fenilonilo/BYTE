@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 # Gemini 3 rejects a function call without its thought signature; Google documents this value
 # as the way to send one that was never produced by the model (history from another provider).
 SKIP_SIGNATURE_VALIDATION = b"skip_thought_signature_validator"
+WEB_SEARCH = types.Tool(google_search=types.GoogleSearch())
 
 
 def to_gemini_contents(messages: Sequence[ModelMessage]) -> list[types.Content]:
@@ -62,18 +63,16 @@ def _only_responses(content: types.Content) -> bool:
 
 
 def to_gemini_tools(tools: Sequence[ToolSpec]) -> list[types.Tool]:
-    return [
-        types.Tool(
-            function_declarations=[
-                types.FunctionDeclaration(
-                    name=t.name,
-                    description=t.description,
-                    parameters_json_schema=dict(t.parameters),
-                )
-                for t in tools
-            ]
+    """Our function tools plus Google Search, which Gemini runs on its own servers."""
+    declarations = [
+        types.FunctionDeclaration(
+            name=t.name, description=t.description, parameters_json_schema=dict(t.parameters)
         )
+        for t in tools
     ]
+    if not declarations:
+        return [WEB_SEARCH]
+    return [types.Tool(function_declarations=declarations), WEB_SEARCH]
 
 
 class GeminiChatModel(ChatModelPort):
@@ -89,7 +88,9 @@ class GeminiChatModel(ChatModelPort):
         system = "\n\n".join(m.content for m in messages if m.role == "system")
         config = types.GenerateContentConfig(
             system_instruction=system or None,
-            tools=to_gemini_tools(tools) if tools else None,
+            tools=to_gemini_tools(tools),
+            # Required to mix Google Search with function calling.
+            tool_config=types.ToolConfig(include_server_side_tool_invocations=True),
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
         try:
