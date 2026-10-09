@@ -29,6 +29,10 @@ class InMemoryExpenses(ExpensesPort):
         self._rows[key] = expense
         return expense
 
+    async def list_expenses(self, year: int, month: int) -> tuple[Expense, ...]:
+        rows = (e for e in self._rows.values() if (e.day.year, e.day.month) == (year, month))
+        return tuple(sorted(rows, key=lambda e: e.day))
+
     async def month_total(self, year: int, month: int) -> int:
         return sum(
             e.amount_cents

@@ -17,9 +17,11 @@ from app.adapters.memory.in_memory_music import InMemoryMusic
 from app.adapters.openai.chat_model import OpenAIChatModel
 from app.adapters.openai.live_session import OpenAILiveSessionAdapter
 from app.api.live_slot import LiveSlot
+from app.application.music_ducker import MusicDucker
 from app.application.pending_actions import PendingActionStore
 from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
+from app.application.tools.music import KnownUris
 from app.application.use_cases.process_chat_message import ProcessChatMessage
 from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
 from app.config import Settings, load_settings
@@ -124,9 +126,25 @@ def get_expenses() -> ExpensesPort:
 
 
 @lru_cache
+def get_known_uris() -> KnownUris:
+    return KnownUris()
+
+
+@lru_cache
+def get_ducker() -> MusicDucker:
+    return MusicDucker(get_music(), get_logger(), get_settings().live_duck_percent)
+
+
+@lru_cache
 def get_tools() -> Registry[Tool]:
     return build_tool_registry(
-        get_light(), get_climate(), get_music(), get_calendar(), get_expenses()
+        get_light(),
+        get_climate(),
+        get_music(),
+        get_calendar(),
+        get_expenses(),
+        known=get_known_uris(),
+        on_volume=get_ducker().note_volume,
     )
 
 
@@ -214,6 +232,7 @@ def get_run_live_session(
     runner: ToolRunner = Depends(get_runner),
     pending: PendingActionStore = Depends(get_pending),
     log: LoggerPort = Depends(get_logger),
+    ducker: MusicDucker = Depends(get_ducker),
     settings: Settings = Depends(get_settings),
 ) -> RunLiveSession:
     return RunLiveSession(
@@ -223,6 +242,7 @@ def get_run_live_session(
         pending,
         log,
         now=time.monotonic,
+        ducker=ducker,
         limits=LiveLimits(
             idle_seconds=settings.live_idle_seconds,
             max_seconds=settings.live_max_seconds,

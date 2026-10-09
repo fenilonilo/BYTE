@@ -11,12 +11,12 @@ from app.application.tools.args import (
     opt_str,
     str_arg,
 )
-from app.domain.exceptions import MusicError
+from app.domain.exceptions import UnknownUriError
 from app.domain.music import MediaKind, PlaybackChange, Repeat, Skip
 from app.domain.tools import ToolSpec
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from app.domain.music import MusicItem, PlaybackState
     from app.ports.music import MusicPort
@@ -40,7 +40,7 @@ class KnownUris:
 
     def require(self, uri: str) -> str:
         if uri not in self._uris:
-            raise MusicError("uri desconhecida: use search_music ou list_playlists primeiro")
+            raise UnknownUriError("uri desconhecida: use search_music ou list_playlists primeiro")
         return uri
 
 
@@ -176,8 +176,9 @@ class ControlMusic(Tool):
         segment="music",
     )
 
-    def __init__(self, music: MusicPort) -> None:
+    def __init__(self, music: MusicPort, on_volume: Callable[[int], None] | None = None) -> None:
         self._music = music
+        self._on_volume = on_volume
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         change = PlaybackChange(
@@ -188,7 +189,10 @@ class ControlMusic(Tool):
             seek_ms=opt_int(args, "seek_ms"),
             skip=opt_enum(args, "skip", Skip),
         )
-        return describe_playback(await self._music.apply(change))
+        state = await self._music.apply(change)
+        if change.volume is not None and self._on_volume is not None:
+            self._on_volume(change.volume)
+        return describe_playback(state)
 
 
 class QueueMusic(Tool):

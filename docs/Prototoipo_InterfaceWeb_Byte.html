@@ -1,0 +1,1240 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ÍRIS | Agente doméstico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+/* ---------- Tokens ---------- */
+:root{
+  --bg:#E4EEF4; --bg-2:#F5FAFD;
+  --panel:rgba(255,255,255,.62); --panel-strong:rgba(255,255,255,.9);
+  --line:rgba(8,90,120,.20); --line-strong:rgba(8,120,160,.5); --grid:rgba(8,90,120,.07);
+  --text:#082536; --muted:#4A687D; --hi:#03384F;
+  --accent:#0A84A6; --warm:#B56A00; --danger:#C22F48; --ok:#17885A;
+  --state:var(--accent);
+  --font:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --mono:"Share Tech Mono",ui-monospace,Consolas,monospace;
+  --cut:16px;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#030912; --bg-2:#0A1C2E;
+    --panel:rgba(7,22,38,.58); --panel-strong:rgba(9,28,48,.92);
+    --line:rgba(79,227,255,.16); --line-strong:rgba(79,227,255,.45); --grid:rgba(79,227,255,.045);
+    --text:#DCF5FF; --muted:#7193AD; --hi:#FFFFFF;
+    --accent:#4FE3FF; --warm:#FFB547; --danger:#FF5470; --ok:#4DFFA6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#030912; --bg-2:#0A1C2E;
+  --panel:rgba(7,22,38,.58); --panel-strong:rgba(9,28,48,.92);
+  --line:rgba(79,227,255,.16); --line-strong:rgba(79,227,255,.45); --grid:rgba(79,227,255,.045);
+  --text:#DCF5FF; --muted:#7193AD; --hi:#FFFFFF;
+  --accent:#4FE3FF; --warm:#FFB547; --danger:#FF5470; --ok:#4DFFA6;
+}
+
+/* ---------- Base ---------- */
+:root{ box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+html{ height:100%; scroll-padding-top:env(safe-area-inset-top,0px); }
+*,*::before,*::after{ box-sizing:inherit; }
+body{
+  margin:0; height:100%; overflow:hidden;
+  font-family:var(--font); color:var(--text); font-size:15px; line-height:1.45;
+  background:radial-gradient(ellipse 70% 60% at 50% 42%, var(--bg-2), var(--bg) 72%);
+  background-color:var(--bg);
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:44px 44px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 45%, #000 20%, transparent 75%);
+          mask-image:radial-gradient(ellipse at 50% 45%, #000 20%, transparent 75%);
+}
+body[data-mode="thinking"], body[data-mode="executing"]{ --state:var(--warm); }
+button,input{ font:inherit; color:inherit; }
+button{ cursor:pointer; }
+:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
+.sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+img,svg,canvas{ max-width:100%; }
+
+/* ---------- Layout ---------- */
+.app{
+  position:relative; height:100%;
+  display:grid; gap:14px; padding:14px;
+  grid-template-columns:minmax(260px,300px) minmax(0,1fr) minmax(280px,330px);
+  grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-areas:"top top top" "left core right" "left cmd right";
+}
+
+/* ---------- Top bar ---------- */
+.topbar{ grid-area:top; display:flex; align-items:center; gap:18px; min-width:0; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:30px; height:30px; position:relative; flex:none;
+  border:1.5px solid var(--state); border-radius:50%;
+  transition:border-color .4s;
+}
+.brand-mark::after{ content:""; position:absolute; inset:7px; border-radius:50%; background:var(--state); box-shadow:0 0 12px var(--state); transition:background .4s, box-shadow .4s; }
+.brand strong{ display:block; font-size:20px; letter-spacing:.18em; font-weight:700; line-height:1; }
+.brand small{ color:var(--muted); font-size:12px; letter-spacing:.04em; }
+
+.status{
+  display:flex; align-items:center; gap:8px; padding:5px 14px 5px 10px;
+  border:1px solid var(--line); background:var(--panel);
+  clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);
+  font-weight:600; font-size:13px; color:var(--state); transition:color .4s;
+}
+.status .dot{ width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; animation:blink 1.6s ease-in-out infinite; }
+@keyframes blink{ 50%{ opacity:.3; } }
+
+.top-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+.model{ display:flex; align-items:baseline; gap:6px; font-size:12px; color:var(--muted); padding:4px 10px; border:1px solid var(--line); }
+.model strong{ color:var(--text); font-size:14px; letter-spacing:.06em; }
+.model.flash{ animation:flash .8s ease-out; }
+@keyframes flash{ 0%{ border-color:var(--warm); box-shadow:0 0 18px var(--warm); } 100%{ box-shadow:none; } }
+#clock{ font-family:var(--mono); font-size:15px; color:var(--muted); min-width:72px; text-align:right; }
+.icon-btn{
+  width:36px; height:36px; display:grid; place-items:center; flex:none;
+  background:var(--panel); border:1px solid var(--line); color:var(--muted);
+  transition:color .2s, border-color .2s;
+}
+.icon-btn svg{ width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.icon-btn[aria-pressed="true"]{ color:var(--accent); border-color:var(--line-strong); }
+.icon-btn:hover{ color:var(--text); }
+.drawer-btn{ display:none; }
+
+/* ---------- Panels (abas laterais) ---------- */
+.panel{
+  position:relative; min-height:0; display:flex; flex-direction:column;
+  background:var(--panel); border:1px solid var(--line);
+  -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,var(--cut) 100%,0 calc(100% - var(--cut)));
+}
+.panel.left{ grid-area:left; } .panel.right{ grid-area:right; }
+.panel::before{ content:""; position:absolute; left:-1px; top:-1px; width:22px; height:22px; border-left:2px solid var(--accent); border-top:2px solid var(--accent); pointer-events:none; }
+.panel::after{ content:""; position:absolute; right:-1px; bottom:-1px; width:22px; height:22px; border-right:2px solid var(--accent); border-bottom:2px solid var(--accent); pointer-events:none; }
+
+.tabs{ display:flex; border-bottom:1px solid var(--line); padding:0 6px; flex:none; }
+.tabs button{
+  position:relative; flex:1; background:none; border:0; padding:13px 8px 11px;
+  color:var(--muted); font-weight:600; font-size:14px; letter-spacing:.03em;
+}
+.tabs button[aria-selected="true"]{ color:var(--text); }
+.tabs button[aria-selected="true"]::after{ content:""; position:absolute; left:18%; right:18%; bottom:-1px; height:2px; background:var(--accent); box-shadow:0 0 10px var(--accent); }
+.tabs .count{ font-family:var(--mono); font-size:11px; color:var(--accent); margin-left:4px; }
+
+.tab-body{ display:none; flex:1; min-height:0; overflow-y:auto; padding:16px; scrollbar-width:thin; scrollbar-color:var(--line-strong) transparent; }
+.tab-body.active{ display:block; }
+.tab-body h3{ margin:22px 0 10px; font-size:13px; font-weight:600; color:var(--muted); letter-spacing:.04em; }
+.tab-body h3:first-child{ margin-top:0; }
+
+/* ---------- Tarefa atual ---------- */
+.task{ position:relative; padding:14px 14px 12px; border:1px solid var(--line); background:var(--panel-strong); }
+.task.running{ border-color:var(--warm); }
+.task.running::before{ content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(100deg,transparent 30%,color-mix(in srgb,var(--warm) 12%,transparent) 50%,transparent 70%); background-size:250% 100%; animation:sheen 1.8s linear infinite; }
+@keyframes sheen{ from{ background-position:120% 0; } to{ background-position:-120% 0; } }
+.task-label{ margin:0 0 4px; font-size:12px; color:var(--state); font-weight:600; }
+.task-title{ margin:0; font-size:18px; font-weight:600; line-height:1.25; }
+.task-sub{ margin:4px 0 12px; font-size:13px; color:var(--muted); }
+.progress{ height:3px; background:var(--line); overflow:hidden; }
+.progress span{ display:block; height:100%; width:0; background:var(--state); box-shadow:0 0 10px var(--state); transition:width .5s ease; }
+.steps{ list-style:none; margin:14px 0 0; padding:0; display:grid; gap:8px; }
+.steps li{ position:relative; padding-left:24px; font-size:14px; color:var(--muted); transition:color .3s; }
+.steps li::before{ content:""; position:absolute; left:2px; top:4px; width:11px; height:11px; border:1.5px solid var(--line-strong); border-radius:50%; }
+.steps li.active{ color:var(--text); }
+.steps li.active::before{ border-color:var(--warm); border-top-color:transparent; animation:spin .8s linear infinite; }
+.steps li.done{ color:var(--text); }
+.steps li.done::before{ border-color:var(--ok); background:var(--ok); box-shadow:0 0 8px var(--ok); }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+.list{ list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.list li{ display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:7px 10px; border-left:2px solid var(--line-strong); background:var(--panel); }
+.list li time, .list li .m{ font-family:var(--mono); color:var(--muted); font-size:12px; flex:none; }
+.list .empty{ border-left-color:transparent; background:none; color:var(--muted); padding-left:0; }
+
+/* ---------- Dispositivos ---------- */
+.device{ position:relative; padding:14px; border:1px solid var(--line); background:var(--panel-strong); margin-bottom:12px; transition:border-color .3s; }
+.device.on{ border-color:var(--line-strong); }
+.device.on::before{ content:""; position:absolute; left:-1px; top:12px; bottom:12px; width:2px; background:var(--accent); box-shadow:0 0 10px var(--accent); }
+.device.pulse{ animation:devpulse .9s ease-out; }
+@keyframes devpulse{ 0%{ box-shadow:0 0 0 0 var(--accent); } 100%{ box-shadow:0 0 0 14px transparent; } }
+.device header{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:600; font-size:14px; }
+.device .meta{ margin:6px 0 0; font-size:13px; color:var(--muted); }
+.switch{ width:40px; height:20px; position:relative; flex:none; border:1px solid var(--line-strong); background:transparent; border-radius:20px; }
+.switch::after{ content:""; position:absolute; top:3px; left:3px; width:12px; height:12px; border-radius:50%; background:var(--muted); transition:transform .25s, background .25s; }
+.switch[aria-pressed="true"]{ border-color:var(--accent); }
+.switch[aria-pressed="true"]::after{ transform:translateX(20px); background:var(--accent); box-shadow:0 0 8px var(--accent); }
+
+.ac-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
+.ac-temp{ font-family:var(--mono); font-size:44px; line-height:1; letter-spacing:-.02em; }
+.ac-temp small{ font-size:16px; color:var(--muted); margin-left:2px; }
+.device:not(.on) .ac-temp{ opacity:.45; }
+.stepper{ display:flex; gap:6px; }
+.stepper button{ width:34px; height:34px; border:1px solid var(--line-strong); background:transparent; font-size:18px; }
+.stepper button:hover{ border-color:var(--accent); color:var(--accent); }
+
+.lamp-row{ display:flex; align-items:center; gap:14px; margin-top:12px; }
+.bulb{
+  --bulb:#FFC98A; --glow:0;
+  width:44px; height:44px; flex:none; border-radius:50%;
+  background:radial-gradient(circle at 40% 35%, #fff 0 12%, var(--bulb) 62%);
+  opacity:calc(.22 + var(--glow) * .78);
+  box-shadow:0 0 calc(var(--glow) * 34px) calc(var(--glow) * 5px) var(--bulb);
+  transition:opacity .4s, box-shadow .4s, background .4s;
+}
+.lamp-row label{ flex:1; font-size:12px; color:var(--muted); display:grid; gap:4px; }
+input[type="range"]{ width:100%; accent-color:var(--accent); }
+
+.music-row{ display:flex; align-items:center; gap:12px; margin-top:10px; }
+.eq{ display:flex; align-items:flex-end; gap:3px; height:26px; flex:none; }
+.eq span{ width:4px; height:30%; background:var(--accent); animation:eq .8s ease-in-out infinite alternate; animation-play-state:paused; opacity:.5; }
+.eq span:nth-child(2){ animation-delay:-.3s; } .eq span:nth-child(3){ animation-delay:-.55s; } .eq span:nth-child(4){ animation-delay:-.15s; }
+.device.on .eq span{ animation-play-state:running; opacity:1; }
+@keyframes eq{ from{ height:15%; } to{ height:100%; } }
+.music-row div{ flex:1; min-width:0; }
+.music-row strong{ display:block; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.play{ width:34px; height:34px; display:grid; place-items:center; border:1px solid var(--line-strong); background:transparent; }
+.play svg{ width:14px; height:14px; fill:currentColor; }
+
+/* ---------- Registro ---------- */
+.log{ list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+.log li{ display:grid; grid-template-columns:auto 1fr; column-gap:8px; row-gap:2px; font-size:13px; animation:logIn .35s ease-out; }
+@keyframes logIn{ from{ opacity:0; transform:translateX(8px); } }
+.log time{ font-family:var(--mono); font-size:12px; color:var(--muted); }
+.log .tag{ justify-self:start; font-size:11px; font-weight:600; padding:0 6px; border:1px solid currentColor; color:var(--accent); }
+.log .tag-roteador,.log .tag-web{ color:var(--warm); }
+.log .tag-sistema{ color:var(--muted); }
+.log .tag-musica{ color:var(--ok); }
+.log p{ grid-column:1 / -1; margin:0; font-family:var(--mono); font-size:13px; line-height:1.4; color:var(--text); }
+.log li.danger p{ color:var(--danger); }
+
+/* ---------- Consumo ---------- */
+.meter-block{ padding:12px 14px; border:1px solid var(--line); background:var(--panel-strong); margin-bottom:10px; }
+.meter-block header{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.meter-block header strong{ font-size:15px; }
+.meter-block header span{ font-size:12px; color:var(--muted); }
+.meter{ height:4px; background:var(--line); margin:10px 0 8px; overflow:hidden; }
+.meter span{ display:block; height:100%; width:0; background:var(--accent); transition:width .6s ease; }
+.meter-block.sol .meter span{ background:var(--warm); }
+.nums{ margin:0; font-family:var(--mono); font-size:12px; color:var(--muted); }
+.nums b{ color:var(--text); font-weight:400; }
+.bars{ display:grid; gap:10px; }
+.bar-row{ display:grid; grid-template-columns:60px 1fr auto; gap:8px; align-items:center; font-size:12px; color:var(--muted); }
+.bar-row .meter{ margin:0; }
+.bar-row .v{ font-family:var(--mono); color:var(--text); }
+.limits{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.limits th{ text-align:left; color:var(--muted); font-weight:500; padding:0 6px 6px 0; border-bottom:1px solid var(--line); }
+.limits td{ padding:7px 6px 7px 0; border-bottom:1px solid var(--line); }
+.limits td:nth-child(n+3){ font-family:var(--mono); }
+.limits th:nth-child(n+3), .limits td:nth-child(n+3){ text-align:right; }
+
+/* ---------- Núcleo ---------- */
+.core{ grid-area:core; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
+.orb-btn{
+  position:relative; width:min(100%, 56vh, 560px); aspect-ratio:1; flex:none;
+  padding:0; border:0; background:none; border-radius:50%;
+}
+.orb-btn canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.orb-state{ margin:0; font-size:26px; font-weight:700; letter-spacing:.14em; color:var(--state); transition:color .4s; text-shadow:0 0 18px color-mix(in srgb,var(--state) 55%,transparent); }
+.orb-hint{ margin:0; font-size:13px; color:var(--muted); min-height:1.4em; }
+.transcript{ width:min(100%, 62ch); text-align:center; margin-top:8px; display:grid; gap:4px; min-height:3.6em; }
+.transcript p{ margin:0; }
+#youLine{ color:var(--muted); font-size:14px; }
+#youLine:not(:empty)::before{ content:"Você: "; color:var(--accent); }
+#irisLine{ font-size:17px; font-weight:500; }
+#wave{ width:min(100%, 640px); height:56px; display:block; flex:none; }
+
+/* ---------- Comando ---------- */
+.command{ grid-area:cmd; display:grid; gap:10px; justify-items:center; }
+.cmd-row{ display:flex; gap:10px; width:min(100%, 720px); }
+.mic{
+  width:50px; height:50px; flex:none; display:grid; place-items:center; border-radius:50%;
+  border:1.5px solid var(--accent); background:var(--panel); color:var(--accent);
+}
+.mic svg{ width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; }
+body[data-mode="listening"] .mic{ background:var(--accent); color:var(--bg); animation:ring 1.3s ease-out infinite; }
+@keyframes ring{ 0%{ box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 60%,transparent); } 100%{ box-shadow:0 0 0 16px transparent; } }
+.cmd-field{
+  flex:1; min-width:0; display:flex; align-items:center;
+  border:1px solid var(--line-strong); background:var(--panel-strong);
+  clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+}
+.cmd-field input{ flex:1; min-width:0; height:50px; border:0; background:transparent; padding:0 16px; font-size:15px; outline:none; }
+.cmd-field input::placeholder{ color:var(--muted); }
+.cmd-field:focus-within{ border-color:var(--accent); }
+.send{ height:50px; padding:0 20px; border:0; border-left:1px solid var(--line); background:transparent; font-weight:600; color:var(--accent); }
+.send:hover{ background:color-mix(in srgb,var(--accent) 12%,transparent); }
+.chips{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; width:min(100%, 760px); }
+.chips button{ font-size:12.5px; padding:5px 11px; border:1px solid var(--line); background:var(--panel); color:var(--muted); }
+.chips button:hover{ color:var(--text); border-color:var(--line-strong); }
+.demo-note{ margin:0; font-size:11.5px; color:var(--muted); }
+
+/* ---------- Responsivo ---------- */
+.scrim{ display:none; }
+@media (max-width: 1000px){
+  .app{ grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto; grid-template-areas:"top" "core" "cmd"; padding:10px; gap:10px; }
+  .drawer-btn{ display:grid; }
+  .model span, #clock{ display:none; }
+  .panel{
+    position:fixed; top:0; bottom:0; z-index:30; width:min(88vw, 340px);
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+    background:var(--panel-strong); transition:transform .35s ease; clip-path:none;
+  }
+  .panel.left{ left:0; transform:translateX(-105%); }
+  .panel.right{ right:0; transform:translateX(105%); }
+  body.show-left .panel.left, body.show-right .panel.right{ transform:none; }
+  .scrim{ display:block; position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.45); opacity:0; pointer-events:none; transition:opacity .3s; }
+  body.show-left .scrim, body.show-right .scrim{ opacity:1; pointer-events:auto; }
+  .orb-btn{ width:min(100%, 44vh, 420px); }
+  .orb-state{ font-size:21px; }
+  #irisLine{ font-size:15px; }
+  .chips{ flex-wrap:nowrap; overflow-x:auto; justify-content:flex-start; padding-bottom:2px; }
+  .chips button{ flex:none; }
+}
+@media (max-width: 520px){
+  .status{ display:none; }
+  .brand small{ display:none; }
+  .topbar{ gap:10px; }
+  .top-right{ gap:6px; }
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+}
+</style>
+</head>
+<body data-mode="idle">
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div><strong>ÍRIS</strong><small>Agente doméstico</small></div>
+    </div>
+    <div class="status" role="status" aria-live="polite"><span class="dot"></span><span id="statusText">Em espera</span></div>
+
+    <div class="top-right">
+      <div class="model" id="modelBadge"><span>Modelo</span><strong id="modelName">Luna</strong></div>
+      <time id="clock">--:--:--</time>
+      <button class="icon-btn" id="ambientBtn" aria-pressed="false" title="Reagir ao som ambiente" aria-label="Reagir ao som ambiente">
+        <svg viewBox="0 0 24 24"><path d="M3 12h1.5M7 8.5v7M11 5v14M15 8v8M19 10.5v3"/></svg>
+      </button>
+      <button class="icon-btn" id="voiceBtn" aria-pressed="true" title="Resposta falada" aria-label="Resposta falada">
+        <svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10"/></svg>
+      </button>
+      <button class="icon-btn drawer-btn" data-drawer="left" aria-label="Abrir tarefas e casa" title="Tarefas e casa">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+      </button>
+      <button class="icon-btn drawer-btn" data-drawer="right" aria-label="Abrir registro e consumo" title="Registro e consumo">
+        <svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 9h6M9 13h6M9 17h3"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Aba lateral esquerda: o que está fazendo / no que está mexendo -->
+  <aside class="panel left" id="panelLeft" aria-label="Tarefas e aparelhos">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="tab-agora">Agora</button>
+      <button role="tab" aria-selected="false" data-tab="tab-casa">Casa</button>
+    </div>
+
+    <section class="tab-body active" id="tab-agora" role="tabpanel">
+      <div class="task" id="taskCard">
+        <p class="task-label" id="taskLabel">Fazendo agora</p>
+        <p class="task-title" id="taskTitle">Nada em andamento</p>
+        <p class="task-sub" id="taskSub">Toque no núcleo para falar ou digite um comando.</p>
+        <div class="progress"><span id="taskBar"></span></div>
+        <ol class="steps" id="taskSteps"></ol>
+      </div>
+      <h3>Na fila</h3>
+      <ul class="list" id="queueList"><li class="empty">Fila vazia</li></ul>
+      <h3>Concluídas</h3>
+      <ul class="list" id="doneList"><li class="empty">Nenhuma ainda</li></ul>
+    </section>
+
+    <section class="tab-body" id="tab-casa" role="tabpanel">
+      <div class="device" id="devAc">
+        <header><span>Ar-condicionado LG</span><button class="switch" id="acSwitch" aria-pressed="false" aria-label="Ligar ou desligar o ar-condicionado"></button></header>
+        <div class="ac-row">
+          <div class="ac-temp"><span id="acTemp">24</span><small>°C</small></div>
+          <div class="stepper"><button data-ac="-1" aria-label="Diminuir temperatura">−</button><button data-ac="1" aria-label="Aumentar temperatura">+</button></div>
+        </div>
+        <p class="meta" id="acState">Desligado</p>
+      </div>
+
+      <div class="device" id="devLamp">
+        <header><span>Lâmpada Positivo</span><button class="switch" id="lampSwitch" aria-pressed="false" aria-label="Acender ou apagar a lâmpada"></button></header>
+        <div class="lamp-row">
+          <div class="bulb" id="bulb" aria-hidden="true"></div>
+          <label>Brilho<input type="range" id="lampRange" min="1" max="100" value="80"></label>
+        </div>
+        <p class="meta" id="lampState">Apagada</p>
+      </div>
+
+      <div class="device" id="devMusic">
+        <header><span>Spotify</span><span class="meta" id="musicState" style="margin:0">Pausado</span></header>
+        <div class="music-row">
+          <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <div><strong id="musicTrack">Nenhuma playlist</strong></div>
+          <button class="play" id="playBtn" aria-label="Tocar ou pausar">
+            <svg viewBox="0 0 16 16" id="playIcon"><path d="M4 2.5v11l9-5.5z"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- Núcleo -->
+  <main class="core">
+    <button class="orb-btn" id="orbBtn" aria-label="Falar com a ÍRIS">
+      <canvas id="orb"></canvas>
+    </button>
+    <p class="orb-state" id="orbState">EM ESPERA</p>
+    <p class="orb-hint" id="orbHint">Toque no núcleo para falar</p>
+    <div class="transcript" aria-live="polite">
+      <p id="youLine"></p>
+      <p id="irisLine"></p>
+    </div>
+    <canvas id="wave" aria-hidden="true"></canvas>
+  </main>
+
+  <!-- Aba lateral direita: registro e consumo -->
+  <aside class="panel right" id="panelRight" aria-label="Registro e consumo">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="tab-registro">Registro<span class="count" id="logCount"></span></button>
+      <button role="tab" aria-selected="false" data-tab="tab-consumo">Consumo</button>
+    </div>
+
+    <section class="tab-body active" id="tab-registro" role="tabpanel">
+      <ul class="log" id="log"></ul>
+    </section>
+
+    <section class="tab-body" id="tab-consumo" role="tabpanel">
+      <h3>Nesta sessão</h3>
+      <div class="meter-block luna">
+        <header><strong>GPT-6 Luna</strong><span>ações simples</span></header>
+        <div class="meter"><span id="lunaBar"></span></div>
+        <p class="nums"><b id="lunaIn">0</b> entrada, <b id="lunaOut">0</b> saída, <b id="lunaCalls">0</b> chamadas</p>
+      </div>
+      <div class="meter-block sol">
+        <header><strong>GPT-6.1 Sol</strong><span>tarefas complexas</span></header>
+        <div class="meter"><span id="solBar"></span></div>
+        <p class="nums"><b id="solIn">0</b> entrada, <b id="solOut">0</b> saída, <b id="solCalls">0</b> chamadas</p>
+      </div>
+
+      <h3>Última ação</h3>
+      <div class="bars" id="lastAction"><p class="nums" style="margin:0">Nenhuma ação ainda.</p></div>
+
+      <h3>Limites por tipo de ação</h3>
+      <table class="limits">
+        <thead><tr><th>Ação</th><th>Modelo</th><th>Entrada</th><th>Saída</th></tr></thead>
+        <tbody id="limitsBody"></tbody>
+      </table>
+    </section>
+  </aside>
+
+  <!-- Comando -->
+  <footer class="command">
+    <div class="cmd-row">
+      <button class="mic" id="micBtn" aria-label="Falar um comando">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+      </button>
+      <form class="cmd-field" id="cmdForm" onsubmit="return false">
+        <label for="cmd" class="sr-only">Comando</label>
+        <input id="cmd" autocomplete="off" placeholder="Ex.: ligar o ar em 22 graus">
+        <button class="send" id="sendBtn" type="submit">Enviar</button>
+      </form>
+    </div>
+    <div class="chips" id="chips">
+      <button>Ligar o ar em 22 graus</button>
+      <button>Lâmpada azul a 60%</button>
+      <button>Tocar lo-fi para programar</button>
+      <button>Pesquisar notícias de IA</button>
+      <button>Status da casa</button>
+      <button>Apagar a luz</button>
+    </div>
+    <p class="demo-note">Modo demonstração: as ações são simuladas no navegador até você ligar o backend.</p>
+  </footer>
+
+  <div class="scrim" id="scrim"></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= Utilidades ================= */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MOTION = reduced ? 0.25 : 1;
+const hhmmss = () => new Date().toLocaleTimeString('pt-BR', { hour12: false });
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const fmt = n => n.toLocaleString('pt-BR');
+
+/* ================= Cores do tema (lidas do CSS) ================= */
+const C = {};
+function hexToRgb(h) {
+  h = (h || '#4FE3FF').replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['accent', 'warm', 'text', 'danger', 'hi']) C[k] = hexToRgb(cs.getPropertyValue('--' + k));
+}
+readColors();
+const darkMq = matchMedia('(prefers-color-scheme: dark)');
+if (darkMq.addEventListener) darkMq.addEventListener('change', readColors);
+new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a))})`;
+
+/* ================= Estado ================= */
+const S = { mode: 'idle', busy: false, ambient: false, voice: true, model: 'Luna' };
+const MODES = {
+  idle:      { label: 'Em espera',  big: 'EM ESPERA',  hint: 'Toque no núcleo para falar' },
+  listening: { label: 'Ouvindo',    big: 'OUVINDO',    hint: 'Pode falar, estou ouvindo' },
+  thinking:  { label: 'Pensando',   big: 'PENSANDO',   hint: 'Escolhendo o modelo certo' },
+  executing: { label: 'Executando', big: 'EXECUTANDO', hint: 'Mexendo na casa' },
+  speaking:  { label: 'Falando',    big: 'FALANDO',    hint: '' }
+};
+function setMode(m) {
+  S.mode = m;
+  document.body.dataset.mode = m;
+  $('#statusText').textContent = MODES[m].label;
+  $('#orbState').textContent = MODES[m].big;
+  $('#orbHint').textContent = MODES[m].hint;
+}
+function setModel(name) {
+  if (S.model !== name) {
+    const b = $('#modelBadge');
+    b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash');
+  }
+  S.model = name;
+  $('#modelName').textContent = name;
+}
+
+/* ================= Relógio ================= */
+const tick = () => { $('#clock').textContent = hhmmss(); };
+tick(); setInterval(tick, 1000);
+
+/* ================= Abas e gavetas ================= */
+$$('.tabs').forEach(tabs => {
+  tabs.addEventListener('click', e => {
+    const btn = e.target.closest('[role="tab"]'); if (!btn) return;
+    const panel = tabs.closest('.panel');
+    $$('[role="tab"]', tabs).forEach(b => b.setAttribute('aria-selected', b === btn));
+    $$('.tab-body', panel).forEach(s => s.classList.toggle('active', s.id === btn.dataset.tab));
+    if (btn.dataset.tab === 'tab-registro') { unread = 0; updateLogCount(); }
+  });
+});
+$$('.drawer-btn').forEach(b => b.addEventListener('click', () => {
+  const side = b.dataset.drawer;
+  document.body.classList.toggle('show-' + side);
+  document.body.classList.remove('show-' + (side === 'left' ? 'right' : 'left'));
+}));
+$('#scrim').addEventListener('click', () => document.body.classList.remove('show-left', 'show-right'));
+addEventListener('keydown', e => { if (e.key === 'Escape') document.body.classList.remove('show-left', 'show-right'); });
+
+/* ================= Registro ================= */
+const TAGS = { voz: 'Voz', roteador: 'Roteador', casa: 'Casa', web: 'Web', musica: 'Música', sistema: 'Sistema' };
+let unread = 0;
+function updateLogCount() { $('#logCount').textContent = unread ? ` ${unread}` : ''; }
+function log(tag, text, tone) {
+  const li = document.createElement('li');
+  if (tone) li.className = tone;
+  li.innerHTML = `<time>${hhmmss()}</time><span class="tag tag-${tag}">${TAGS[tag] || tag}</span><p></p>`;
+  li.querySelector('p').textContent = text;
+  const ul = $('#log');
+  ul.prepend(li);
+  while (ul.children.length > 80) ul.lastChild.remove();
+  if (!$('#tab-registro').classList.contains('active')) { unread++; updateLogCount(); }
+}
+
+/* ================= Aparelhos ================= */
+const dev = {
+  ac:    { on: false, temp: 24, mode: 'Frio' },
+  lamp:  { on: false, bright: 80, color: '#FFC98A', colorName: 'branca quente' },
+  music: { playing: false, playlist: 'Nenhuma playlist' }
+};
+const DEV_EL = { ac: 'devAc', lamp: 'devLamp', music: 'devMusic' };
+
+function renderDevices() {
+  const a = dev.ac;
+  $('#acTemp').textContent = a.temp;
+  $('#acState').textContent = a.on ? `Ligado, modo ${a.mode.toLowerCase()}` : 'Desligado';
+  $('#acSwitch').setAttribute('aria-pressed', a.on);
+  $('#devAc').classList.toggle('on', a.on);
+
+  const l = dev.lamp, bulb = $('#bulb');
+  bulb.style.setProperty('--bulb', l.color);
+  bulb.style.setProperty('--glow', l.on ? (0.25 + l.bright / 100 * 0.75).toFixed(2) : 0);
+  $('#lampRange').value = l.bright;
+  $('#lampState').textContent = l.on ? `Acesa, ${l.colorName}, ${l.bright}%` : 'Apagada';
+  $('#lampSwitch').setAttribute('aria-pressed', l.on);
+  $('#devLamp').classList.toggle('on', l.on);
+
+  const m = dev.music;
+  $('#musicTrack').textContent = m.playlist;
+  $('#musicState').textContent = m.playing ? 'Tocando' : 'Pausado';
+  $('#devMusic').classList.toggle('on', m.playing);
+  $('#playIcon').innerHTML = m.playing ? '<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/>' : '<path d="M4 2.5v11l9-5.5z"/>';
+}
+function pulseDevice(key) {
+  const el = $('#' + DEV_EL[key]); if (!el) return;
+  el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+}
+// Efeitos declarativos: { device:'ac', set:{ on:true, temp:22 } } — fácil de vir de um backend em JSON
+function applyEffect(fx) {
+  if (!fx || !dev[fx.device]) return;
+  Object.assign(dev[fx.device], fx.set);
+  renderDevices(); pulseDevice(fx.device);
+}
+
+// Controles manuais
+$('#acSwitch').addEventListener('click', () => {
+  applyEffect({ device: 'ac', set: { on: !dev.ac.on } });
+  log('casa', `Ajuste manual: ar-condicionado ${dev.ac.on ? 'ligado' : 'desligado'}`);
+});
+$$('[data-ac]').forEach(b => b.addEventListener('click', () => {
+  const temp = Math.max(16, Math.min(30, dev.ac.temp + Number(b.dataset.ac)));
+  applyEffect({ device: 'ac', set: { temp } });
+  log('casa', `Ajuste manual: ar-condicionado em ${temp} °C`);
+}));
+$('#lampSwitch').addEventListener('click', () => {
+  applyEffect({ device: 'lamp', set: { on: !dev.lamp.on } });
+  log('casa', `Ajuste manual: lâmpada ${dev.lamp.on ? 'acesa' : 'apagada'}`);
+});
+$('#lampRange').addEventListener('change', e => {
+  applyEffect({ device: 'lamp', set: { bright: Number(e.target.value), on: true } });
+  log('casa', `Ajuste manual: brilho da lâmpada em ${dev.lamp.bright}%`);
+});
+$('#playBtn').addEventListener('click', () => {
+  const set = { playing: !dev.music.playing };
+  if (set.playing && dev.music.playlist === 'Nenhuma playlist') set.playlist = 'Foco profundo';
+  applyEffect({ device: 'music', set });
+  log('musica', dev.music.playing ? `Tocando ${dev.music.playlist}` : 'Música pausada');
+});
+
+/* ================= Tarefas e fila ================= */
+const queue = [];
+const done = [];
+function renderQueue() {
+  const ul = $('#queueList');
+  ul.innerHTML = queue.length ? '' : '<li class="empty">Fila vazia</li>';
+  queue.forEach(q => { const li = document.createElement('li'); li.textContent = q; ul.append(li); });
+}
+function renderDone() {
+  const ul = $('#doneList');
+  ul.innerHTML = done.length ? '' : '<li class="empty">Nenhuma ainda</li>';
+  done.forEach(d => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span></span><span class="m"></span>';
+    li.children[0].textContent = d.title;
+    li.children[1].textContent = `${d.model} ${d.time.slice(0, 5)}`;
+    ul.append(li);
+  });
+}
+function startTask(plan) {
+  $('#taskLabel').textContent = 'Fazendo agora';
+  $('#taskTitle').textContent = plan.title;
+  $('#taskSub').textContent = `${LIMITS[plan.kind].label}, modelo ${plan.model}`;
+  const ol = $('#taskSteps'); ol.innerHTML = '';
+  plan.steps.forEach(s => { const li = document.createElement('li'); li.textContent = s.label; ol.append(li); });
+  $('#taskBar').style.width = '0%';
+  $('#taskCard').classList.add('running');
+}
+function stepState(i, st) { const li = $('#taskSteps').children[i]; if (li) li.className = st; }
+function finishTask(plan) {
+  $('#taskCard').classList.remove('running');
+  $('#taskLabel').textContent = 'Última tarefa';
+  $('#taskSub').textContent = `Concluída às ${hhmmss()} com o ${plan.model}`;
+  done.unshift({ title: plan.title, time: hhmmss(), model: plan.model });
+  if (done.length > 6) done.length = 6;
+  renderDone();
+}
+
+/* ================= Consumo de tokens ================= */
+const LIMITS = {
+  saudacao: { label: 'Saudação',         model: 'Luna', in: 150,  out: 60  },
+  casa:     { label: 'Casa inteligente', model: 'Luna', in: 400,  out: 120 },
+  musica:   { label: 'Música',           model: 'Luna', in: 300,  out: 80  },
+  pesquisa: { label: 'Pesquisa na web',  model: 'Sol',  in: 4000, out: 800 },
+  conversa: { label: 'Conversa aberta',  model: 'Sol',  in: 1500, out: 400 }
+};
+const BUDGET = { Luna: 20000, Sol: 60000 };
+const usage = { Luna: { in: 0, out: 0, calls: 0 }, Sol: { in: 0, out: 0, calls: 0 } };
+
+$('#limitsBody').innerHTML = Object.values(LIMITS)
+  .map(l => `<tr><td>${l.label}</td><td>${l.model}</td><td>${fmt(l.in)}</td><td>${fmt(l.out)}</td></tr>`).join('');
+
+function recordTokens(plan, text) {
+  const lim = LIMITS[plan.kind];
+  // Simulação: no backend real, use os valores de usage retornados pela API
+  const tin = Math.min(lim.in, Math.round(lim.in * (0.3 + Math.random() * 0.35) + text.length * 1.3));
+  const tout = Math.min(lim.out, Math.round(lim.out * (0.35 + Math.random() * 0.5)));
+  const u = usage[plan.model];
+  u.in += tin; u.out += tout; u.calls++;
+  renderUsage({ lim, tin, tout, model: plan.model });
+  return { tin, tout };
+}
+function renderUsage(last) {
+  for (const m of ['Luna', 'Sol']) {
+    const k = m.toLowerCase(), u = usage[m];
+    $(`#${k}In`).textContent = fmt(u.in);
+    $(`#${k}Out`).textContent = fmt(u.out);
+    $(`#${k}Calls`).textContent = u.calls;
+    $(`#${k}Bar`).style.width = Math.min(100, (u.in + u.out) / BUDGET[m] * 100) + '%';
+  }
+  if (!last) return;
+  const row = (name, v, max) => `
+    <div class="bar-row"><span>${name}</span>
+      <div class="meter"><span style="width:${(v / max * 100).toFixed(1)}%;${v / max > .85 ? 'background:var(--danger)' : ''}"></span></div>
+      <span class="v">${fmt(v)} / ${fmt(max)}</span></div>`;
+  $('#lastAction').innerHTML =
+    `<p class="nums" style="margin:0 0 2px">${last.lim.label}, ${last.model}</p>` +
+    row('Entrada', last.tin, last.lim.in) + row('Saída', last.tout, last.lim.out);
+}
+
+/* ================= Cérebro (simulado) ================= */
+/*
+  PONTO DE INTEGRAÇÃO
+  Troque o corpo de interpretar() por uma chamada ao seu backend (FastAPI, Django etc.).
+  Ele deve devolver um plano neste formato:
+  {
+    kind: 'casa' | 'musica' | 'pesquisa' | 'conversa' | 'saudacao',
+    title: 'Ar-condicionado em 22 °C',
+    steps: [ { label: 'Ligar no modo frio', tag: 'casa', do: { device: 'ac', set: { on: true } } } ],
+    reply: 'Ar-condicionado ligado em 22 graus.'
+  }
+  Exemplo:
+    const r = await fetch('/api/agente', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                           body: JSON.stringify({ texto }) });
+    return r.json();
+*/
+async function interpretar(texto) {
+  await sleep(450 + Math.random() * 400);
+  return simular(texto);
+}
+
+const COLORS = [
+  ['azul', '#4DA6FF', 'azul'], ['vermelh', '#FF4F64', 'vermelha'], ['verde', '#4DFF9A', 'verde'],
+  ['rox', '#A97BFF', 'roxa'], ['rosa', '#FF7AC6', 'rosa'], ['amarel', '#FFD34D', 'amarela'],
+  ['quente', '#FFC98A', 'branca quente'], ['fria', '#DDEEFF', 'branca fria'], ['branc', '#F4F8FF', 'branca']
+];
+
+function simular(raw) {
+  const t = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const off = /\b(deslig|apag|desativ)/.test(t);
+  const numMatch = t.match(/\b(\d{1,3})\b/);
+  const n = numMatch ? parseInt(numMatch[1], 10) : NaN;
+
+  // Saudação
+  if (/^(oi|ola|bom dia|boa tarde|boa noite|e ai|fala)\b/.test(t) && t.length < 32) {
+    const h = new Date().getHours();
+    const s = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    return { kind: 'saudacao', title: 'Responder saudação',
+      steps: [{ label: 'Entender a saudação', tag: 'voz' }],
+      reply: `${s}, Felipe. Tudo pronto por aqui. O que eu faço?` };
+  }
+
+  // Status da casa
+  if (/\b(status|relatorio|resumo da casa|como (esta|ta) a casa)\b/.test(t)) {
+    const a = dev.ac, l = dev.lamp, m = dev.music;
+    const parts = [
+      a.on ? `ar ligado em ${a.temp} graus` : 'ar desligado',
+      l.on ? `luz ${l.colorName} a ${l.bright}%` : 'luz apagada',
+      m.playing ? `tocando ${m.playlist}` : 'música pausada'
+    ];
+    return { kind: 'casa', title: 'Relatório da casa',
+      steps: [
+        { label: 'Ler estado do ar-condicionado LG' },
+        { label: 'Ler estado da lâmpada Positivo' },
+        { label: 'Ler estado do Spotify', tag: 'musica' }
+      ],
+      reply: `Situação da casa: ${parts.join(', ')}.` };
+  }
+
+  // Ar-condicionado
+  if (/\bar\b|ar-condicionado|climatiz|temperatura|\bgraus\b|esfri|esquent/.test(t)) {
+    if (off) return { kind: 'casa', title: 'Desligar ar-condicionado LG',
+      steps: [
+        { label: 'Localizar o ar-condicionado LG na rede' },
+        { label: 'Enviar comando de desligar', do: { device: 'ac', set: { on: false } } },
+        { label: 'Confirmar estado do aparelho' }
+      ],
+      reply: 'Pronto, desliguei o ar-condicionado.' };
+    const temp = (n >= 16 && n <= 30) ? n : /esfri/.test(t) ? Math.min(dev.ac.temp, 22) : /esquent|aquec/.test(t) ? 26 : dev.ac.temp;
+    const mode = /esquent|aquec|quente/.test(t) ? 'Quente' : /ventil/.test(t) ? 'Ventilar' : /desumid|seco/.test(t) ? 'Desumidificar' : 'Frio';
+    return { kind: 'casa', title: `Ar-condicionado em ${temp} °C`,
+      steps: [
+        { label: 'Localizar o ar-condicionado LG na rede' },
+        { label: `Ligar no modo ${mode.toLowerCase()}`, do: { device: 'ac', set: { on: true, mode } } },
+        { label: `Ajustar para ${temp} °C`, do: { device: 'ac', set: { temp } } },
+        { label: 'Confirmar estado do aparelho' }
+      ],
+      reply: `Ar-condicionado ligado em ${temp} graus, modo ${mode.toLowerCase()}.` };
+  }
+
+  // Lâmpada
+  if (/lampada|\bluz\b|\bluzes\b|ilumina|brilho/.test(t)) {
+    if (off) return { kind: 'casa', title: 'Apagar lâmpada Positivo',
+      steps: [
+        { label: 'Conectar à lâmpada Positivo' },
+        { label: 'Apagar a lâmpada', do: { device: 'lamp', set: { on: false } } }
+      ],
+      reply: 'Luz apagada.' };
+    const c = COLORS.find(([k]) => t.includes(k));
+    const bright = (n >= 1 && n <= 100) ? n : null;
+    const steps = [
+      { label: 'Conectar à lâmpada Positivo' },
+      { label: 'Acender a lâmpada', do: { device: 'lamp', set: { on: true } } }
+    ];
+    if (c) steps.push({ label: `Mudar a cor para ${c[2]}`, do: { device: 'lamp', set: { color: c[1], colorName: c[2] } } });
+    if (bright) steps.push({ label: `Ajustar brilho para ${bright}%`, do: { device: 'lamp', set: { bright } } });
+    return { kind: 'casa',
+      title: `Lâmpada${c ? ' ' + c[2] : ' acesa'}${bright ? ` a ${bright}%` : ''}`,
+      steps,
+      reply: `Lâmpada acesa${c ? `, cor ${c[2]}` : ''}${bright ? `, brilho em ${bright}%` : ''}.` };
+  }
+
+  // Música
+  if (/musica|spotify|\btoca|\btoque|\bcoloca|playlist|\bpaus|proxima|\bpula/.test(t)) {
+    if (/\bpaus|\bpare\b|\bparar\b|para a musica/.test(t)) return { kind: 'musica', title: 'Pausar música',
+      steps: [{ label: 'Pausar o Spotify', tag: 'musica', do: { device: 'music', set: { playing: false } } }],
+      reply: 'Música pausada.' };
+    if (/proxima|\bpula|\bpassa/.test(t)) return { kind: 'musica', title: 'Próxima faixa',
+      steps: [{ label: 'Pular para a próxima faixa', tag: 'musica', do: { device: 'music', set: { playing: true } } }],
+      reply: 'Pulei para a próxima faixa.' };
+    const m = raw.match(/(?:toca|tocar|toque|coloca|colocar|bota|play)\s+(?:a\s+|o\s+|uma\s+|um\s+)?(.+)/i);
+    const q = m ? m[1].replace(/\s*(no|pelo)\s+spotify\s*$/i, '').trim() : 'Foco profundo';
+    return { kind: 'musica', title: `Tocar ${q}`,
+      steps: [
+        { label: 'Conectar ao Spotify', tag: 'musica' },
+        { label: `Buscar “${q}”`, tag: 'musica' },
+        { label: 'Iniciar reprodução', tag: 'musica', do: { device: 'music', set: { playing: true, playlist: cap(q) } } }
+      ],
+      reply: `Tocando ${q} no Spotify.` };
+  }
+
+  // Pesquisa
+  if (/pesquis|procur|\bbusca|noticia/.test(t)) {
+    const m = raw.match(/(?:pesquis\w*|procur\w*|busc\w*)\s+(?:sobre\s+|por\s+)?(.+)/i);
+    const q = (m ? m[1] : raw).trim();
+    return { kind: 'pesquisa', title: `Pesquisar ${q}`,
+      steps: [
+        { label: 'Abrir busca na web', tag: 'web' },
+        { label: `Buscar “${q}”`, tag: 'web', ms: 900 },
+        { label: 'Ler as 4 fontes mais relevantes', tag: 'web', ms: 1400 },
+        { label: 'Comparar e resumir com o Sol', tag: 'web', ms: 1100 }
+      ],
+      reply: `Pesquisa sobre ${q} concluída. Nesta demonstração o resultado é simulado; com o backend ligado, o resumo real aparece aqui.` };
+  }
+
+  // Conversa aberta
+  return { kind: 'conversa', title: 'Responder pergunta',
+    steps: [{ label: 'Entender o pedido', tag: 'voz' }, { label: 'Montar a resposta', tag: 'roteador' }],
+    reply: 'Nesta demonstração eu cuido da casa, da música e de pesquisas. Tente “ligar o ar em 22 graus” ou “tocar lo-fi”.' };
+}
+
+/* ================= Pipeline ================= */
+function submit(text) {
+  text = (text || '').trim(); if (!text) return;
+  $('#youLine').textContent = text;
+  queue.push(text); renderQueue();
+  if (queue.length > 1 || S.busy) log('sistema', `Na fila: “${text}”`);
+  if (!S.busy) runNext();
+}
+async function runNext() {
+  const text = queue.shift(); renderQueue();
+  if (!text) { S.busy = false; setMode('idle'); return; }
+  S.busy = true;
+  $('#youLine').textContent = text;
+  log('voz', `Comando recebido: “${text}”`);
+  setMode('thinking');
+
+  let plan;
+  try { plan = await interpretar(text); }
+  catch (err) {
+    log('sistema', 'O backend não respondeu. Confira se ele está rodando e tente de novo.', 'danger');
+    S.busy = false; setMode('idle'); return runNext();
+  }
+  plan.model = LIMITS[plan.kind]?.model || 'Sol';
+  setModel(plan.model);
+  const lim = LIMITS[plan.kind];
+  log('roteador', `${lim.label}: roteado para o ${plan.model} (limite ${lim.in} entrada, ${lim.out} saída)`);
+  startTask(plan);
+  await sleep(350);
+
+  setMode('executing');
+  for (let i = 0; i < plan.steps.length; i++) {
+    const s = plan.steps[i];
+    stepState(i, 'active');
+    await sleep(s.ms || 550 + Math.random() * 350);
+    if (s.do) applyEffect(s.do);
+    stepState(i, 'done');
+    $('#taskBar').style.width = ((i + 1) / plan.steps.length * 100) + '%';
+    log(s.tag || 'casa', s.label);
+  }
+  const tk = recordTokens(plan, text);
+  log('roteador', `${plan.model} usou ${tk.tin} tokens de entrada e ${tk.tout} de saída`);
+  finishTask(plan);
+
+  await speak(plan.reply);
+  S.busy = false;
+  if (queue.length) runNext(); else setMode('idle');
+}
+
+/* ================= Fala (síntese) ================= */
+let ptVoice = null;
+const hasTTS = 'speechSynthesis' in window;
+function pickVoice() {
+  const vs = speechSynthesis.getVoices();
+  ptVoice = vs.find(v => /pt[-_]BR/i.test(v.lang)) || vs.find(v => /^pt/i.test(v.lang)) || null;
+}
+if (hasTTS) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+
+let typeTimer = null;
+function typeLine(el, text) {
+  clearInterval(typeTimer);
+  if (reduced) { el.textContent = text; return; }
+  let i = 0; el.textContent = '';
+  typeTimer = setInterval(() => { el.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(typeTimer); }, 22);
+}
+function speak(text) {
+  return new Promise(resolve => {
+    setMode('speaking');
+    typeLine($('#irisLine'), text);
+    log('voz', `Resposta: ${text}`);
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; resolve(); };
+    const estimate = Math.min(9000, 900 + text.length * 58);
+    if (S.voice && hasTTS) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'pt-BR'; if (ptVoice) u.voice = ptVoice;
+      u.rate = 1.05; u.pitch = 0.95;
+      u.onboundary = () => { speakEnv = 1; };
+      u.onend = finish; u.onerror = finish;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+      setTimeout(finish, estimate + 5000);
+    } else setTimeout(finish, estimate);
+  });
+}
+
+/* ================= Áudio (microfone) ================= */
+let actx = null, analyser = null, micStream = null;
+let freq = new Uint8Array(256), timeD = new Uint8Array(512);
+async function startMic() {
+  if (analyser) return true;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') await actx.resume();
+    const src = actx.createMediaStreamSource(micStream);
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.78;
+    src.connect(analyser);
+    freq = new Uint8Array(analyser.frequencyBinCount);
+    timeD = new Uint8Array(analyser.fftSize);
+    log('sistema', 'Microfone ativo: o núcleo está reagindo ao som');
+    return true;
+  } catch (e) {
+    log('sistema', 'Microfone bloqueado. Libere o acesso ao microfone no navegador para eu reagir à sua voz.', 'danger');
+    return false;
+  }
+}
+function stopMic() {
+  if (micStream) micStream.getTracks().forEach(tr => tr.stop());
+  micStream = null; analyser = null;
+}
+$('#ambientBtn').addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  if (!S.ambient) {
+    const ok = await startMic();
+    S.ambient = ok;
+  } else {
+    S.ambient = false;
+    if (S.mode !== 'listening') { stopMic(); log('sistema', 'Microfone desligado'); }
+  }
+  btn.setAttribute('aria-pressed', S.ambient);
+});
+$('#voiceBtn').addEventListener('click', e => {
+  S.voice = !S.voice;
+  e.currentTarget.setAttribute('aria-pressed', S.voice);
+  if (!S.voice && hasTTS) speechSynthesis.cancel();
+  log('sistema', S.voice ? 'Resposta falada ligada' : 'Resposta falada desligada');
+});
+
+/* ================= Reconhecimento de voz ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+async function toggleListening() {
+  if (rec) { rec.stop(); return; }
+  if (S.busy) { log('sistema', 'Ainda estou terminando a tarefa atual. Digite o próximo comando para ele entrar na fila.'); return; }
+  if (hasTTS) speechSynthesis.cancel();
+  setMode('listening');
+  $('#youLine').textContent = '';
+  await startMic();
+  if (!SR) {
+    log('sistema', 'Este navegador não reconhece fala. O núcleo reage ao som, mas os comandos precisam ser digitados.', 'danger');
+    setTimeout(() => { if (S.mode === 'listening') { setMode('idle'); if (!S.ambient) stopMic(); } }, 2500);
+    return;
+  }
+  let finalTxt = '';
+  rec = new SR();
+  rec.lang = 'pt-BR'; rec.interimResults = true; rec.continuous = false;
+  rec.onresult = e => {
+    let txt = '';
+    for (const r of e.results) txt += r[0].transcript;
+    $('#youLine').textContent = txt;
+    if (e.results[e.results.length - 1].isFinal) finalTxt = txt;
+  };
+  rec.onerror = e => {
+    const msg = e.error === 'not-allowed' || e.error === 'service-not-allowed'
+      ? 'Reconhecimento de fala bloqueado. Libere o microfone para falar comigo.'
+      : e.error === 'no-speech' ? 'Não ouvi nada. Toque no núcleo e fale de novo.'
+      : 'Não entendi o áudio. Tente de novo ou digite o comando.';
+    log('sistema', msg, 'danger');
+  };
+  rec.onend = () => {
+    rec = null;
+    if (!S.ambient) stopMic();
+    if (finalTxt) submit(finalTxt);
+    else if (S.mode === 'listening') setMode('idle');
+  };
+  try { rec.start(); } catch (_) { rec = null; setMode('idle'); }
+}
+$('#orbBtn').addEventListener('click', toggleListening);
+$('#micBtn').addEventListener('click', toggleListening);
+
+/* ================= Comando digitado ================= */
+$('#cmdForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('#cmd').value; $('#cmd').value = '';
+  submit(v);
+});
+$('#chips').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (b) submit(b.textContent);
+});
+
+/* ================= Visual: núcleo e onda ================= */
+const orbC = $('#orb'), oc = orbC.getContext('2d');
+const waveC = $('#wave'), wc = waveC.getContext('2d');
+let OW = 0, OH = 0, WW = 0, WH = 0;
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let r = orbC.getBoundingClientRect(); OW = r.width; OH = r.height;
+  orbC.width = Math.round(OW * dpr); orbC.height = Math.round(OH * dpr); oc.setTransform(dpr, 0, 0, dpr, 0, 0);
+  r = waveC.getBoundingClientRect(); WW = r.width; WH = r.height;
+  waveC.width = Math.round(WW * dpr); waveC.height = Math.round(WH * dpr); wc.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+const ro = new ResizeObserver(fit); ro.observe(orbC); ro.observe(waveC);
+
+const BANDS = 48;
+const bands = new Float32Array(BANDS);
+const waveArr = new Float32Array(160);
+let level = 0, speakEnv = 0, nextSyl = 0;
+
+const N = reduced ? 320 : 600;
+const GOLD = Math.PI * (3 - Math.sqrt(5));
+const pts = [];
+for (let i = 0; i < N; i++) {
+  const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * GOLD;
+  const a = Math.random() * Math.PI * 2, d = 2.4 + Math.random() * 2.6;
+  pts.push({
+    x: Math.cos(th) * r, y, z: Math.sin(th) * r,
+    band: Math.min(BANDS - 1, Math.floor(Math.abs(y) * BANDS)),
+    seed: Math.random() * Math.PI * 2,
+    sx: Math.cos(a) * d, sy: Math.sin(a) * d
+  });
+}
+
+function updateAudio(t, dt) {
+  if (analyser) { analyser.getByteFrequencyData(freq); analyser.getByteTimeDomainData(timeD); }
+  if (S.mode === 'speaking' && t > nextSyl) { speakEnv = 0.55 + Math.random() * 0.45; nextSyl = t + 0.07 + Math.random() * 0.13; }
+  speakEnv *= Math.pow(0.04, dt);
+
+  const span = analyser ? freq.length * 0.75 : 0;
+  let sum = 0;
+  for (let i = 0; i < BANDS; i++) {
+    const tilt = 1 - (i / BANDS) * 0.7;
+    let target;
+    if (S.mode === 'speaking') target = speakEnv * tilt * (0.45 + 0.55 * Math.random());
+    else if (S.mode === 'thinking' || S.mode === 'executing') target = 0.1 + 0.08 * Math.sin(t * 7 + i * 0.5) + 0.05 * Math.random();
+    else target = 0.025 + 0.02 * Math.sin(t * 1.4 + i * 0.3);
+    if (analyser) {
+      const a = Math.floor(Math.pow(i / BANDS, 1.7) * span);
+      const b = Math.max(a + 1, Math.floor(Math.pow((i + 1) / BANDS, 1.7) * span));
+      let s = 0; for (let j = a; j < b; j++) s += freq[j];
+      const v = Math.max(0, (s / (b - a) / 255 - 0.08) / 0.92);
+      target = Math.max(target, v * 1.15);
+    }
+    bands[i] += (target - bands[i]) * (target > bands[i] ? 0.55 : 0.12);
+    sum += bands[i];
+  }
+  level = sum / BANDS;
+
+  for (let i = 0; i < waveArr.length; i++) {
+    const x = i / waveArr.length;
+    let v = Math.sin(x * 18 + t * 5) * 0.5 + Math.sin(x * 41 - t * 7) * 0.3 + Math.sin(x * 7 + t * 2) * 0.2;
+    v *= 0.05 + level * 1.4;
+    if (analyser) v += (timeD[Math.floor(x * timeD.length)] - 128) / 128 * 1.3;
+    waveArr[i] = Math.max(-1, Math.min(1, v));
+  }
+}
+
+let rotY = 0, warmMix = 0;
+const bootStart = performance.now();
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+
+function arcs(cx, cy, r, rot, segs, lw, col, a) {
+  oc.lineWidth = lw; oc.strokeStyle = rgba(col, a);
+  for (const [s, e] of segs) { oc.beginPath(); oc.arc(cx, cy, r, s + rot, e + rot); oc.stroke(); }
+}
+
+function drawOrb(t, dt, eb) {
+  const w = OW, h = OH; if (!w) return;
+  oc.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.235;
+  const col = mixRgb(C.accent, C.warm, warmMix);
+  const hot = mixRgb(col, C.hi, 0.55);
+
+  // halo
+  let g = oc.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.1);
+  g.addColorStop(0, rgba(col, (0.16 + level * 0.9) * eb));
+  g.addColorStop(1, rgba(col, 0));
+  oc.fillStyle = g; oc.fillRect(0, 0, w, h);
+
+  oc.lineCap = 'round';
+
+  // anel de marcações
+  const r2 = R * 1.78;
+  oc.lineWidth = 1;
+  const tickRot = t * 0.05 * MOTION;
+  for (let i = 0; i < 120; i++) {
+    const a = (i / 120) * Math.PI * 2 + tickRot;
+    if ((a / (Math.PI * 2) * 120) % 120 > 120 * eb) continue;
+    const long = i % 10 === 0, r1 = r2 + (long ? 9 : 4);
+    oc.strokeStyle = rgba(col, long ? 0.55 : 0.22);
+    oc.beginPath();
+    oc.moveTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+    oc.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+    oc.stroke();
+  }
+
+  // espectro radial (espelhado)
+  const rb = R * 1.32, NB = BANDS * 2;
+  oc.lineWidth = Math.max(1.5, R * 0.02);
+  for (let i = 0; i < NB; i++) {
+    const v = bands[i < BANDS ? i : NB - 1 - i];
+    const a = (i / NB) * Math.PI * 2 - Math.PI / 2;
+    const len = (3 + v * R * 0.62) * eb;
+    oc.strokeStyle = rgba(mixRgb(col, hot, Math.min(1, v * 1.5)), 0.22 + v * 1.1);
+    oc.beginPath();
+    oc.moveTo(cx + Math.cos(a) * rb, cy + Math.sin(a) * rb);
+    oc.lineTo(cx + Math.cos(a) * (rb + len), cy + Math.sin(a) * (rb + len));
+    oc.stroke();
+  }
+
+  // arcos girando
+  arcs(cx, cy, R * 1.17, t * 0.6 * MOTION, [[0, 0.9], [1.25, 2.05], [3.3, 4.5]], 2, col, 0.6 * eb);
+  arcs(cx, cy, R * 2.02, -t * 0.32 * MOTION, [[0, 1.3], [3.14, 4.1]], 1.4, col, 0.4 * eb);
+  arcs(cx, cy, R * 2.1, t * 0.18 * MOTION, [[0.4, 0.55], [2.0, 2.12], [4.4, 4.6]], 4, col, 0.5 * eb);
+
+  // varredura enquanto pensa/executa
+  if (warmMix > 0.02) {
+    const a = t * 3.2 * MOTION;
+    oc.strokeStyle = rgba(C.warm, 0.85 * warmMix); oc.lineWidth = 3;
+    oc.beginPath(); oc.arc(cx, cy, R * 1.17 + 7, a, a + 0.7); oc.stroke();
+    oc.beginPath(); oc.arc(cx, cy, R * 1.17 + 7, a + Math.PI, a + Math.PI + 0.7); oc.stroke();
+  }
+
+  // esfera de partículas
+  rotY += dt * (0.22 + warmMix * 0.8 + level * 2.2) * MOTION;
+  const rx = 0.38 + Math.sin(t * 0.25) * 0.12;
+  const cY = Math.cos(rotY), sY = Math.sin(rotY), cX = Math.cos(rx), sX = Math.sin(rx);
+  for (const p of pts) {
+    const x = p.x * cY + p.z * sY;
+    const z = -p.x * sY + p.z * cY;
+    const y2 = p.y * cX - z * sX;
+    const z2 = p.y * sX + z * cX;
+    const d = 1 + bands[p.band] * 0.5 + level * 0.12 + Math.sin(t * 2 + p.seed) * 0.015;
+    const f = 2.8 / (2.8 - z2);
+    let px = x * R * d * f, py = y2 * R * d * f;
+    if (eb < 1) { px = px * eb + p.sx * R * (1 - eb); py = py * eb + p.sy * R * (1 - eb); }
+    const depth = (z2 + 1) / 2;
+    oc.fillStyle = rgba(depth > 0.72 ? hot : col, (0.1 + depth * 0.85) * (0.3 + eb * 0.7));
+    const s = 0.5 + depth * 1.7;
+    oc.fillRect(cx + px - s / 2, cy + py - s / 2, s, s);
+  }
+
+  // núcleo
+  const cr = R * (0.3 + level * 0.38) * eb;
+  if (cr > 0.5) {
+    g = oc.createRadialGradient(cx, cy, 0, cx, cy, cr * 2);
+    g.addColorStop(0, rgba(C.hi, 0.9));
+    g.addColorStop(0.25, rgba(hot, 0.7));
+    g.addColorStop(1, rgba(col, 0));
+    oc.fillStyle = g;
+    oc.beginPath(); oc.arc(cx, cy, cr * 2, 0, Math.PI * 2); oc.fill();
+  }
+}
+
+function drawWave() {
+  const w = WW, h = WH; if (!w) return;
+  wc.clearRect(0, 0, w, h);
+  const col = mixRgb(C.accent, C.warm, warmMix);
+  const mid = h / 2, L = waveArr.length - 1;
+  wc.lineWidth = 1; wc.strokeStyle = rgba(col, 0.15);
+  wc.beginPath(); wc.moveTo(0, mid); wc.lineTo(w, mid); wc.stroke();
+  for (const [amp, alpha, lw] of [[1, 0.9, 1.6], [-0.55, 0.3, 1]]) {
+    wc.beginPath();
+    for (let i = 0; i <= L; i++) {
+      const x = (i / L) * w, env = Math.sin(Math.PI * i / L);
+      const y = mid + waveArr[i] * amp * env * mid * 0.9;
+      i ? wc.lineTo(x, y) : wc.moveTo(x, y);
+    }
+    wc.strokeStyle = rgba(col, alpha); wc.lineWidth = lw; wc.stroke();
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const t = now / 1000;
+  const eb = easeOut(Math.min(1, (now - bootStart) / (reduced ? 300 : 2400)));
+  updateAudio(t, dt);
+  const target = (S.mode === 'thinking' || S.mode === 'executing') ? 1 : 0;
+  warmMix += (target - warmMix) * Math.min(1, dt * 3);
+  drawOrb(t, dt, eb);
+  drawWave();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ================= Inicialização ================= */
+renderDevices(); renderUsage();
+setMode('idle');
+(async () => {
+  log('sistema', 'Núcleo iniciado');
+  await sleep(500);
+  log('roteador', 'Modelos prontos: Luna para ações simples, Sol para tarefas complexas');
+  await sleep(500);
+  log('casa', 'Aparelhos encontrados: ar-condicionado LG e lâmpada Positivo');
+  await sleep(400);
+  log('musica', 'Spotify pronto');
+  await sleep(600);
+  typeLine($('#irisLine'), 'Olá, Felipe. Toque no núcleo para falar ou digite um comando.');
+})();
+
+})();
+</script>
+</body>
+</html>

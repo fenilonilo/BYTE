@@ -98,6 +98,9 @@ ignore = [
 "tests/**" = ["ANN", "S", "PLR2004"]
 "main.py" = ["ANN"]
 
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["app", "voice"]
 combine-as-imports = true

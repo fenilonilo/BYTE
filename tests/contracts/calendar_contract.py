@@ -53,3 +53,10 @@ class CalendarPortContract(ABC):
     async def test_delete_unknown_raises(self) -> None:
         with pytest.raises(EventNotFoundError):
             await self.make().delete_event("nope")
+
+    async def test_get_event_returns_it_and_unknown_raises(self) -> None:
+        cal = self.make()
+        event = await cal.create_event("k1", "dentista", at(15), 60)
+        assert (await cal.get_event(event.id)).title == "dentista"
+        with pytest.raises(EventNotFoundError):
+            await cal.get_event("nope")

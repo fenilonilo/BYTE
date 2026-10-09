@@ -31,7 +31,6 @@ from app.domain.exceptions import (
     UnknownLightDeviceError,
     UnknownMusicDeviceError,
 )
-from tests.fakes.clock import FakeClock
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -50,19 +49,13 @@ WHITE = "modo white, brilho 100%, temperatura de cor 50%"
 
 
 @pytest.fixture
-def clock() -> FakeClock:
-    return FakeClock()
-
-
-@pytest.fixture
-def registry(clock: FakeClock) -> Registry[Tool]:
+def registry() -> Registry[Tool]:
     return build_tool_registry(
         InMemoryLight(("lampada", "quarto")),
         InMemoryClimate(),
         InMemoryMusic(),
         InMemoryCalendar(),
         InMemoryExpenses(),
-        now=clock,
     )
 
 
@@ -103,15 +96,10 @@ def test_irreversible_data_changes_always_ask(registry: Registry[Tool]) -> None:
 
 
 @pytest.mark.unit
-def test_the_air_conditioner_asks_only_when_it_is_switched_on_or_off(
-    registry: Registry[Tool],
-) -> None:
+def test_switching_devices_on_or_off_never_asks(registry: Registry[Tool]) -> None:
     climate = registry.get("set_climate")
-    assert climate.needs_confirmation({"name": "ar-condicionado", "power": True}) is True
-    assert climate.needs_confirmation({"name": "ar-condicionado", "power": False}) is True
-    assert (
-        climate.needs_confirmation({"name": "ar-condicionado", "target_temperature": 22}) is False
-    )
+    assert climate.needs_confirmation({"name": "ar-condicionado", "power": True}) is False
+    assert climate.needs_confirmation({"name": "ar-condicionado", "power": False}) is False
     assert registry.get("set_light").needs_confirmation({"name": "lampada", "power": True}) is False
 
 
@@ -126,6 +114,9 @@ def test_every_schema_is_a_strict_object_and_requires_only_known_fields(
         properties = params["properties"]
         assert isinstance(properties, dict)
         assert set(params["required"]) <= set(properties)  # type: ignore[call-overload]
+    # A partial-update tool that required every field would force the model to invent values.
+    assert registry.get("set_light").spec.parameters["required"] == []
+    assert registry.get("set_climate").spec.parameters["required"] == ["name"]
 
 
 @pytest.mark.unit
@@ -150,7 +141,7 @@ async def test_lights(registry: Registry[Tool]) -> None:
         ({"name": "lampada", "hue": 120, "color_temperature": 10}, LightError),
         ({"name": "lampada"}, LightError),
         ({"name": "lampada", "brightness": "alto"}, ToolArgumentError),
-        ({"power": True}, ToolArgumentError),
+        ({"power": True}, UnknownLightDeviceError),  # two lamps: which one?
     ],
 )
 async def test_bad_light_requests(
@@ -161,30 +152,25 @@ async def test_bad_light_requests(
 
 
 @pytest.mark.unit
-async def test_a_lamp_is_not_switched_again_within_five_seconds(
-    registry: Registry[Tool], clock: FakeClock
-) -> None:
+async def test_a_lamp_switches_back_and_forth_without_waiting(registry: Registry[Tool]) -> None:
     await run(registry, "set_light", {"name": "lampada", "power": True})
-    clock.advance(4.9)
-    with pytest.raises(LightError, match="aguarde"):
-        await run(registry, "set_light", {"name": "lampada", "power": False})
-    await run(registry, "set_light", {"name": "lampada", "brightness": 20})  # not a toggle
-    await run(registry, "set_light", {"name": "quarto", "power": True})  # another lamp
-    clock.advance(0.2)
     assert (await run(registry, "set_light", {"name": "lampada", "power": False})).startswith(
         "lampada: desligada"
     )
 
 
 @pytest.mark.unit
-async def test_a_failed_switch_does_not_start_the_waiting_period(
-    registry: Registry[Tool],
-) -> None:
-    with pytest.raises(UnknownLightDeviceError):
-        await run(registry, "set_light", {"name": "cofre", "power": True})
-    assert (await run(registry, "set_light", {"name": "lampada", "power": True})).startswith(
-        "lampada: ligada"
+async def test_with_a_single_lamp_any_name_or_none_means_it() -> None:
+    registry = build_tool_registry(
+        InMemoryLight(("lampada",)),
+        InMemoryClimate(),
+        InMemoryMusic(),
+        InMemoryCalendar(),
+        InMemoryExpenses(),
     )
+    assert (await run(registry, "set_light", {"power": True})).startswith("lampada: ligada")
+    off = await run(registry, "set_light", {"name": "luz do quarto", "power": False})
+    assert off.startswith("lampada: desligada")
 
 
 @pytest.mark.unit
@@ -195,27 +181,14 @@ async def test_climate(registry: Registry[Tool]) -> None:
     changed = await run(
         registry,
         "set_climate",
-        {"name": "ar-condicionado", "power": True, "mode": "dry", "target_temperature": 22.5},
+        {"name": "ar-condicionado", "power": True, "mode": "dry", "target_temperature": 22},
     )
     assert changed == (
-        "ar-condicionado: ligado, modo dry, alvo 22.5°C, ambiente 25°C, ventilador auto"
+        "ar-condicionado: ligado, modo dry, alvo 22°C, ambiente 25°C, ventilador auto"
     )
     timer = await run(registry, "set_climate", {"name": "ar-condicionado", "stop_in_minutes": 30})
     assert timer.startswith("ar-condicionado: ligado")
     await run(registry, "set_climate", {"name": "ar-condicionado", "display_light": False})
-
-
-@pytest.mark.unit
-def test_climate_confirmation_summary_comes_from_code(registry: Registry[Tool]) -> None:
-    climate = registry.get("set_climate")
-    assert climate.summarize({"name": "ar-condicionado", "power": True}) == (
-        "Ligar ar-condicionado"
-    )
-    assert climate.summarize({"name": "ar-condicionado", "power": False}) == (
-        "Desligar ar-condicionado"
-    )
-    both = climate.summarize({"name": "ar-condicionado", "power": True, "target_temperature": 22})
-    assert both == "Ligar ar-condicionado e aplicar os outros ajustes pedidos"
 
 
 @pytest.mark.unit

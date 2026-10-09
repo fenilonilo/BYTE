@@ -45,6 +45,18 @@ class UnknownMusicDeviceError(MusicError):
     """Raised when a playback device name is not available."""
 
 
+class MusicOfflineError(MusicError):
+    """Raised when no playback device is reachable (offline, closed app, none active)."""
+
+
+class GuardError(DomainError):
+    """Raised when a safety rule refuses a tool call (unknown uri)."""
+
+
+class UnknownUriError(GuardError, MusicError):
+    """Raised when the model asks to play a uri no search or playlist returned."""
+
+
 class LiveSessionError(DomainError):
     """Raised when a live (voice) session cannot be opened or breaks."""
 
@@ -59,3 +71,23 @@ class ToolArgumentError(DomainError):
 
 class EventNotFoundError(DomainError):
     """Raised when a calendar event id does not exist."""
+
+
+def failure_reason(exc: BaseException) -> str:
+    """Short, content-free category for logs: guard, offline, validation or upstream."""
+    # ponytail: domain validators raise plain LightError/MusicError, so those read as upstream
+    if isinstance(exc, GuardError):
+        return "guard"
+    if isinstance(exc, MusicOfflineError):
+        return "offline"
+    if isinstance(
+        exc,
+        ToolArgumentError
+        | RegistryKeyError
+        | EventNotFoundError
+        | UnknownLightDeviceError
+        | UnknownClimateDeviceError
+        | UnknownMusicDeviceError,
+    ):
+        return "validation"
+    return "upstream"

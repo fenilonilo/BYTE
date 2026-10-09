@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
-from app.api.auth import token_matches
+from app.api.auth import BEARER, token_matches
 from app.api.deps import (
     get_live_slot,
     get_logger,
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from app.ports.logger import LoggerPort
 
 AUTO = "auto"
+BEARER_SUBPROTOCOL = "bearer"
 START_TIMEOUT_SECONDS = 5.0
 
 router = APIRouter()
@@ -57,6 +58,15 @@ async def _read_start(websocket: WebSocket, runner: ToolRunner) -> LiveStartSche
     return start
 
 
+def _subprotocol_token(websocket: WebSocket) -> str | None:
+    """Browsers cannot set headers on a WebSocket, so they offer `["bearer", <token>]`."""
+    match websocket.scope.get("subprotocols", []):
+        case [str(name), str(token)] if name == BEARER_SUBPROTOCOL:
+            return token
+        case _:
+            return None
+
+
 @router.websocket("/live")
 async def live(
     websocket: WebSocket,
@@ -66,10 +76,13 @@ async def live(
     run: RunLiveSession = Depends(get_run_live_session),
     log: LoggerPort = Depends(get_logger),
 ) -> None:
-    if not token_matches(websocket.headers.get("authorization"), settings.api_token):
+    offered = _subprotocol_token(websocket)
+    header = websocket.headers.get("authorization") if offered is None else f"{BEARER}{offered}"
+    if not token_matches(header, settings.api_token):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    await websocket.accept()
+    # echo only the fixed name: the token itself must never travel back
+    await websocket.accept(subprotocol=None if offered is None else BEARER_SUBPROTOCOL)
     start = await _read_start(websocket, runner)
     if start is None:
         return

@@ -85,3 +85,16 @@ def test_google_only_boots_without_an_openai_key(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("BYTE_LIVE_PROVIDER", "gemini")
     monkeypatch.setenv("BYTE_GEMINI_API_KEY", "g-test")
     assert load_settings().openai_api_key is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("raw", "ok"), [("20", True), ("0", True), ("100", True), ("101", False)])
+def test_live_duck_percent_is_bounded(monkeypatch: pytest.MonkeyPatch, raw: str, ok: bool) -> None:
+    monkeypatch.setenv("BYTE_API_TOKEN", GOOD_TOKEN)
+    monkeypatch.setenv("BYTE_OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("BYTE_LIVE_DUCK_PERCENT", raw)
+    if ok:
+        assert load_settings().live_duck_percent == int(raw)
+    else:
+        with pytest.raises(ConfigError):
+            load_settings()

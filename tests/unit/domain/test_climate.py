@@ -11,7 +11,7 @@ def test_empty_change_rejected() -> None:
         ClimateChange()
 
 
-@pytest.mark.parametrize("temp", [17.5, 30.5, 22.3])
+@pytest.mark.parametrize("temp", [17.0, 31.0, 22.5])
 def test_bad_target_rejected(temp: float) -> None:
     with pytest.raises(ClimateError):
         ClimateChange(target_temperature=temp)
@@ -23,4 +23,4 @@ def test_bad_timer_rejected() -> None:
 
 
 def test_valid_change() -> None:
-    assert ClimateChange(target_temperature=22.5, stop_in_minutes=0).power is None
+    assert ClimateChange(target_temperature=22, stop_in_minutes=0).power is None

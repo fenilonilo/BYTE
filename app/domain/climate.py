@@ -7,7 +7,7 @@ from app.domain.exceptions import ClimateError
 
 MIN_TARGET_C = 18.0
 MAX_TARGET_C = 30.0
-TARGET_STEP_C = 0.5
+TARGET_STEP_C = 1.0
 MAX_TIMER_MINUTES = 24 * 60
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from app.application.live_transport import LiveTransport
+    from app.application.music_ducker import MusicDucker
     from app.application.pending_actions import PendingActionStore
     from app.application.tool_runner import ToolRunner
     from app.domain.live import LiveEvent
@@ -57,7 +59,9 @@ class RunLiveSession:
         *,
         now: Callable[[], float],
         limits: LiveLimits | None = None,
+        ducker: MusicDucker | None = None,
     ) -> None:
+        self._ducker = ducker
         self._live = live
         self._store = store
         self._runner = runner
@@ -91,8 +95,11 @@ class RunLiveSession:
             await transport.send_event(
                 {"type": "ready", "conversation_id": conversation_id, "audio": AUDIO_FORMAT}
             )
-            async with asyncio.timeout(self._limits.max_seconds):
-                await run.pump()
+            async with contextlib.AsyncExitStack() as stack:
+                if self._ducker is not None:
+                    await stack.enter_async_context(self._ducker.session())
+                async with asyncio.timeout(self._limits.max_seconds):
+                    await run.pump()
         except TimeoutError:
             await transport.send_event({"type": "error", "code": "session_limit"})
         finally:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, SecretStr, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.exceptions import ConfigError
@@ -19,6 +19,7 @@ class TuyaLightSettings(BaseModel):
 
 class Settings(BaseSettings):
     app_name: str = "byte"
+    web: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     api_token: SecretStr
     openai_api_key: SecretStr | None = None
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     live_transcript_wait_seconds: float = 2.0
     live_pace_factor: float = 0.9
     live_max_frame_bytes: int = 65536
+    live_duck_percent: int = Field(default=20, ge=0, le=100)  # 100 = never lower the music
     # Real devices. Leave a group unset and Byte runs against the in-memory adapter instead.
     thinq_access_secret: SecretStr | None = None
     thinq_country: str = "BR"

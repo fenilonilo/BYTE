@@ -7,9 +7,10 @@ from typing import Any
 
 import aiohttp
 
-from app.domain.exceptions import MusicError, UnknownMusicDeviceError
+from app.domain.exceptions import MusicError, MusicOfflineError, UnknownMusicDeviceError
 from app.domain.music import (
     MediaKind,
+    MusicDevice,
     MusicItem,
     PlaybackChange,
     PlaybackState,
@@ -22,6 +23,7 @@ API = "https://api.spotify.com/v1"
 TOKEN_URL = "https://accounts.spotify.com/api/token"  # noqa: S105
 SEARCH_LIMIT = 5  # dev-mode apps cap search results at 10
 NO_CONTENT = 204
+NOT_FOUND = 404
 SETTLE_SECONDS = 0.7  # ponytail: Spotify state lags commands; poll if this proves flaky
 
 
@@ -91,9 +93,10 @@ class SpotifyMusic(MusicPort):
             ) as res:
                 if res.status == NO_CONTENT:
                     return None
+                if res.status == NOT_FOUND and path.startswith("/me/player"):
+                    raise MusicOfflineError(self._offline_message())
                 if res.status >= 400:  # noqa: PLR2004
-                    reason = "no active device" if res.status == 404 else f"http {res.status}"  # noqa: PLR2004
-                    raise MusicError(f"spotify {method} {path}: {reason}")
+                    raise MusicError(f"spotify {method} {path}: http {res.status}")
                 return await res.json() if res.content_type == "application/json" else None
         except aiohttp.ClientError as exc:
             raise MusicError("spotify unreachable") from exc
@@ -103,16 +106,39 @@ class SpotifyMusic(MusicPort):
     ) -> dict[str, Any]:
         return await self._call(method, path, params) or {}
 
+    def _offline_message(self) -> str:
+        if not self._default_device:
+            return (
+                "Nenhum aparelho ativo no Spotify. Abra o Spotify em um aparelho e tente de novo."
+            )
+        return (
+            f"{self._default_device} está offline no Spotify. Abra o Spotify nele e tente de novo."
+        )
+
     async def _device_id(self, name: str) -> str:
         raw = await self._data("GET", "/me/player/devices")
-        for d in raw["devices"]:
+        for d in raw.get("devices", []):
             if d["name"].lower() == name.lower():
                 return str(d["id"])
+        if name.lower() == self._default_device.lower():
+            raise MusicOfflineError(self._offline_message())
         raise UnknownMusicDeviceError(f"unknown device: {name!r}")
 
     async def devices(self) -> tuple[str, ...]:
+        return tuple(d.name for d in await self.list_devices())
+
+    async def list_devices(self) -> tuple[MusicDevice, ...]:
         raw = await self._data("GET", "/me/player/devices")
-        return tuple(d["name"] for d in raw["devices"])
+        return tuple(
+            MusicDevice(d["name"], bool(d.get("is_active")), d.get("volume_percent"))
+            for d in raw.get("devices", [])
+        )
+
+    async def select_device(self, name: str) -> None:
+        device_id = await self._device_id(name)
+        playing = (await self.state()).playing
+        body = {"device_ids": [device_id], "play": playing}
+        await self._call("PUT", "/me/player", body=body)
 
     async def state(self) -> PlaybackState:
         return parse_state(await self._call("GET", "/me/player"))

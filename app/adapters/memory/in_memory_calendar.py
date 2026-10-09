@@ -35,6 +35,12 @@ class InMemoryCalendar(CalendarPort):
         self._by_key[key] = event.id
         return event
 
+    async def get_event(self, event_id: str) -> CalendarEvent:
+        try:
+            return self._events[event_id]
+        except KeyError:
+            raise EventNotFoundError(f"Unknown event: {event_id!r}") from None
+
     async def delete_event(self, event_id: str) -> None:
         if self._events.pop(event_id, None) is None:
             raise EventNotFoundError(f"Unknown event: {event_id!r}")

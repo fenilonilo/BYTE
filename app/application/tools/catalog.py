@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from app.application.registry import Registry
@@ -36,13 +35,14 @@ def build_tool_registry(
     music: MusicPort,
     calendar: CalendarPort,
     expenses: ExpensesPort,
-    now: Callable[[], float] = time.monotonic,
+    known: KnownUris | None = None,
+    on_volume: Callable[[int], None] | None = None,
 ) -> Registry[Tool]:
-    known = KnownUris()
+    known = known or KnownUris()
     registry: Registry[Tool] = Registry()
     tools: tuple[Tool, ...] = (
         ListLights(light),
-        SetLight(light, now),
+        SetLight(light),
         ListClimates(climate),
         SetClimate(climate),
         MusicState(music),
@@ -50,7 +50,7 @@ def build_tool_registry(
         SearchMusic(music, known),
         ListPlaylists(music, known),
         PlayMusic(music, known),
-        ControlMusic(music),
+        ControlMusic(music, on_volume),
         QueueMusic(music, known),
         ListEvents(calendar),
         CreateEvent(calendar),

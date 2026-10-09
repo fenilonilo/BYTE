@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 from app.application.tools.args import object_schema
-from app.domain.exceptions import DomainError, RegistryKeyError, ToolArgumentError
+from app.domain.exceptions import (
+    DomainError,
+    RegistryKeyError,
+    ToolArgumentError,
+    failure_reason,
+)
 from app.domain.tools import ToolResult, ToolSpec
 
 if TYPE_CHECKING:
@@ -129,6 +134,8 @@ class ToolRunner:
         if task.cancelled():
             self._log.warning("tool.cancelled", tool=name)
         elif (exc := task.exception()) is not None:
-            self._log.error("tool.failed", tool=name, error=type(exc).__name__)
+            self._log.error(
+                "tool.failed", tool=name, error=type(exc).__name__, reason=failure_reason(exc)
+            )
         else:
             self._log.info("tool.done", tool=name)

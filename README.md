@@ -11,7 +11,7 @@ One agent holds every tool. Every outside resource (the model provider, the smar
 home, the calendar, the expense sheet, storage) is an adapter behind a port. The
 live client is a custom ESP32-S3, but the protocol is plain WebSocket: any client works.
 
-No GUI, no computer vision, no chat-channel adapters, no multi-user support.
+No GUI beyond the optional `web/` control panel, no computer vision, no chat-channel adapters, no multi-user support.
 
 ## Run
 
@@ -22,6 +22,13 @@ docker compose up --build
 
 API on `http://127.0.0.1:8000/api/v1`, interactive docs at `/docs`. Compose binds to
 loopback only.
+
+### Web panel (optional, off by default)
+
+Set `BYTE_WEB=true` in `.env` (works with docker compose), or run locally with
+`python main.py --web [--host H --port P]`. Open `http://127.0.0.1:8000/` and enter
+`BYTE_API_TOKEN`. It drives the same adapters as chat: real devices when configured, in-memory
+fakes otherwise (the boot log says which).
 
 ### Real devices
 

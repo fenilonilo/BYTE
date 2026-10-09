@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import argparse
+import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import uvicorn
 from fastapi import FastAPI
 
 from app.adapters.logging.structlog_logger import configure_logging
+from app.api.control import router as control_router
 from app.api.deps import (
     get_chat_model,
     get_climate,
@@ -20,15 +25,18 @@ from app.api.deps import (
 from app.api.errors import install_error_handlers
 from app.api.live import router as live_router
 from app.api.router import router
+from app.api.web import mount_web
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()  # a bad config stops the boot here, not at the first request
     configure_logging(settings.log_level, json=not sys.stdout.isatty())
+    if settings.web:
+        mount_web(app, WEB_DIR)
     get_chat_model()
     get_live_port()
     runner = get_runner()
@@ -38,12 +46,40 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         light=type(get_light()).__name__,
         climate=type(get_climate()).__name__,
         music=type(get_music()).__name__,
+        web=settings.web,
     )
     yield
     await runner.drain()
 
 
+WEB_DIR = Path(__file__).parent / "web"
+
 app = FastAPI(title="byte", lifespan=lifespan)
 app.include_router(router, prefix="/api/v1")
 app.include_router(live_router, prefix="/api/v1")
+app.include_router(control_router, prefix="/api/v1")
 install_error_handlers(app)
+
+
+def run(argv: list[str] | None = None) -> None:
+    """`python main.py [--web]`: same as uvicorn, plus the panel on request (or BYTE_WEB=true)."""
+    parser = argparse.ArgumentParser(prog="byte")
+    parser.add_argument("--web", action="store_true", help="serve the web control panel at /")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args(argv)
+    if args.web:
+        os.environ["BYTE_WEB"] = "true"
+    cert, key = os.environ.get("BYTE_TLS_CERT"), os.environ.get("BYTE_TLS_KEY")
+    uvicorn.run(
+        "main:app",
+        host=args.host,
+        port=args.port,
+        access_log=False,
+        ssl_certfile=cert or None,
+        ssl_keyfile=key if cert else None,
+    )
+
+
+if __name__ == "__main__":
+    run()

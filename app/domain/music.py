@@ -35,6 +35,13 @@ class MusicItem:
 
 
 @dataclass(frozen=True, slots=True)
+class MusicDevice:
+    name: str
+    active: bool
+    volume: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class PlaybackState:
     playing: bool
     item: MusicItem | None

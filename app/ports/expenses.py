@@ -17,5 +17,9 @@ class ExpensesPort(ABC):
         """Idempotent: the same `key` never writes a second row."""
 
     @abstractmethod
+    async def list_expenses(self, year: int, month: int) -> tuple[Expense, ...]:
+        """The month's rows, oldest first."""
+
+    @abstractmethod
     async def month_total(self, year: int, month: int) -> int:
         """Total in cents."""

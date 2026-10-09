@@ -28,12 +28,19 @@ expenses, proactive reminders (later spec).
 
 **Explicitly out of scope — reject on sight:**
 
-- Any GUI, TUI, web page, or desktop client. This repository ships no frontend.
+- Any TUI or desktop client. The only GUI in scope is the single static control panel in `web/` (below).
 - Computer vision, cameras, screen capture, OCR, image pipelines.
 - Chat-channel adapters (WhatsApp, Telegram, Email).
 - Multi-tenancy, user accounts, roles. One owner.
 
-Voice is not a GUI. Audio endpoints belong here; pixels do not.
+Voice is not a GUI. Audio endpoints belong here.
+
+**Web control panel (`web/`)** — one static page (HTML/CSS/vanilla JS, no build step,
+no framework) served by FastAPI. It is a *client* of `/api/v1`: bearer token typed by the
+owner, kept in `sessionStorage`, never in a URL. It shows the 0/1 sphere agent and gives direct
+control of lights, climate, music, agenda and expenses through the same `ToolRunner` +
+confirmation rules as chat — no logic or credentials in the browser. Contract:
+`docs/web-api-contract.md`.
 
 ## Tools and segments
 
@@ -89,7 +96,7 @@ live:  WS /live ⇄ RunLiveSession ⇄ LiveSessionPort ⇄ ToolRunner
 
 | Target | Via | Notes |
 |---|---|---|
-| Model provider | OpenAI (chat + Realtime) behind `ChatModelPort` / `LiveSessionPort` | Second adapter planned: Gemini Live. |
+| Model provider | OpenAI (chat + Realtime) or Gemini (chat + Live) behind `ChatModelPort` / `LiveSessionPort` | Gemini adds its built-in Google Search (web search runs on Google's side, not a `Tool`, no credentials). OpenAI has no web search yet. |
 | Tuya | `tinytuya` over the local network (device id, address, local key) | Lights are physical. Keys come from the environment. |
 | LG ThinQ | ThinQ Connect personal access token | The air conditioner. |
 | Spotify | Web API with a refresh token (Premium) | Playback on a Connect device; `scripts/spotify_login.py` gets the token. |
@@ -137,11 +144,10 @@ data. Hard requirements, not polish:
   `confirm_action()`, and only if the **very next user utterance** after the
   request is affirmative (`is_affirmative`, whole-word pt-BR matcher, deny list
   wins). Any other utterance drops the pending action. 60 s expiry. An agent
-  must not learn that it can act first and apologise later. Today `delete_event` and
-  `add_expense` always ask, and `set_climate` asks whenever it switches the air
-  conditioner on or off (`Tool.needs_confirmation`); lights and music never ask. The
-  lamp is never switched twice within 5 s, and the model only plays a `uri` that a
-  search or the playlists returned.
+  must not learn that it can act first and apologise later. Today only `delete_event`
+  and `add_expense` ask; switching lights or the air conditioner on or off runs at once
+  (owner's call). With a single configured lamp, `set_light` targets it whatever name the
+  model says. The model only plays a `uri` that a search or the playlists returned.
 - **Bound the blast radius of tools.** A tool addresses a known device list or
   the configured spreadsheet, never an id the model names.
 - **Tools are idempotent**, and execution is shielded from cancellation: a

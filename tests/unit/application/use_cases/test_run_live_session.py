@@ -306,3 +306,26 @@ async def test_cancelling_the_session_still_closes_the_provider() -> None:
     with contextlib.suppress(asyncio.CancelledError):
         await task
     assert world.session.closed is True
+
+
+async def test_music_is_ducked_during_the_session_and_restored_after() -> None:
+    world = LiveWorld()
+    await world.music.play("spotify:track:1")
+    task = await start_and_wait_ready(world)
+    await eventually(lambda: world.music.volume == 20)
+    await finish(world, task)
+    await eventually(lambda: world.music.volume == 50)
+
+
+async def test_volume_the_agent_sets_by_voice_survives_the_restore() -> None:
+    world = LiveWorld()
+    await world.music.play("spotify:track:1")
+    task = await start_and_wait_ready(world)
+    await eventually(lambda: world.music.volume == 20)
+    world.session.push(
+        ResponseStarted(),
+        ResponseDone(calls=(call("control_music", '{"volume": 60}'),)),
+    )
+    await eventually(lambda: len(world.session.tool_results) == 1)
+    await finish(world, task)
+    await eventually(lambda: world.music.volume == 60)

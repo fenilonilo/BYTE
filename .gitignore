@@ -77,3 +77,5 @@ certs/
 
 # wake word training clips (the trained models/ei_byte.onnx is tracked)
 wakeword_data/
+
+.playwright-mcp/

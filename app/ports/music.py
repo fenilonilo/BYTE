@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.domain.music import MediaKind, MusicItem, PlaybackChange, PlaybackState
+    from app.domain.music import MediaKind, MusicDevice, MusicItem, PlaybackChange, PlaybackState
 
 
 class MusicPort(ABC):
@@ -12,6 +12,14 @@ class MusicPort(ABC):
 
     @abstractmethod
     async def devices(self) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    async def list_devices(self) -> tuple[MusicDevice, ...]:
+        """Devices with their state; an empty tuple is valid."""
+
+    @abstractmethod
+    async def select_device(self, name: str) -> None:
+        """Move playback to `name` (keeps playing only if it was). Unknown -> error."""
 
     @abstractmethod
     async def state(self) -> PlaybackState: ...
