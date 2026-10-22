@@ -12,7 +12,7 @@ COPY app ./app
 COPY main.py ./
 COPY web ./web
 
-RUN useradd --system --no-create-home --uid 10001 byte
+RUN useradd --system --no-create-home --uid 10001 byte     && mkdir data && chown byte data
 USER byte
 
 EXPOSE 8000

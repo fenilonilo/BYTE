@@ -12,3 +12,11 @@ certs/
 .env
 .env.*
 !.env.example
+
+# secrets and local data never go into the image
+client_secret*.json
+cliente_secret*.json
+*secret*.json
+*credentials*.json
+data/
+models/pt_BR-*

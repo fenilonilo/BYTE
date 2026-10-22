@@ -24,7 +24,7 @@ a terminal script is another. Any application can use the HTTP API.
 **One owner, one person, one household.** Not a product, not multi-tenant.
 
 **In scope:** chat, live voice, tool execution, device control, calendar,
-expenses, proactive reminders (later spec).
+expenses, proactive reminders and alarms.
 
 **Explicitly out of scope — reject on sight:**
 
@@ -53,7 +53,7 @@ filter (`segment` omitted or `auto` = all tools; unknown segment = `404`).
 |---|---|---|
 | `home` | Lights (Tuya, local network) and the air conditioner (LG ThinQ) | `LightPort`, `ClimatePort` |
 | `music` | Spotify playback on a Spotify Connect device | `MusicPort` |
-| `agenda` | Events, appointments (Google Calendar) | `CalendarPort` |
+| `agenda` | Events (Google Calendar), reminders and alarms | `CalendarPort`, `ReminderStorePort` |
 | `finance` | Monthly expenses, bills (Google Sheets) | `ExpensesPort` |
 
 **Adding a tool:**
@@ -100,7 +100,8 @@ live:  WS /live ⇄ RunLiveSession ⇄ LiveSessionPort ⇄ ToolRunner
 | Tuya | `tinytuya` over the local network (device id, address, local key) | Lights are physical. Keys come from the environment. |
 | LG ThinQ | ThinQ Connect personal access token | The air conditioner. |
 | Spotify | Web API with a refresh token (Premium) | Playback on a Connect device; `scripts/spotify_login.py` gets the token. |
-| Google Calendar | OAuth 2.0 | Google is the system of record, not our DB. |
+| Google Calendar | OAuth 2.0 refresh token, REST over aiohttp | Google is the system of record, not our DB. `scripts/google_login.py` gets the token. |
+| Piper | Local TTS (`piper-tts`, CPU, pt-BR voice in `models/`) behind `SpeechPort` | Speaks reminders. No network, no tokens. |
 | Google Sheets | OAuth 2.0 | The expense spreadsheet you already use. |
 
 **Every integration is a driven adapter behind a port.** A vendor SDK type never
@@ -112,13 +113,17 @@ packages and nowhere else.
 Google holds the truth for calendar and expenses so they stay editable from a
 phone. A cache is never treated as the source of truth.
 
-## Proactive reminders (not built)
+## Proactive reminders and alarms
 
-Byte will speak first for bills and appointments: a scheduler adapter, a use
-case that decides what is due (unit-testable without a clock), and a push over
-`WS /ws/notifications`. If nothing is connected the reminder is persisted and
-delivered on reconnect — never silently dropped. WebSocket, not MQTT, until a
-real limit is hit; mark the swap with a `ponytail:` comment then.
+Spec 3 (`docs/superpowers/specs/2026-10-21-calendar-reminders-design.md`). Byte speaks
+first, and **firing never calls the model**: the model only creates a reminder through
+`create_reminder`. `ReminderHub` (a 5 s loop in the lifespan) pushes due reminders, with
+Piper speech, over `WS /ws/notifications`; a reminder leaves `ReminderStorePort` (a JSON
+file) only when the device acks. Nothing connected → it waits and is spoken on reconnect,
+never silently dropped. Calendar events get a warning 10 minutes before, recomputed from
+Google every 5 min and expired at the event's start. An alarm rings on the device until the
+local wake word stops it — no live session, no tokens. The model gets the current time as
+one `Agora:` line in its prompt. WebSocket, not MQTT, until a real limit is hit.
 
 ## Safety and security
 
@@ -207,7 +212,7 @@ Prefix `/api/v1`. FastAPI. Everything async.
 | `GET /health` | Liveness. Used by the Docker healthcheck. |
 | `POST /messages` | Text in, text out. `segment` optional. May return `pending_confirmation.summary`. |
 | `WS /live` | Spoken conversation. One session at a time; a new connection replaces the old (close code 4000). |
-| `WS /ws/notifications` | Proactive pushes. Not built. |
+| `WS /ws/notifications` | Proactive pushes: `{"type":"reminder","id","kind"}` + one binary PCM frame; the device replies `{"type":"ack","id"}`. One listener; a new one replaces the old (4000). |
 
 Rules:
 
@@ -316,10 +321,11 @@ expense adapters. What is left is replacing those adapters with real ones.
 | `WS /live` + OpenAI Realtime adapter | done |
 | TLS, LAN exposure, locked dependencies, non-root image | done |
 | Voice client (`voice/`): wake word "Ei Byte" (custom model in `models/`), `/live` over the laptop mic and speaker | in progress (Spec 2: code done, hardware checks pending) |
-| Tuya, Google Calendar / Sheets adapters | not started (later spec) |
+| Tuya, ThinQ, Spotify adapters | done |
+| Google Calendar adapter, reminders/alarms, Piper TTS, `/ws/notifications` (Spec 3) | done (real Google and Docker image not yet checked by hand) |
+| Google Sheets adapter | not started (later spec) |
 | Gemini Live adapter, A/B against OpenAI | not started (later spec) |
 | Postgres + pgvector + Alembic | not started (later spec) |
-| Scheduler + `/ws/notifications` | not started (later spec) |
 
 ## Before you finish
 
