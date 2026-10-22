@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domain.climate import ClimateMode, FanSpeed
 from app.domain.light import LightMode
 from app.domain.music import MediaKind, Repeat, Skip
+from app.domain.reminders import ReminderKind
 
 MAX_CONTENT_CHARS = 4000
 
@@ -149,6 +150,17 @@ class ExpensesSchema(BaseModel):
     total_cents: int
 
 
+class ReminderSchema(_View):
+    id: str
+    text: str
+    at: dt.datetime
+    kind: ReminderKind
+
+
+class RemindersSchema(BaseModel):
+    reminders: list[ReminderSchema]
+
+
 class StateSchema(BaseModel):
     lights: list[LightSchema] | None
     climates: list[ClimateSchema] | None
@@ -210,6 +222,12 @@ class ExpenseCreateSchema(_Body):
     category: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=200)
     date: dt.date
+
+
+class ReminderCreateSchema(_Body):
+    text: str = Field(min_length=1, max_length=200)
+    at: dt.datetime
+    kind: ReminderKind
 
 
 class ConfirmSchema(_Body):

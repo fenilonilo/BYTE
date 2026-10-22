@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.adapters.files.json_reminder_store import JsonReminderStore
 from app.adapters.memory.in_memory_calendar import InMemoryCalendar
 from app.adapters.memory.in_memory_climate import InMemoryClimate
 from app.adapters.memory.in_memory_expenses import InMemoryExpenses
@@ -20,6 +24,8 @@ from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
 from app.application.tools.music import KnownUris
 from app.domain.exceptions import MusicError, MusicOfflineError
+from app.domain.reminders import calendar_warnings
+from app.domain.world import CalendarEvent
 from tests.fakes.clock import FakeClock
 from tests.fakes.logger import RecordingLogger
 from tests.fakes.world import TOKEN, make_settings
@@ -77,7 +83,16 @@ class Panel:
         climate, calendar, expenses = InMemoryClimate(), InMemoryCalendar(), InMemoryExpenses()
         music = music or InMemoryMusic()
         light = light or InMemoryLight()
-        registry = build_tool_registry(light, climate, music, calendar, expenses, known=known)
+        self.reminders = JsonReminderStore(Path(tempfile.mkdtemp()) / "r.json")
+        registry = build_tool_registry(
+            light,
+            climate,
+            music,
+            calendar,
+            expenses,
+            known=known,
+            reminders=(self.reminders, lambda: NOW),
+        )
         runner = ToolRunner(registry, self.pending, self.log, tool_timeout=tool_timeout)
         app = FastAPI()
         app.include_router(router, prefix=P)
@@ -92,6 +107,7 @@ class Panel:
             deps.get_calendar: calendar,
             deps.get_expenses: expenses,
             deps.get_known_uris: known,
+            deps.get_reminder_store: self.reminders,
         }
         for dep, value in overrides.items():
             app.dependency_overrides[dep] = _provide(value)
@@ -112,6 +128,7 @@ EXPENSE = {
 }
 EVENT = {"title": "Dentista", "start": "2026-10-06T15:00:00-03:00", "duration_minutes": 30}
 MONTH = "/finance/expenses?year=2026&month=10"
+NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone(timedelta(hours=-3)))
 
 
 @pytest.mark.unit
@@ -123,6 +140,8 @@ MONTH = "/finance/expenses?year=2026&month=10"
         ("PATCH", "/lights/lampada"),
         ("GET", "/music/search?q=a"),
         ("DELETE", "/agenda/evt-1"),
+        ("GET", "/reminders"),
+        ("DELETE", "/reminders/abc"),
         ("POST", "/confirm"),
     ],
 )
@@ -274,6 +293,37 @@ def test_deleting_an_unknown_event_is_422_before_any_pending_action() -> None:
     panel = Panel()
     assert panel.send("DELETE", "/agenda/evt-9").status_code == 422
     assert panel.send("POST", "/confirm", {"approve": True}).status_code == 409
+
+
+@pytest.mark.unit
+def test_reminders_create_list_and_cancel_without_asking() -> None:
+    panel = Panel()
+    alarm = {"text": "acordar", "at": "2026-10-07T07:00:00-03:00", "kind": "alarme"}
+    created = panel.send("POST", "/reminders", alarm).json()
+    assert created["status"] == "done"
+    [listed] = panel.get("/reminders").json()["reminders"]
+    assert (listed["text"], listed["kind"]) == ("acordar", "alarme")
+    assert panel.send("DELETE", f"/reminders/{listed['id']}").json()["status"] == "done"
+    assert panel.get("/reminders").json()["reminders"] == []
+
+
+@pytest.mark.unit
+def test_reminder_in_the_past_unknown_kind_and_unknown_id_are_422() -> None:
+    panel = Panel()
+    past = {"text": "x", "at": "2026-10-06T11:00:00-03:00", "kind": "lembrete"}
+    assert panel.send("POST", "/reminders", past).status_code == 422
+    assert panel.send("POST", "/reminders", {**past, "kind": "sirene"}).status_code == 422
+    assert panel.send("DELETE", "/reminders/nada").status_code == 422
+
+
+@pytest.mark.unit
+def test_reminder_list_hides_calendar_warnings() -> None:
+    panel = Panel()
+    [warning] = calendar_warnings(
+        [CalendarEvent("evt-1", "Dentista", NOW + timedelta(hours=1), 30)], timedelta(minutes=10)
+    )
+    asyncio.run(panel.reminders.put(warning))
+    assert panel.get("/reminders").json()["reminders"] == []
 
 
 @pytest.mark.unit

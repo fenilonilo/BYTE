@@ -65,6 +65,9 @@ export const api = {
   deleteEvent: (id) => request('DELETE', `/agenda/${seg(id)}`),
   expenses: (year, month) => request('GET', '/finance/expenses' + q({ year, month })),
   addExpense: (expense) => request('POST', '/finance/expenses', expense),
+  reminders: () => request('GET', '/reminders'),
+  createReminder: (reminder) => request('POST', '/reminders', reminder),
+  cancelReminder: (id) => request('DELETE', `/reminders/${seg(id)}`),
   confirm: (approve) => request('POST', '/confirm', { approve }),
   chat: (content, conversationId) => request('POST', '/messages', {
     content, ...(conversationId ? { conversation_id: conversationId } : {}),
@@ -91,6 +94,8 @@ const tz = () => {
   const a = Math.abs(m);
   return `${s}${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
 };
+
+const inMinutes = (m) => new Date(Date.now() + m * 60_000).toISOString();
 
 const db = {
   lights: [
@@ -143,6 +148,12 @@ const db = {
     { amount_cents: 11999, category: 'contas', description: 'Internet fibra', date: monthDay(3) },
     { amount_cents: 5430, category: 'saúde', description: 'Farmácia', date: monthDay(5) },
     { amount_cents: 21864, category: 'transporte', description: 'Gasolina', date: monthDay(6) },
+  ],
+  // Due ones vanish 20 s after their time, as if the device had played them and acked.
+  reminders: [
+    { id: 'a1b2c3', text: 'Tomar o remédio', at: inMinutes(1.5), kind: 'lembrete' },
+    { id: '9f8e7d', text: 'Tirar a roupa da máquina', at: inMinutes(38), kind: 'lembrete' },
+    { id: 'd4e5f6', text: 'Acordar', at: `${ymd(1)}T07:00:00${tz()}`, kind: 'alarme' },
   ],
   pending: null,
   chatPending: null,
@@ -294,6 +305,22 @@ async function mockRoute(method, path, body) {
       db.expenses.push({ ...body });
       return `Gasto registrado: ${brl}`;
     });
+  }
+  if (head === 'reminders') {
+    if (method === 'GET') {
+      db.reminders = db.reminders.filter((r) => new Date(r.at).getTime() + 20_000 > Date.now());
+      return ok({ reminders: clone(db.reminders) });
+    }
+    if (method === 'DELETE') {
+      if (!db.reminders.some((r) => r.id === sub)) return fail(422, `Unknown reminder: '${sub}'`);
+      db.reminders = db.reminders.filter((r) => r.id !== sub);
+      return done(`${sub} cancelado`);
+    }
+    if (!['lembrete', 'alarme'].includes(body.kind)) return fail(422, 'kind inválido');
+    if (new Date(body.at) <= Date.now()) return fail(422, 'esse horário já passou');
+    const r = { id: (db.seq++ * 0x9e3779b1 >>> 0).toString(16).slice(0, 6), ...body };
+    db.reminders.push(r);
+    return done(`${r.kind} ${r.id} ${new Date(r.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`);
   }
   if (head === 'confirm') {
     const p = livePending();
