@@ -89,6 +89,7 @@ async def live(
         log.error("live.failed", error=type(exc).__name__, cause=cause)
     finally:
         await transport.aclose()
-        with contextlib.suppress(RuntimeError):
+        # a replaced or vanished client is already gone: closing it again raises
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
             await websocket.close()
         slot.release(websocket)  # last: "released" means this connection is fully cleaned up
