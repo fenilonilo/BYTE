@@ -98,3 +98,13 @@ def test_live_duck_percent_is_bounded(monkeypatch: pytest.MonkeyPatch, raw: str,
     else:
         with pytest.raises(ConfigError):
             load_settings()
+
+
+@pytest.mark.unit
+def test_unknown_timezone_refuses_to_boot(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BYTE_API_TOKEN", GOOD_TOKEN)
+    monkeypatch.setenv("BYTE_OPENAI_API_KEY", "sk-test")
+    assert load_settings().timezone == "America/Sao_Paulo"
+    monkeypatch.setenv("BYTE_TIMEZONE", "Mars/Olympus")
+    with pytest.raises(ConfigError, match="timezone"):
+        load_settings()

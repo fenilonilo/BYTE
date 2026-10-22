@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 from openai import AsyncOpenAI
@@ -27,6 +29,8 @@ from app.application.use_cases.run_live_session import LiveLimits, RunLiveSessio
 from app.config import Settings, load_settings
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from google import genai
 
     from app.application.registry import Registry
@@ -45,6 +49,12 @@ if TYPE_CHECKING:
 @lru_cache
 def get_settings() -> Settings:
     return load_settings()
+
+
+@lru_cache
+def get_wall_clock() -> Callable[[], datetime]:
+    tz = ZoneInfo(get_settings().timezone)
+    return lambda: datetime.now(tz)
 
 
 @lru_cache
@@ -222,6 +232,7 @@ def get_process_chat(
         runner,
         pending,
         log,
+        clock=get_wall_clock(),
         max_steps=settings.max_steps,
         history_limit=settings.history_limit,
         timeout_seconds=settings.chat_timeout_seconds,
@@ -244,6 +255,7 @@ def get_run_live_session(
         pending,
         log,
         now=time.monotonic,
+        clock=get_wall_clock(),
         ducker=ducker,
         limits=LiveLimits(
             idle_seconds=settings.live_idle_seconds,

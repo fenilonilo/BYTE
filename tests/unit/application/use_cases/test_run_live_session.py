@@ -92,6 +92,7 @@ async def test_opens_the_provider_with_instructions_and_the_segment_tools_then_s
     assert world.adapter.opened_with is not None
     instructions, tools = world.adapter.opened_with
     assert "Byte" in instructions
+    assert "Agora: 2026-10-21T12:00+00:00" in instructions
     assert {t.segment for t in tools} == {"home", "*"}
     ready = world.transport.sent("ready")[0]
     assert ready["conversation_id"] == "c1"

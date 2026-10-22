@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
     app_name: str = "byte"
     web: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    timezone: str = "America/Sao_Paulo"  # the owner's wall clock: prompts, reminders, calendar
     api_token: SecretStr
     openai_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
@@ -67,6 +69,15 @@ class Settings(BaseSettings):
     def _token_is_long_enough(cls, value: SecretStr) -> SecretStr:
         if len(value.get_secret_value()) < MIN_TOKEN_LENGTH:
             raise ValueError(f"must be at least {MIN_TOKEN_LENGTH} characters")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def _timezone_exists(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("unknown time zone") from exc
         return value
 
     @field_validator("openai_api_key")

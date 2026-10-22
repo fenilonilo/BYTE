@@ -17,7 +17,7 @@ from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
 from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
 from app.ports.live_session import LiveSession, LiveSessionPort
-from tests.fakes.clock import FakeClock
+from tests.fakes.clock import FakeClock, wall
 from tests.fakes.logger import RecordingLogger
 
 if TYPE_CHECKING:
@@ -179,6 +179,7 @@ class LiveWorld:
             self.pending,
             self.log,
             now=time.monotonic,
+            clock=wall,
             limits=limits or LiveLimits(),
             ducker=self.ducker,
         )

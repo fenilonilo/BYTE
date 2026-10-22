@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
 SYSTEM_PROMPT = (
     "Você é o Byte, assistente pessoal de uma única pessoa. "
     "Seu nome se pronuncia 'baite' e o usuário costuma começar a frase com ele: um 'vai', "
@@ -15,3 +20,18 @@ SYSTEM_PROMPT = (
     "você lê o resumo ao usuário palavra por palavra e espera. "
     "Só chame confirm_action depois que o usuário responder."
 )
+
+WEEKDAYS = (
+    "segunda-feira",
+    "terça-feira",
+    "quarta-feira",
+    "quinta-feira",
+    "sexta-feira",
+    "sábado",
+    "domingo",
+)
+
+
+def now_line(now: datetime) -> str:
+    """The model has no clock: one short line lets it resolve "amanhã às 9"."""
+    return f"Agora: {now.isoformat(timespec='minutes')}, {WEEKDAYS[now.weekday()]}."

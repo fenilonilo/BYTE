@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.application.prompts import SYSTEM_PROMPT
+from app.application.prompts import SYSTEM_PROMPT, now_line
 from app.application.tool_runner import CONFIRM_ACTION
 from app.domain.entities import Message
 from app.domain.exceptions import LiveSessionError
@@ -58,9 +58,11 @@ class RunLiveSession:
         log: LoggerPort,
         *,
         now: Callable[[], float],
+        clock: Callable[[], datetime],
         limits: LiveLimits | None = None,
         ducker: MusicDucker | None = None,
     ) -> None:
+        self._clock = clock
         self._ducker = ducker
         self._live = live
         self._store = store
@@ -74,7 +76,9 @@ class RunLiveSession:
         self, transport: LiveTransport, conversation_id: str, segment: str | None
     ) -> None:
         try:
-            session = await self._live.open(LIVE_INSTRUCTIONS, self._runner.specs(segment))
+            # sessions last minutes, so the time at the start is close enough
+            instructions = f"{LIVE_INSTRUCTIONS} {now_line(self._clock())}"
+            session = await self._live.open(instructions, self._runner.specs(segment))
         except LiveSessionError:
             await transport.send_event({"type": "error", "code": "model_unavailable"})
             raise

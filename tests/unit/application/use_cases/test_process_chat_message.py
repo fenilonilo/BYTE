@@ -11,6 +11,7 @@ from app.domain.entities import Message
 from app.domain.exceptions import AgentError
 from app.domain.model import ModelMessage, ModelTurn
 from app.ports.chat_model import ChatModelPort
+from tests.fakes.clock import wall
 from tests.fakes.events import events_on_day, seed_event
 from tests.fakes.logger import RecordingLogger
 from tests.fakes.world import World, text_turn, tool_turn
@@ -103,7 +104,13 @@ async def test_timeout_raises_agent_error() -> None:
 
     world = World([], timeout_seconds=0.01)
     chat = ProcessChatMessage(
-        Hanging(), world.store, world.runner, world.pending, RecordingLogger(), timeout_seconds=0.01
+        Hanging(),
+        world.store,
+        world.runner,
+        world.pending,
+        RecordingLogger(),
+        clock=wall,
+        timeout_seconds=0.01,
     )
     with pytest.raises(AgentError, match="timed out"):
         await chat.execute(CID, "oi", None)
@@ -173,3 +180,10 @@ async def test_the_model_cannot_confirm_in_the_same_request() -> None:
     assert reply.pending_summary == "Apagar o evento evt-1"
     refused: ModelMessage = world.model.calls[2][0][-1]
     assert refused.content.startswith("erro: aguarde")
+
+
+@pytest.mark.unit
+async def test_system_prompt_tells_the_model_the_current_time() -> None:
+    world = World([text_turn("oi")])
+    await world.chat.execute(CID, "que horas são?", None)
+    assert "Agora: 2026-10-21T12:00+00:00, quarta-feira." in world.model.calls[0][0][0].content
