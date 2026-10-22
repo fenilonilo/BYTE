@@ -17,9 +17,11 @@ from app.application.tools.music import (
     QueueMusic,
     SearchMusic,
 )
+from app.application.tools.reminders import CancelReminder, CreateReminder, ListReminders
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from datetime import datetime
 
     from app.application.tool import Tool
     from app.ports.calendar import CalendarPort
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
     from app.ports.expenses import ExpensesPort
     from app.ports.light import LightPort
     from app.ports.music import MusicPort
+    from app.ports.reminders import ReminderStorePort
 
 
 def build_tool_registry(
@@ -35,9 +38,12 @@ def build_tool_registry(
     music: MusicPort,
     calendar: CalendarPort,
     expenses: ExpensesPort,
+    *,
     known: KnownUris | None = None,
     on_volume: Callable[[int], None] | None = None,
+    reminders: tuple[ReminderStorePort, Callable[[], datetime]] | None = None,
 ) -> Registry[Tool]:
+    """`reminders` is the store plus the owner's wall clock; without it there are no reminders."""
     known = known or KnownUris()
     registry: Registry[Tool] = Registry()
     tools: tuple[Tool, ...] = (
@@ -58,6 +64,9 @@ def build_tool_registry(
         AddExpense(expenses),
         MonthTotal(expenses),
     )
+    if reminders is not None:
+        store, clock = reminders
+        tools += (CreateReminder(store, clock), ListReminders(store, clock), CancelReminder(store))
     for tool in tools:
         registry.register(tool.spec.name, tool)
     return registry

@@ -3,12 +3,14 @@ from __future__ import annotations
 import time
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 from openai import AsyncOpenAI
 
+from app.adapters.files.json_reminder_store import JsonReminderStore
 from app.adapters.logging.structlog_logger import StructlogLogger
 from app.adapters.memory.in_memory_calendar import InMemoryCalendar
 from app.adapters.memory.in_memory_climate import InMemoryClimate
@@ -16,11 +18,13 @@ from app.adapters.memory.in_memory_conversation_store import InMemoryConversatio
 from app.adapters.memory.in_memory_expenses import InMemoryExpenses
 from app.adapters.memory.in_memory_light import InMemoryLight
 from app.adapters.memory.in_memory_music import InMemoryMusic
+from app.adapters.memory.silent_speech import SilentSpeech
 from app.adapters.openai.chat_model import OpenAIChatModel
 from app.adapters.openai.live_session import OpenAILiveSessionAdapter
 from app.api.live_slot import LiveSlot
 from app.application.music_ducker import MusicDucker
 from app.application.pending_actions import PendingActionStore
+from app.application.reminder_hub import ReminderHub
 from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
 from app.application.tools.music import KnownUris
@@ -44,6 +48,8 @@ if TYPE_CHECKING:
     from app.ports.live_session import LiveSessionPort
     from app.ports.logger import LoggerPort
     from app.ports.music import MusicPort
+    from app.ports.reminders import ReminderStorePort
+    from app.ports.speech import SpeechPort
 
 
 @lru_cache
@@ -150,6 +156,31 @@ def get_expenses() -> ExpensesPort:
 
 
 @lru_cache
+def get_reminder_store() -> ReminderStorePort:
+    return JsonReminderStore(Path(get_settings().reminders_path))
+
+
+@lru_cache
+def get_speech() -> SpeechPort:
+    model = get_settings().piper_model
+    if model is None:
+        return SilentSpeech()
+    from app.adapters.piper.piper_speech import PiperSpeech  # noqa: PLC0415 - optional extra
+
+    return PiperSpeech(model)
+
+
+@lru_cache
+def get_reminder_hub() -> ReminderHub:
+    return ReminderHub(get_reminder_store(), get_speech(), get_calendar(), get_logger())
+
+
+@lru_cache
+def get_notify_slot() -> LiveSlot:
+    return LiveSlot()
+
+
+@lru_cache
 def get_known_uris() -> KnownUris:
     return KnownUris()
 
@@ -169,6 +200,7 @@ def get_tools() -> Registry[Tool]:
         get_expenses(),
         known=get_known_uris(),
         on_volume=get_ducker().note_volume,
+        reminders=(get_reminder_store(), get_wall_clock()),
     )
 
 

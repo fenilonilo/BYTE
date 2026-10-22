@@ -48,7 +48,9 @@ class Rig:
             clock=self.clock,
             log=self.log,
             config=config or SessionConfig(),
+            interrupt=lambda: self.ringing,
         )
+        self.ringing = False
 
     async def _connect(self) -> FakeSocket:
         if self.connect_error is not None:
@@ -359,3 +361,12 @@ async def test_run_closes_the_link_when_the_mic_ends() -> None:
     await rig.session.run(mic())
     assert rig.socket.closed
     assert rig.session.state == "idle"
+
+
+async def test_wake_word_while_an_alarm_rings_only_stops_it() -> None:
+    rig = Rig()
+    rig.ringing = True
+    await rig.wake()
+    assert rig.session.state == "idle"
+    assert rig.sockets == []
+    assert rig.detector.resets == 1

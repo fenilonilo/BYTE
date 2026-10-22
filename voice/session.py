@@ -69,8 +69,10 @@ class VoiceSession:
         clock: Callable[[], float],
         log: LoggerPort,
         config: SessionConfig,
+        interrupt: Callable[[], bool] = lambda: False,
     ) -> None:
         self._detector = detector
+        self._interrupt = interrupt
         self._connect = connect
         self._speaker = speaker
         self._clock = clock
@@ -101,7 +103,11 @@ class VoiceSession:
 
     async def on_frame(self, frame: bytes) -> None:
         if self._state == "idle":
-            if self._detector(frame):
+            if not self._detector(frame):
+                return
+            if self._interrupt():  # the wake word stopped an alarm: no conversation, no tokens
+                self._detector.reset()
+            else:
                 self._open_link()
         elif self._state == "connecting":
             self._buffer.append(frame)

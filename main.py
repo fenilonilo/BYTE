@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import contextlib
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -13,17 +15,22 @@ from fastapi import FastAPI
 from app.adapters.logging.structlog_logger import configure_logging
 from app.api.control import router as control_router
 from app.api.deps import (
+    get_calendar,
     get_chat_model,
     get_climate,
     get_light,
     get_live_port,
     get_logger,
     get_music,
+    get_reminder_hub,
     get_runner,
     get_settings,
+    get_speech,
+    get_wall_clock,
 )
 from app.api.errors import install_error_handlers
 from app.api.live import router as live_router
+from app.api.notifications import router as notifications_router, run_reminders
 from app.api.router import router
 from app.api.web import mount_web
 
@@ -46,9 +53,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         light=type(get_light()).__name__,
         climate=type(get_climate()).__name__,
         music=type(get_music()).__name__,
+        calendar=type(get_calendar()).__name__,
+        speech=type(get_speech()).__name__,
         web=settings.web,
     )
+    reminders = asyncio.create_task(
+        run_reminders(get_reminder_hub(), get_wall_clock(), get_logger())
+    )
     yield
+    reminders.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await reminders
     await runner.drain()
 
 
@@ -58,6 +73,7 @@ app = FastAPI(title="byte", lifespan=lifespan)
 app.include_router(router, prefix="/api/v1")
 app.include_router(live_router, prefix="/api/v1")
 app.include_router(control_router, prefix="/api/v1")
+app.include_router(notifications_router, prefix="/api/v1")
 install_error_handlers(app)
 
 

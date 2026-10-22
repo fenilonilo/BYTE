@@ -77,6 +77,14 @@ class CalendarError(DomainError):
     """Raised when the calendar service fails or refuses a request."""
 
 
+class ReminderNotFoundError(DomainError):
+    """Raised when a reminder id does not exist."""
+
+
+class SpeechError(DomainError):
+    """Raised when text-to-speech fails."""
+
+
 def failure_reason(exc: BaseException) -> str:
     """Short, content-free category for logs: guard, offline, validation or upstream."""
     # ponytail: domain validators raise plain LightError/MusicError, so those read as upstream
@@ -89,6 +97,7 @@ def failure_reason(exc: BaseException) -> str:
         ToolArgumentError
         | RegistryKeyError
         | EventNotFoundError
+        | ReminderNotFoundError
         | UnknownLightDeviceError
         | UnknownClimateDeviceError
         | UnknownMusicDeviceError,

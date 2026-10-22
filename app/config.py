@@ -55,11 +55,14 @@ class Settings(BaseSettings):
     spotify_client_id: str | None = None
     spotify_refresh_token: SecretStr | None = None
     spotify_device: str = ""
-    # Google Calendar (scripts/google_login.py prints the refresh token). Unset: in-memory.
+    # Google Calendar (scripts/google_login.py writes the refresh token). Unset: in-memory.
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     google_refresh_token: SecretStr | None = None
     google_calendar_id: str = "primary"
+    # Reminders: kept in a JSON file; spoken with a local Piper voice (.onnx), beep-only if unset.
+    reminders_path: str = "data/reminders.json"
+    piper_model: str | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="BYTE_",
