@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     spotify_client_id: str | None = None
     spotify_refresh_token: SecretStr | None = None
     spotify_device: str = ""
+    # Google Calendar (scripts/google_login.py prints the refresh token). Unset: in-memory.
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    google_refresh_token: SecretStr | None = None
+    google_calendar_id: str = "primary"
 
     model_config = SettingsConfigDict(
         env_prefix="BYTE_",

@@ -125,8 +125,22 @@ def get_music() -> MusicPort:
 
 @lru_cache
 def get_calendar() -> CalendarPort:
-    # ponytail: in memory until the Google Calendar adapter exists
-    return InMemoryCalendar()
+    s = get_settings()
+    if (
+        s.google_client_id is None
+        or s.google_client_secret is None
+        or s.google_refresh_token is None
+    ):
+        return InMemoryCalendar()
+    from app.adapters.google.google_calendar import GoogleCalendar  # noqa: PLC0415 - optional extra
+
+    return GoogleCalendar(
+        s.google_client_id,
+        s.google_client_secret.get_secret_value(),
+        s.google_refresh_token.get_secret_value(),
+        s.google_calendar_id,
+        ZoneInfo(s.timezone),
+    )
 
 
 @lru_cache

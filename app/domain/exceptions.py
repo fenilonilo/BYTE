@@ -73,6 +73,10 @@ class EventNotFoundError(DomainError):
     """Raised when a calendar event id does not exist."""
 
 
+class CalendarError(DomainError):
+    """Raised when the calendar service fails or refuses a request."""
+
+
 def failure_reason(exc: BaseException) -> str:
     """Short, content-free category for logs: guard, offline, validation or upstream."""
     # ponytail: domain validators raise plain LightError/MusicError, so those read as upstream

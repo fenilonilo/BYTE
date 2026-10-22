@@ -35,6 +35,9 @@ tuya = [
 spotify = [
     "aiohttp>=3.9",
 ]
+google = [
+    "aiohttp>=3.9",
+]
 voice = [
     "sounddevice>=0.5",
     "websockets>=14",
