@@ -55,6 +55,10 @@ def build_connect_config(
         ),
         output_audio_transcription=types.AudioTranscriptionConfig(),
         tools=to_gemini_tools(tools),
+        # Every turn re-reads the whole session; a sliding window caps that as audio piles up.
+        context_window_compression=types.ContextWindowCompressionConfig(
+            sliding_window=types.SlidingWindow()
+        ),
     )
 
 

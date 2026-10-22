@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     chat_provider: Literal["openai", "gemini"] = "openai"
     chat_model: str = "gpt-4.1-mini"
     gemini_chat_model: str = "gemini-3.1-flash-lite"
+    # Thinking is billed as output and buys nothing for tool calls; Pro models reject "minimal".
+    gemini_thinking_level: Literal["minimal", "low", "medium", "high"] = "minimal"
     chat_timeout_seconds: float = 30.0
     tool_timeout_seconds: float = 10.0
     max_steps: int = 6

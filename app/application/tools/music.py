@@ -25,21 +25,32 @@ if TYPE_CHECKING:
 class KnownUris:
     """URIs the model may play: only ones that a search or the playlists returned.
 
-    The model must never invent a uri; it asks for one first (oldest forgotten past `limit`)."""
+    The model must never invent a uri; it asks for one first (oldest forgotten past `limit`).
+    The model sees a short id per uri ("3", not "spotify:track:..."): far fewer tokens."""
 
     def __init__(self, limit: int = 200) -> None:
         self._limit = limit
-        self._uris: dict[str, None] = {}
+        self._ids: dict[str, str] = {}  # uri -> short id, oldest first
+        self._uris: dict[str, str] = {}  # short id -> uri
+        self._next = 1
 
     def remember(self, items: tuple[MusicItem, ...]) -> None:
         for item in items:
-            self._uris.pop(item.uri, None)
-            self._uris[item.uri] = None
-        while len(self._uris) > self._limit:
-            del self._uris[next(iter(self._uris))]
+            short = self._ids.pop(item.uri, None)
+            if short is None:
+                short, self._next = str(self._next), self._next + 1
+                self._uris[short] = item.uri
+            self._ids[item.uri] = short
+        while len(self._ids) > self._limit:
+            del self._uris[self._ids.pop(next(iter(self._ids)))]
 
-    def require(self, uri: str) -> str:
-        if uri not in self._uris:
+    def short(self, uri: str) -> str:
+        return self._ids[uri]
+
+    def require(self, ref: str) -> str:
+        """A short id (model) or a full uri (control panel) -> the full uri, if one was returned."""
+        uri = self._uris.get(ref, ref)
+        if uri not in self._ids:
             raise UnknownUriError("uri desconhecida: use search_music ou list_playlists primeiro")
         return uri
 
@@ -50,8 +61,9 @@ def describe_playback(state: PlaybackState) -> str:
     return f"{status}: {what} no aparelho {state.device}, volume {state.volume}%"
 
 
-def describe_items(items: tuple[MusicItem, ...]) -> str:
-    lines = [f"{i.uri} | {i.name} {i.artist}".strip() for i in items]
+def describe_items(items: tuple[MusicItem, ...], known: KnownUris) -> str:
+    known.remember(items)
+    lines = [f"{known.short(i.uri)} | {i.name} {i.artist}".strip() for i in items]
     return "; ".join(lines) or "nada encontrado"
 
 
@@ -88,7 +100,7 @@ class ListMusicDevices(Tool):
 class SearchMusic(Tool):
     spec = ToolSpec(
         name="search_music",
-        description="Procura músicas, álbuns, playlists ou artistas. Devolve 'uri | nome artista'.",
+        description="Procura músicas, álbuns, playlists ou artistas. Devolve 'id | nome artista'.",
         parameters=object_schema(
             {
                 "query": ("string", "O que procurar."),
@@ -106,14 +118,13 @@ class SearchMusic(Tool):
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         kind = opt_enum(args, "kind", MediaKind) or MediaKind.TRACK
         items = await self._music.search(str_arg(args, "query"), kind)
-        self._known.remember(items)
-        return describe_items(items)
+        return describe_items(items, self._known)
 
 
 class ListPlaylists(Tool):
     spec = ToolSpec(
         name="list_playlists",
-        description="Lista as playlists do usuário. Devolve 'uri | nome'.",
+        description="Lista as playlists do usuário. Devolve 'id | nome'.",
         parameters=object_schema({}),
         segment="music",
     )
@@ -124,20 +135,19 @@ class ListPlaylists(Tool):
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         items = await self._music.playlists()
-        self._known.remember(items)
-        return describe_items(items)
+        return describe_items(items, self._known)
 
 
 class PlayMusic(Tool):
     spec = ToolSpec(
         name="play_music",
         description=(
-            "Toca uma uri devolvida por search_music ou list_playlists, ou retoma a reprodução "
-            "se uri não for informada. 'device' move a reprodução para outro aparelho."
+            "Toca um id devolvido por search_music ou list_playlists, ou retoma a reprodução "
+            "se nenhum for informado. 'device' move a reprodução para outro aparelho."
         ),
         parameters=object_schema(
             {
-                "uri": ("string", "Uri a tocar (nunca invente uma)."),
+                "uri": ("string", "Id a tocar (nunca invente um)."),
                 "device": ("string", "Nome do aparelho de destino."),
             },
             required=[],
@@ -152,7 +162,7 @@ class PlayMusic(Tool):
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         uri = opt_str(args, "uri")
         if uri is not None:
-            self._known.require(uri)
+            uri = self._known.require(uri)
         return describe_playback(await self._music.play(uri, opt_str(args, "device")))
 
 
@@ -198,8 +208,8 @@ class ControlMusic(Tool):
 class QueueMusic(Tool):
     spec = ToolSpec(
         name="queue_music",
-        description="Adiciona à fila uma uri devolvida por search_music ou list_playlists.",
-        parameters=object_schema({"uri": ("string", "Uri a enfileirar (nunca invente uma).")}),
+        description="Adiciona à fila um id devolvido por search_music ou list_playlists.",
+        parameters=object_schema({"uri": ("string", "Id a enfileirar (nunca invente um).")}),
         segment="music",
     )
 

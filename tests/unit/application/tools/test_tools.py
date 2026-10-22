@@ -221,13 +221,17 @@ async def test_music(registry: Registry[Tool]) -> None:
         "pausado: nada no aparelho nest mini, volume 50%"
     )
     assert await run(registry, "list_music_devices", {}) == "nest mini"
+    # Short ids instead of 30-char spotify uris: fewer tokens in and out of the model.
     assert await run(registry, "search_music", {"query": "queen"}) == (
-        "spotify:track:1 | Bohemian Rhapsody Queen"
+        "1 | Bohemian Rhapsody Queen"
     )
     assert await run(registry, "search_music", {"query": "xyz"}) == "nada encontrado"
-    assert await run(registry, "list_playlists", {}) == "spotify:playlist:1 | Treino"
-    await run(registry, "search_music", {"query": "aquarela"})
-    playing = await run(registry, "play_music", {"uri": "spotify:track:2"})
+    assert await run(registry, "list_playlists", {}) == "2 | Treino"
+    assert await run(registry, "search_music", {"query": "queen"}) == (
+        "1 | Bohemian Rhapsody Queen"
+    )
+    assert await run(registry, "search_music", {"query": "aquarela"}) == "3 | Aquarela Toquinho"
+    playing = await run(registry, "play_music", {"uri": "3"})
     assert playing == "tocando: Aquarela Toquinho no aparelho nest mini, volume 50%"
     louder = await run(registry, "control_music", {"volume": 20, "shuffle": True})
     assert louder == "tocando: Aquarela Toquinho no aparelho nest mini, volume 20%"

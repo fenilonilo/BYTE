@@ -78,9 +78,10 @@ def to_gemini_tools(tools: Sequence[ToolSpec]) -> list[types.Tool]:
 class GeminiChatModel(ChatModelPort):
     """generateContent with function tools. The google-genai SDK never leaves this package."""
 
-    def __init__(self, client: genai.Client, model: str) -> None:
+    def __init__(self, client: genai.Client, model: str, *, thinking: str = "minimal") -> None:
         self._client = client
         self._model = model
+        self._thinking = types.ThinkingConfig(thinking_level=types.ThinkingLevel(thinking.upper()))
 
     async def complete(
         self, messages: Sequence[ModelMessage], tools: Sequence[ToolSpec]
@@ -89,6 +90,7 @@ class GeminiChatModel(ChatModelPort):
         config = types.GenerateContentConfig(
             system_instruction=system or None,
             tools=to_gemini_tools(tools),
+            thinking_config=self._thinking,
             # Required to mix Google Search with function calling.
             tool_config=types.ToolConfig(include_server_side_tool_invocations=True),
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),

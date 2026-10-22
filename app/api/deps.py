@@ -183,7 +183,9 @@ def get_chat_model() -> ChatModelPort:
     if settings.chat_provider == "gemini":
         from app.adapters.gemini.chat_model import GeminiChatModel  # noqa: PLC0415 - optional extra
 
-        return GeminiChatModel(get_gemini(), settings.gemini_chat_model)
+        return GeminiChatModel(
+            get_gemini(), settings.gemini_chat_model, thinking=settings.gemini_thinking_level
+        )
     return OpenAIChatModel(get_openai(), settings.chat_model)
 
 
