@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, SecretStr, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.exceptions import ConfigError
@@ -19,13 +20,17 @@ class TuyaLightSettings(BaseModel):
 
 class Settings(BaseSettings):
     app_name: str = "byte"
+    web: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    timezone: str = "America/Sao_Paulo"  # the owner's wall clock: prompts, reminders, calendar
     api_token: SecretStr
     openai_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     chat_provider: Literal["openai", "gemini"] = "openai"
     chat_model: str = "gpt-4.1-mini"
     gemini_chat_model: str = "gemini-3.1-flash-lite"
+    # Thinking is billed as output and buys nothing for tool calls; Pro models reject "minimal".
+    gemini_thinking_level: Literal["minimal", "low", "medium", "high"] = "minimal"
     chat_timeout_seconds: float = 30.0
     tool_timeout_seconds: float = 10.0
     max_steps: int = 6
@@ -41,6 +46,7 @@ class Settings(BaseSettings):
     live_transcript_wait_seconds: float = 2.0
     live_pace_factor: float = 0.9
     live_max_frame_bytes: int = 65536
+    live_duck_percent: int = Field(default=20, ge=0, le=100)  # 100 = never lower the music
     # Real devices. Leave a group unset and Byte runs against the in-memory adapter instead.
     thinq_access_secret: SecretStr | None = None
     thinq_country: str = "BR"
@@ -49,6 +55,14 @@ class Settings(BaseSettings):
     spotify_client_id: str | None = None
     spotify_refresh_token: SecretStr | None = None
     spotify_device: str = ""
+    # Google Calendar (scripts/google_login.py writes the refresh token). Unset: in-memory.
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    google_refresh_token: SecretStr | None = None
+    google_calendar_id: str = "primary"
+    # Reminders: kept in a JSON file; spoken with a local Piper voice (.onnx), beep-only if unset.
+    reminders_path: str = "data/reminders.json"
+    piper_model: str | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="BYTE_",
@@ -63,6 +77,15 @@ class Settings(BaseSettings):
     def _token_is_long_enough(cls, value: SecretStr) -> SecretStr:
         if len(value.get_secret_value()) < MIN_TOKEN_LENGTH:
             raise ValueError(f"must be at least {MIN_TOKEN_LENGTH} characters")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def _timezone_exists(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("unknown time zone") from exc
         return value
 
     @field_validator("openai_api_key")

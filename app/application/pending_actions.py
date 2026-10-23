@@ -35,6 +35,9 @@ class PendingActionStore:
         self._pending[conversation_id] = action
         return action
 
+    def drop(self, conversation_id: str) -> None:
+        self._pending.pop(conversation_id, None)
+
     def on_user_utterance(self, conversation_id: str, text: str) -> None:
         """Call for every user utterance. The first one after creation arms the action;
         any later one drops it, so an old request can never be confirmed by a later "sim"."""

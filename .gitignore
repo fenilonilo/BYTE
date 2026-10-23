@@ -77,3 +77,16 @@ certs/
 
 # wake word training clips (the trained models/ei_byte.onnx is tracked)
 wakeword_data/
+
+.playwright-mcp/
+
+# Piper voices (download: python -m piper.download_voices pt_BR-faber-medium --download-dir models)
+models/pt_BR-*
+# Runtime data (reminders)
+data/
+
+# Google OAuth client files downloaded from the Cloud Console (secrets)
+client_secret*.json
+cliente_secret*.json
+*secret*.json
+*credentials*.json

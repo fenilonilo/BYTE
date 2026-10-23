@@ -91,3 +91,12 @@ def test_a_new_request_replaces_the_old_one() -> None:
     action, _ = store.confirm("c1")
     assert action is not None
     assert action.key == "key-2"
+
+
+@pytest.mark.unit
+def test_drop_removes_the_action_and_is_safe_when_empty() -> None:
+    store, _ = make()
+    store.drop("c1")
+    create(store)
+    store.drop("c1")
+    assert store.peek("c1") is None

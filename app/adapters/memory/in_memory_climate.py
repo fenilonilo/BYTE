@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
-from typing import TYPE_CHECKING
 
-from app.domain.climate import ClimateMode, ClimateState, FanSpeed
-from app.domain.exceptions import UnknownClimateDeviceError
+from app.domain.climate import ClimateChange, ClimateMode, ClimateState, FanSpeed
+from app.domain.exceptions import ClimateError, UnknownClimateDeviceError
 from app.ports.climate import ClimatePort
-
-if TYPE_CHECKING:
-    from app.domain.climate import ClimateChange
 
 _TIMER_FIELDS = {
     "stop_in_minutes": "stop_timer_minutes",
     "start_in_minutes": "start_timer_minutes",
     "sleep_in_minutes": "sleep_timer_minutes",
 }
+
+
+def _adjusts(change: ClimateChange) -> bool:
+    """True when the change touches anything a stopped unit refuses (a start timer is fine)."""
+    ignored = {"power", "start_in_minutes"}
+    return any(getattr(change, f.name) is not None for f in fields(change) if f.name not in ignored)
 
 
 def _initial() -> ClimateState:
@@ -50,6 +52,8 @@ class InMemoryClimate(ClimatePort):
 
     async def apply(self, device: str, change: ClimateChange) -> ClimateState:
         state = await self.get_state(device)
+        if not state.power and change.power is not True and _adjusts(change):
+            raise ClimateError(f"{device} está desligado: ligue-o antes de ajustar")
         updates: dict[str, object] = {}
         for f in fields(change):
             value = getattr(change, f.name)

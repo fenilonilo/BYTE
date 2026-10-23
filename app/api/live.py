@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
-from app.api.auth import token_matches
+from app.api.auth import accept_authorized
 from app.api.deps import (
     get_live_slot,
     get_logger,
@@ -66,10 +66,8 @@ async def live(
     run: RunLiveSession = Depends(get_run_live_session),
     log: LoggerPort = Depends(get_logger),
 ) -> None:
-    if not token_matches(websocket.headers.get("authorization"), settings.api_token):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    if not await accept_authorized(websocket, settings.api_token):
         return
-    await websocket.accept()
     start = await _read_start(websocket, runner)
     if start is None:
         return

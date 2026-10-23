@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#14120f">
+<meta name="robots" content="noindex">
+<title>Byte</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314120f'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='17' text-anchor='middle' fill='%23e3a548'%3E01%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#console">Pular para os controles</a>
+
+<!-- Token gate -->
+<section class="gate" id="gate" hidden aria-labelledby="gate-title">
+  <form class="gate-form" id="gate-form" novalidate>
+    <p class="eyebrow">byte / painel local</p>
+    <h1 id="gate-title">Acesso do dono</h1>
+    <p class="lede">Cole o token da API. Ele fica só nesta aba e some quando ela fecha.</p>
+    <div class="field">
+      <label for="gate-token">Token</label>
+      <input id="gate-token" name="token" type="password" autocomplete="current-password"
+             spellcheck="false" aria-describedby="gate-help gate-error" required>
+      <p class="help" id="gate-help">Mínimo de 32 caracteres, o mesmo de <code>BYTE_API_TOKEN</code>.</p>
+      <p class="error" id="gate-error" role="alert"></p>
+    </div>
+    <p class="help mock-only" hidden><span class="tag">mock</span> qualquer token com 32 ou mais caracteres entra.</p>
+    <button class="btn primary" type="submit">Entrar</button>
+  </form>
+  <div class="gate-orb" aria-hidden="true"><canvas id="gate-orb"></canvas></div>
+</section>
+
+<div class="app" id="app" hidden>
+  <header class="bar">
+    <div class="brand"><span class="mark" aria-hidden="true">01</span><strong>Byte</strong></div>
+    <p class="agent-state" role="status" aria-live="polite"><span class="led" aria-hidden="true"></span><span id="agent-state">em espera</span></p>
+    <nav class="index" aria-label="Seções">
+      <a href="#sec-lights">Luzes</a><a href="#sec-climate">Clima</a><a href="#sec-music">Música</a><a href="#sec-agenda">Agenda</a><a href="#sec-finance">Finanças</a>
+    </nav>
+    <div class="bar-end">
+      <span class="tag mock-only" hidden>mock</span>
+      <time id="clock" class="mono">--:--</time>
+      <button class="btn ghost small" id="logout" type="button">Sair</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <!-- Agent core: sphere + chat -->
+    <section class="core" aria-label="Agente">
+      <div class="orb-wrap">
+        <canvas id="orb" aria-hidden="true"></canvas>
+      </div>
+      <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversa">
+        <p class="t-empty">Escreva para o Byte. Ações destrutivas sempre pedem confirmação aqui.</p>
+      </div>
+      <div class="voice" id="voice" data-voice="off">
+        <button class="btn talk" type="button" id="talk" aria-describedby="voice-note">
+          <span class="talk-led" aria-hidden="true"></span><span id="talk-word">Falar</span><span class="talk-stop" aria-hidden="true">parar</span>
+        </button>
+        <button class="toggle" type="button" id="wake-toggle" aria-pressed="false" aria-describedby="voice-note">escuta ativa</button>
+        <p class="voice-note" id="voice-note" role="status" aria-live="polite"></p>
+      </div>
+      <form class="chat" id="chat-form">
+        <label for="chat-input" class="sr-only">Mensagem para o Byte</label>
+        <input id="chat-input" maxlength="4000" autocomplete="off" placeholder="Ex.: o que tenho hoje na agenda?">
+        <button class="btn primary" type="submit" id="chat-send">Enviar</button>
+      </form>
+    </section>
+
+    <!-- Direct control -->
+    <div class="console" id="console" tabindex="-1">
+      <div class="global-pending" id="global-pending"></div>
+
+      <section class="sec" id="sec-lights" aria-labelledby="h-lights">
+        <header class="sec-head">
+          <span class="num">01</span><h2 id="h-lights">Luzes</h2>
+          <button class="icon-btn" type="button" data-refresh="lights" aria-label="Atualizar luzes"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+        </header>
+        <ul class="rows" id="lights-list"></ul>
+        <p class="note" role="status" data-note="lights"></p>
+      </section>
+
+      <section class="sec" id="sec-climate" aria-labelledby="h-climate">
+        <header class="sec-head">
+          <span class="num">02</span><h2 id="h-climate">Clima</h2>
+          <button class="icon-btn" type="button" data-refresh="climate" aria-label="Atualizar clima"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+        </header>
+        <div id="climate-list"></div>
+        <p class="note" role="status" data-note="climate"></p>
+      </section>
+
+      <section class="sec wide" id="sec-music" aria-labelledby="h-music">
+        <header class="sec-head">
+          <span class="num">03</span><h2 id="h-music">Música</h2>
+          <button class="icon-btn" type="button" data-refresh="music" aria-label="Atualizar música"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+        </header>
+        <div class="devices" role="group" aria-labelledby="devices-label">
+          <span class="label" id="devices-label">aparelho</span>
+          <div class="devices-slot" id="music-devices"></div>
+          <button class="btn ghost small" type="button" id="devices-refresh" aria-label="Atualizar aparelhos do Spotify">Atualizar</button>
+        </div>
+        <div class="music">
+          <div class="now" id="music-now"></div>
+          <div class="finder">
+            <form class="search" id="music-search">
+              <label for="music-q" class="sr-only">Buscar música</label>
+              <input id="music-q" maxlength="200" placeholder="Buscar no Spotify" autocomplete="off">
+              <label for="music-kind" class="sr-only">Tipo</label>
+              <select id="music-kind">
+                <option value="track">faixa</option><option value="album">álbum</option>
+                <option value="playlist">playlist</option><option value="artist">artista</option>
+              </select>
+              <button class="btn" type="submit">Buscar</button>
+            </form>
+            <button class="link" type="button" id="music-playlists">Minhas playlists</button>
+            <ul class="rows results" id="music-results"><li><div class="empty-state">Busque uma faixa ou abra suas playlists.</div></li></ul>
+          </div>
+        </div>
+        <p class="note" role="status" data-note="music"></p>
+      </section>
+
+      <section class="sec" id="sec-agenda" aria-labelledby="h-agenda">
+        <header class="sec-head">
+          <span class="num">04</span><h2 id="h-agenda">Agenda</h2>
+          <div class="day-nav">
+            <button class="icon-btn" type="button" id="day-prev" aria-label="Dia anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+            <label for="agenda-date" class="sr-only">Dia</label>
+            <input type="date" id="agenda-date">
+            <button class="icon-btn" type="button" id="day-next" aria-label="Próximo dia"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+          </div>
+        </header>
+        <ul class="rows" id="agenda-list"></ul>
+        <details class="add">
+          <summary>Novo evento</summary>
+          <form id="event-form" class="form-grid" novalidate>
+            <div class="field span-3"><label for="ev-title">Título</label><input id="ev-title" required maxlength="200"></div>
+            <div class="field"><label for="ev-time">Início</label><input id="ev-time" type="time" required value="09:00"></div>
+            <div class="field"><label for="ev-dur">Duração (min)</label><input id="ev-dur" type="number" min="5" step="5" value="60" required></div>
+            <div class="field end"><button class="btn primary" type="submit">Criar</button></div>
+            <p class="error span-3" role="alert" data-form-error></p>
+          </form>
+        </details>
+        <p class="note" role="status" data-note="agenda"></p>
+      </section>
+
+      <section class="sec" id="sec-finance" aria-labelledby="h-finance">
+        <header class="sec-head">
+          <span class="num">05</span><h2 id="h-finance">Finanças</h2>
+          <div class="day-nav">
+            <label for="finance-month" class="sr-only">Mês</label>
+            <input type="month" id="finance-month">
+          </div>
+        </header>
+        <div class="total"><span class="label">Total do mês</span><strong id="finance-total" class="mono">—</strong></div>
+        <ul class="rows" id="finance-list"></ul>
+        <details class="add">
+          <summary>Novo gasto</summary>
+          <form id="expense-form" class="form-grid" novalidate>
+            <div class="field"><label for="ex-amount">Valor (R$)</label><input id="ex-amount" inputmode="decimal" placeholder="54,30" required></div>
+            <div class="field"><label for="ex-cat">Categoria</label><input id="ex-cat" list="ex-cats" required maxlength="60"><datalist id="ex-cats"></datalist></div>
+            <div class="field"><label for="ex-date">Data</label><input id="ex-date" type="date" required></div>
+            <div class="field span-2"><label for="ex-desc">Descrição</label><input id="ex-desc" required maxlength="200"></div>
+            <div class="field end"><button class="btn primary" type="submit">Registrar</button></div>
+            <p class="error span-3" role="alert" data-form-error></p>
+          </form>
+        </details>
+        <p class="note" role="status" data-note="finance"></p>
+      </section>
+    </div>
+  </main>
+</div>
+
+<template id="tpl-pending">
+  <div class="pending" role="alertdialog" aria-live="assertive">
+    <p><span class="label">Confirmar</span><span class="summary"></span></p>
+    <div class="pending-actions">
+      <button class="btn primary small" type="button" data-confirm>Confirmar</button>
+      <button class="btn ghost small" type="button" data-cancel>Cancelar</button>
+    </div>
+  </div>
+</template>
+</body>
+</html>

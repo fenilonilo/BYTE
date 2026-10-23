@@ -8,6 +8,7 @@ from app.application.tools.args import (
     datetime_arg,
     int_arg,
     object_schema,
+    opt_str,
     str_arg,
 )
 from app.domain.exceptions import ToolArgumentError
@@ -81,4 +82,6 @@ class DeleteEvent(Tool):
         return f"Evento {event_id} apagado"
 
     def summarize(self, args: Mapping[str, object]) -> str:
-        return f"Apagar o evento {str_arg(args, 'event_id')}"
+        title = opt_str(args, "title")  # filled by the panel route from the calendar, not the model
+        what = f"{str_arg(args, 'event_id')}" if title is None else f'"{title}"'
+        return f"Apagar o evento {what}"

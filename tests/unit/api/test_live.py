@@ -98,6 +98,41 @@ def test_the_socket_requires_the_bearer_token(headers: dict[str, str]) -> None:
 
 
 @pytest.mark.unit
+def test_a_browser_authenticates_through_the_subprotocol_and_gets_only_bearer_back() -> None:
+    client, slot = make_client(LiveWorld())
+    with client.websocket_connect(URL, subprotocols=["bearer", TOKEN]) as ws:
+        start(ws)
+        accepted = ws.accepted_subprotocol
+        leave(ws, slot)
+    assert accepted == "bearer"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "subprotocols",
+    [["bearer", "nope"], ["bearer"], [TOKEN], [TOKEN, "bearer"], ["bearer", TOKEN, "x"]],
+)
+def test_a_bad_subprotocol_token_closes_the_socket(subprotocols: list[str]) -> None:
+    client, _ = make_client(LiveWorld())
+    with (
+        pytest.raises(WebSocketDisconnect) as info,
+        client.websocket_connect(URL, subprotocols=subprotocols),
+    ):
+        pass
+    assert info.value.code == 1008
+
+
+@pytest.mark.unit
+def test_the_header_path_accepts_without_a_subprotocol() -> None:
+    client, slot = make_client(LiveWorld())
+    with client.websocket_connect(URL, headers=AUTH) as ws:
+        start(ws)
+        accepted = ws.accepted_subprotocol
+        leave(ws, slot)
+    assert accepted is None
+
+
+@pytest.mark.unit
 def test_start_then_ready_with_the_audio_contract() -> None:
     world = LiveWorld()
     client, slot = make_client(world)

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.application.prompts import SYSTEM_PROMPT
+from app.application.prompts import SYSTEM_PROMPT, now_line
 from app.application.tool_runner import CONFIRM_ACTION
 from app.domain.entities import Message
 from app.domain.exceptions import LiveSessionError
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from app.application.live_transport import LiveTransport
+    from app.application.music_ducker import MusicDucker
     from app.application.pending_actions import PendingActionStore
     from app.application.tool_runner import ToolRunner
     from app.domain.live import LiveEvent
@@ -56,8 +58,12 @@ class RunLiveSession:
         log: LoggerPort,
         *,
         now: Callable[[], float],
+        clock: Callable[[], datetime],
         limits: LiveLimits | None = None,
+        ducker: MusicDucker | None = None,
     ) -> None:
+        self._clock = clock
+        self._ducker = ducker
         self._live = live
         self._store = store
         self._runner = runner
@@ -70,7 +76,9 @@ class RunLiveSession:
         self, transport: LiveTransport, conversation_id: str, segment: str | None
     ) -> None:
         try:
-            session = await self._live.open(LIVE_INSTRUCTIONS, self._runner.specs(segment))
+            # sessions last minutes, so the time at the start is close enough
+            instructions = f"{LIVE_INSTRUCTIONS} {now_line(self._clock())}"
+            session = await self._live.open(instructions, self._runner.specs(segment))
         except LiveSessionError:
             await transport.send_event({"type": "error", "code": "model_unavailable"})
             raise
@@ -91,8 +99,11 @@ class RunLiveSession:
             await transport.send_event(
                 {"type": "ready", "conversation_id": conversation_id, "audio": AUDIO_FORMAT}
             )
-            async with asyncio.timeout(self._limits.max_seconds):
-                await run.pump()
+            async with contextlib.AsyncExitStack() as stack:
+                if self._ducker is not None:
+                    await stack.enter_async_context(self._ducker.session())
+                async with asyncio.timeout(self._limits.max_seconds):
+                    await run.pump()
         except TimeoutError:
             await transport.send_event({"type": "error", "code": "session_limit"})
         finally:

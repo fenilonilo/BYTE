@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from app.application.tool import Tool
@@ -8,20 +7,17 @@ from app.application.tools.args import (
     object_schema,
     opt_bool,
     opt_int,
-    str_arg,
+    opt_str,
 )
-from app.domain.exceptions import LightError
+from app.domain.exceptions import UnknownLightDeviceError
 from app.domain.light import Color, LightChange, LightMode
 from app.domain.tools import ToolSpec
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Mapping
 
     from app.domain.light import LightState
     from app.ports.light import LightPort
-
-# Switching the same lamp on and off in quick succession can reset it into pairing mode.
-MIN_TOGGLE_SECONDS = 5.0
 
 
 def describe_light(name: str, state: LightState) -> str:
@@ -59,11 +55,11 @@ class SetLight(Tool):
         description=(
             "Muda uma luz. Só informe o que mudar. Escolha um visual: branco (brightness "
             "e/ou color_temperature) ou cor (hue, com saturation e brightness). "
-            "Escolher um visual liga a luz. Não ligue e desligue a mesma luz em sequência rápida."
+            "Escolher um visual liga a luz. Se a casa tem uma luz só, omita name."
         ),
         parameters=object_schema(
             {
-                "name": ("string", "Nome da luz, como em list_lights."),
+                "name": ("string", "Nome da luz, como em list_lights; opcional se houver uma só."),
                 "power": ("boolean", "true liga, false desliga."),
                 "brightness": ("integer", "Brilho de 1 a 100."),
                 "color_temperature": ("integer", "Temperatura de cor de 0 (quente) a 100 (fria)."),
@@ -72,18 +68,16 @@ class SetLight(Tool):
                 "timer_minutes": ("integer", "Desliga/liga em N minutos; 0 cancela o timer."),
                 "do_not_disturb": ("boolean", "Modo não perturbe."),
             },
-            required=["name"],
+            required=[],
         ),
         segment="home",
     )
 
-    def __init__(self, light: LightPort, now: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, light: LightPort) -> None:
         self._light = light
-        self._now = now
-        self._last_toggle: dict[str, float] = {}
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
-        name = str_arg(args, "name")
+        name = await self._resolve(opt_str(args, "name"))
         power = opt_bool(args, "power")
         hue = opt_int(args, "hue")
         brightness = opt_int(args, "brightness")
@@ -103,16 +97,13 @@ class SetLight(Tool):
             timer_minutes=opt_int(args, "timer_minutes"),
             do_not_disturb=opt_bool(args, "do_not_disturb"),
         )
-        if power is not None:
-            self._guard_toggle(name)
-        state = await self._light.apply(name, change)
-        if power is not None:
-            self._last_toggle[name.lower()] = self._now()
-        return describe_light(name, state)
+        return describe_light(name, await self._light.apply(name, change))
 
-    def _guard_toggle(self, name: str) -> None:
-        last = self._last_toggle.get(name.lower())
-        if last is not None and self._now() - last < MIN_TOGGLE_SECONDS:
-            raise LightError(
-                "aguarde alguns segundos antes de ligar ou desligar a mesma luz de novo"
-            )
+    async def _resolve(self, name: str | None) -> str:
+        """With a single lamp, any name the model says ("a luz", "luz do quarto") means it."""
+        names = await self._light.devices()
+        if len(names) == 1:
+            return names[0]
+        if name is None:
+            raise UnknownLightDeviceError("informe qual luz: " + ", ".join(names))
+        return name

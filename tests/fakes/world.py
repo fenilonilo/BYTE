@@ -16,7 +16,7 @@ from app.config import Settings
 from app.domain.model import ModelTurn
 from app.domain.tools import ToolCall
 from tests.fakes.chat_model import ScriptedChatModel
-from tests.fakes.clock import FakeClock
+from tests.fakes.clock import FakeClock, wall
 from tests.fakes.logger import RecordingLogger
 
 if TYPE_CHECKING:
@@ -56,6 +56,7 @@ class World:
             self.runner,
             self.pending,
             self.log,
+            clock=wall,
             max_steps=max_steps,
             history_limit=history_limit,
             timeout_seconds=timeout_seconds,

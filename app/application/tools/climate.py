@@ -48,20 +48,18 @@ class ListClimates(Tool):
 
 
 class SetClimate(Tool):
-    """Turning the unit on or off is physical, so that (and only that) asks for confirmation."""
-
     spec = ToolSpec(
         name="set_climate",
         description=(
-            "Muda um ar-condicionado. Só informe o que mudar. Ligar ou desligar (power) exige "
-            "confirmação do usuário. Um aparelho desligado recusa ajustes: ligue-o antes."
+            "Muda um ar-condicionado. Só informe o que mudar. "
+            "Um aparelho desligado recusa ajustes: ligue-o antes."
         ),
         parameters=object_schema(
             {
                 "name": ("string", "Nome do aparelho, como em list_climates."),
                 "power": ("boolean", "true liga, false desliga."),
                 "mode": ("string", "cool, dry, fan ou auto."),
-                "target_temperature": ("number", "Temperatura alvo de 18 a 30, de 0,5 em 0,5."),
+                "target_temperature": ("number", "Temperatura alvo de 18 a 30, em graus inteiros."),
                 "fan_speed": ("string", "auto, low, mid, high ou nature."),
                 "swing": ("boolean", "Oscilação das aletas."),
                 "power_save": ("boolean", "Modo economia."),
@@ -77,15 +75,6 @@ class SetClimate(Tool):
 
     def __init__(self, climate: ClimatePort) -> None:
         self._climate = climate
-
-    def needs_confirmation(self, args: Mapping[str, object]) -> bool:
-        return opt_bool(args, "power") is not None
-
-    def summarize(self, args: Mapping[str, object]) -> str:
-        verb = "Ligar" if opt_bool(args, "power") else "Desligar"
-        others = [k for k, v in args.items() if k not in ("name", "power") and v is not None]
-        extra = " e aplicar os outros ajustes pedidos" if others else ""
-        return f"{verb} {str_arg(args, 'name')}{extra}"
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
         name = str_arg(args, "name")

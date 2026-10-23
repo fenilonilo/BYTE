@@ -8,4 +8,11 @@ services:
       - .env
     volumes:
       - ./certs:/certs:ro
+      # Piper voice for reminders (BYTE_PIPER_MODEL=models/pt_BR-faber-medium.onnx)
+      - ./models:/app/models:ro
+      # reminders.json: a named volume keeps the non-root owner from the image
+      - byte-data:/app/data
     restart: unless-stopped
+
+volumes:
+  byte-data:

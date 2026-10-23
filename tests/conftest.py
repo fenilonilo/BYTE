@@ -19,6 +19,8 @@ _CACHED = (
     deps.get_music,
     deps.get_calendar,
     deps.get_expenses,
+    deps.get_known_uris,
+    deps.get_ducker,
     deps.get_tools,
     deps.get_runner,
     deps.get_openai,

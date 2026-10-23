@@ -25,3 +25,14 @@ async def test_unknown_device_and_uri() -> None:
         await m.play(device="cozinha")
     with pytest.raises(MusicError):
         await m.play("spotify:track:x")
+
+
+async def test_list_and_select_device() -> None:
+    m = InMemoryMusic(("nest mini", "cozinha"))
+    devices = await m.list_devices()
+    assert [(d.name, d.active) for d in devices] == [("nest mini", True), ("cozinha", False)]
+    assert devices[1].volume is None
+    await m.select_device("Cozinha")
+    assert (await m.state()).device == "cozinha"
+    with pytest.raises(UnknownMusicDeviceError):
+        await m.select_device("garagem")

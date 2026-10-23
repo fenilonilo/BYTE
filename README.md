@@ -11,7 +11,7 @@ One agent holds every tool. Every outside resource (the model provider, the smar
 home, the calendar, the expense sheet, storage) is an adapter behind a port. The
 live client is a custom ESP32-S3, but the protocol is plain WebSocket: any client works.
 
-No GUI, no computer vision, no chat-channel adapters, no multi-user support.
+No GUI beyond the optional `web/` control panel, no computer vision, no chat-channel adapters, no multi-user support.
 
 ## Run
 
@@ -22,6 +22,13 @@ docker compose up --build
 
 API on `http://127.0.0.1:8000/api/v1`, interactive docs at `/docs`. Compose binds to
 loopback only.
+
+### Web panel (optional, off by default)
+
+Set `BYTE_WEB=true` in `.env` (works with docker compose), or run locally with
+`python main.py --web [--host H --port P]`. Open `http://127.0.0.1:8000/` and enter
+`BYTE_API_TOKEN`. It drives the same adapters as chat: real devices when configured, in-memory
+fakes otherwise (the boot log says which).
 
 ### Real devices
 
@@ -120,17 +127,36 @@ pytest -m integration        # hits the real OpenAI API (needs BYTE_OPENAI_API_K
 Regenerate the locked dependencies used by the Docker image:
 
 ```bash
-pip-compile --extra api --extra openai --extra thinq --extra tuya --extra spotify \
-  --strip-extras -o requirements.lock pyproject.toml
+uv pip compile pyproject.toml --extra api --extra gemini --extra openai --extra thinq \
+  --extra tuya --extra spotify --extra google --extra tts \
+  --python-version 3.12 --python-platform x86_64-manylinux_2_28 -o requirements.lock
 ```
+
+## Reminders, alarms and Google Calendar
+
+Byte speaks first: "me lembra amanhã às 9 de pagar a luz", "alarme às 6h30". The voice
+daemon keeps `WS /api/v1/ws/notifications` open (no model, no tokens); at the time the
+server sends speech made by a local Piper voice, the device plays it and acks. An alarm
+repeats until you say the wake word. Google Calendar events are announced 10 minutes before.
+
+```bash
+# voice (~60 MB), read by the server through BYTE_PIPER_MODEL
+python -m piper.download_voices pt_BR-faber-medium --download-dir models
+# Google Calendar: create a "Desktop app" OAuth client, enable the Calendar API, set the
+# consent screen to "In production" (in "Testing" the token dies after 7 days), then:
+python scripts/google_login.py   # prints BYTE_GOOGLE_REFRESH_TOKEN
+```
+
+Reminders are kept in `data/reminders.json` (a compose volume) and survive restarts; one
+missed while the device was off is spoken when it reconnects.
 
 ## Status
 
-Chat and live are built end to end. Lights (Tuya), the air conditioner (ThinQ) and music
-(Spotify) have real adapters; the calendar and the expenses are still **in memory**, so
-the whole flow (tools, confirmation, barge-in) also runs with no device at all. Not built
-yet: the Google Calendar and Google Sheets adapters, Postgres persistence (history is in
-memory and lost on restart), the Gemini Live adapter and the reminder scheduler.
+Chat and live are built end to end. Lights (Tuya), the air conditioner (ThinQ), music
+(Spotify) and the calendar (Google) have real adapters; the expenses are still **in memory**,
+so the whole flow (tools, confirmation, barge-in) also runs with no device at all. Not built
+yet: the Google Sheets adapter, Postgres persistence (history is in memory and lost on
+restart) and the Gemini Live adapter.
 
 See `CLAUDE.md` for the rules, `docs/ARCHITECTURE.md` for the decisions and
 `docs/superpowers/specs/` for the design.

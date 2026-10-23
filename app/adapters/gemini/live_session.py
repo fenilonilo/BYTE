@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from google.genai import errors, types
 from websockets.exceptions import WebSocketException
 
+from app.adapters.gemini.chat_model import to_gemini_tools
 from app.adapters.gemini.live_events import GeminiEventMapper
 from app.domain.exceptions import LiveSessionError
 from app.ports.live_session import LiveSession, LiveSessionPort
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
 
 HANDSHAKE_TIMEOUT_SECONDS = 10.0
 AUDIO_IN_MIME = "audio/pcm;rate=24000"  # Gemini resamples to its native 16 kHz itself
+LANGUAGE = "pt-BR"
+VOCABULARY = ("Byte", "Ei Byte", "apague a luz", "acenda a luz", "lâmpada", "ar-condicionado")
 _PROVIDER_ERRORS = (errors.APIError, WebSocketException, OSError)
 
 
@@ -36,23 +39,26 @@ def _provider_errors() -> Generator[None]:
 def build_connect_config(
     instructions: str, tools: Sequence[ToolSpec], voice: str
 ) -> types.LiveConnectConfig:
-    declarations = [
-        types.FunctionDeclaration(
-            name=t.name, description=t.description, parameters_json_schema=dict(t.parameters)
-        )
-        for t in tools
-    ]
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
         system_instruction=instructions,
         speech_config=types.SpeechConfig(
+            language_code=LANGUAGE,
             voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice)
-            )
+            ),
         ),
-        input_audio_transcription=types.AudioTranscriptionConfig(),
+        # Without a hint the transcriber auto-detects the language and garbles pt-BR, and hears
+        # the spoken name "Byte" as "vai" or "baixa".
+        input_audio_transcription=types.AudioTranscriptionConfig(
+            language_codes=[LANGUAGE], custom_vocabulary=list(VOCABULARY)
+        ),
         output_audio_transcription=types.AudioTranscriptionConfig(),
-        tools=[types.Tool(function_declarations=declarations)] if declarations else None,
+        tools=to_gemini_tools(tools),
+        # Every turn re-reads the whole session; a sliding window caps that as audio piles up.
+        context_window_compression=types.ContextWindowCompressionConfig(
+            sliding_window=types.SlidingWindow()
+        ),
     )
 
 

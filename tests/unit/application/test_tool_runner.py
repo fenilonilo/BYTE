@@ -17,7 +17,15 @@ from app.application.tool import Tool
 from app.application.tool_runner import CONFIRM_ACTION, UNKNOWN_STATE, ToolRunner
 from app.application.tools.args import object_schema
 from app.application.tools.catalog import build_tool_registry
-from app.domain.exceptions import DomainError
+from app.domain.climate import ClimateChange
+from app.domain.exceptions import (
+    DomainError,
+    MusicError,
+    MusicOfflineError,
+    ToolArgumentError,
+    UnknownMusicDeviceError,
+    UnknownUriError,
+)
 from app.domain.tools import ToolCall, ToolSpec
 from tests.fakes.clock import FakeClock
 from tests.fakes.events import events_on_day, seed_event
@@ -252,25 +260,18 @@ def real_tools_runner() -> tuple[ToolRunner, PendingActionStore, InMemoryCalenda
     calendar = InMemoryCalendar()
     climate = InMemoryClimate()
     registry = build_tool_registry(
-        InMemoryLight(), climate, InMemoryMusic(), calendar, InMemoryExpenses()
+        InMemoryLight(("lampada", "quarto")), climate, InMemoryMusic(), calendar, InMemoryExpenses()
     )
     pending = PendingActionStore(FakeClock())
     return ToolRunner(registry, pending, RecordingLogger()), pending, calendar, climate
 
 
 @pytest.mark.unit
-async def test_switching_the_air_conditioner_on_asks_first_and_applies_everything_once() -> None:
-    runner, pending, _, climate = real_tools_runner()
+async def test_switching_the_air_conditioner_on_runs_at_once() -> None:
+    runner, _, _, climate = real_tools_runner()
     args = '{"name": "ar-condicionado", "power": true, "target_temperature": 22}'
 
-    asked = await runner.run(call("set_climate", args), CID, None)
-
-    assert asked.output.startswith("needs_confirmation:")
-    assert "Ligar ar-condicionado e aplicar os outros ajustes pedidos" in asked.output
-    assert (await climate.get_state("ar-condicionado")).power is False
-
-    pending.on_user_utterance(CID, "pode sim")
-    done = await runner.run(call(CONFIRM_ACTION), CID, None)
+    done = await runner.run(call("set_climate", args), CID, None)
 
     state = await climate.get_state("ar-condicionado")
     assert (state.power, state.target_temperature) == (True, 22.0)
@@ -280,6 +281,7 @@ async def test_switching_the_air_conditioner_on_asks_first_and_applies_everythin
 @pytest.mark.unit
 async def test_adjusting_the_air_conditioner_without_switching_it_does_not_ask() -> None:
     runner, _, _, climate = real_tools_runner()
+    await climate.apply("ar-condicionado", ClimateChange(power=True))
 
     result = await runner.run(
         call("set_climate", '{"name": "ar-condicionado", "target_temperature": 21}'), CID, None
@@ -312,3 +314,24 @@ async def test_unknown_device_from_the_model_becomes_error_text_not_a_crash() ->
     result = await runner.run(call("set_light", '{"name": "cofre", "power": true}'), CID, None)
 
     assert result.output == "erro: unknown light: 'cofre'"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (UnknownUriError("uri"), "guard"),
+        (MusicOfflineError("offline"), "offline"),
+        (ToolArgumentError("x"), "validation"),
+        (UnknownMusicDeviceError("x"), "validation"),
+        (MusicError("spotify 500"), "upstream"),
+        (RuntimeError("senha=123"), "upstream"),
+    ],
+)
+async def test_tool_failed_log_carries_a_reason_category(error: Exception, reason: str) -> None:
+    runner, _, log = build(RecordingTool("t", error=error))
+    await runner.run(call("t"), CID, None)
+    await runner.drain()
+    failed = [f for _, name, f in log.events if name == "tool.failed"]
+    assert [f["reason"] for f in failed] == [reason]
+    assert "senha" not in str(failed)

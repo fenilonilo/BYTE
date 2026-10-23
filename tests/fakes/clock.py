@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+WALL = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)
+
+
+def wall() -> datetime:
+    return WALL
+
 
 class FakeClock:
     """Injectable monotonic clock: tests advance time instead of sleeping."""

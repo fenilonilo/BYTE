@@ -11,12 +11,13 @@ from app.adapters.memory.in_memory_expenses import InMemoryExpenses
 from app.adapters.memory.in_memory_light import InMemoryLight
 from app.adapters.memory.in_memory_music import InMemoryMusic
 from app.application.live_transport import LiveTransport
+from app.application.music_ducker import MusicDucker
 from app.application.pending_actions import PendingActionStore
 from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
 from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
 from app.ports.live_session import LiveSession, LiveSessionPort
-from tests.fakes.clock import FakeClock
+from tests.fakes.clock import FakeClock, wall
 from tests.fakes.logger import RecordingLogger
 
 if TYPE_CHECKING:
@@ -155,8 +156,15 @@ class LiveWorld:
         self.store = InMemoryConversationStore()
         self.pending = PendingActionStore(FakeClock())
         self.log = RecordingLogger()
+        self.music = InMemoryMusic()
+        self.ducker = MusicDucker(self.music, self.log, 20)
         registry: Registry[Tool] = build_tool_registry(
-            self.light, InMemoryClimate(), InMemoryMusic(), self.calendar, InMemoryExpenses()
+            self.light,
+            InMemoryClimate(),
+            self.music,
+            self.calendar,
+            InMemoryExpenses(),
+            on_volume=self.ducker.note_volume,
         )
         for tool in extra_tools:
             registry.register(tool.spec.name, tool)
@@ -171,7 +179,9 @@ class LiveWorld:
             self.pending,
             self.log,
             now=time.monotonic,
+            clock=wall,
             limits=limits or LiveLimits(),
+            ducker=self.ducker,
         )
 
     def start(self, segment: str | None = None) -> asyncio.Task[None]:
