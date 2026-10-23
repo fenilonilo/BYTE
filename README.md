@@ -128,9 +128,41 @@ Regenerate the locked dependencies used by the Docker image:
 
 ```bash
 uv pip compile pyproject.toml --extra api --extra gemini --extra openai --extra thinq \
-  --extra tuya --extra spotify --extra google --extra tts \
+  --extra tuya --extra spotify --extra google --extra weather --extra tts --extra db --extra embed \
   --python-version 3.12 --python-platform x86_64-manylinux_2_28 -o requirements.lock
 ```
+
+## Projects: knowledge and terminal (Spec 4)
+
+Byte knows your programming projects and opens them for coding in the panel.
+
+- **Ask** (chat or voice): "o que o Sistema_Perfil usa de banco?" — answered from the projects'
+  `CLAUDE.md` through a local vector index (`search_projects`). Only the project names go in
+  every prompt; content is fetched when a question needs it.
+- **Open** (panel only, typed or spoken): "abre o FinFlow" — the panel's terminal becomes a real
+  terminal running a new `claude` in that folder. "fecha o projeto" goes back to Byte's log.
+  One project at a time; reloading the tab keeps the session.
+
+Setup on the Windows machine that holds the projects (Byte under uvicorn):
+
+```bash
+pip install -e ".[api,gemini,db,embed,pty]"
+# .env
+BYTE_PROJECTS={"Byte":{"path":"D:/Projetos/Byte/BYTE"},"FinFlow":{"path":"D:/Projetos/FinFlow"}}
+BYTE_DB_PASSWORD=<long random>
+BYTE_DATABASE_URL=postgresql+asyncpg://byte:<same password>@127.0.0.1:5432/byte
+docker compose up -d db      # pgvector, loopback only; Byte runs the migrations at boot
+python main.py --web
+```
+
+- Each project's `docs` defaults to `["CLAUDE.md"]`; add more relative `.md` paths to index
+  them. The index refreshes every 5 minutes by content hash (`BYTE_KNOWLEDGE_SCAN_SECONDS`).
+- The embedding model (`paraphrase-multilingual-MiniLM-L12-v2`, ~220 MB, CPU) downloads once
+  into `data/models`. Without `BYTE_DATABASE_URL` the index lives in memory and is rebuilt at boot.
+- A server that cannot see the folders keeps answering from the last index; the terminal tools
+  only exist where `claude` is on `PATH` and the `pty` extra is installed (not in the Docker image).
+- The `claude` child process gets no `BYTE_*` variable, no provider key and no marker of a
+  parent Claude Code session.
 
 ## Reminders, alarms and Google Calendar
 

@@ -35,7 +35,12 @@ async def receive_message(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown segment: {body.segment!r}"
         )
     conversation_id = body.conversation_id or uuid4().hex
-    reply = await chat.execute(conversation_id, body.content, None if segment == AUTO else segment)
+    reply = await chat.execute(
+        conversation_id,
+        body.content,
+        None if segment == AUTO else segment,
+        panel=body.client == "panel",
+    )
     return MessageSchema(
         id=reply.message.id,
         role=reply.message.role,

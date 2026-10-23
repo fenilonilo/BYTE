@@ -39,6 +39,7 @@ class World:
         max_steps: int = 6,
         history_limit: int = 20,
         timeout_seconds: float = 30.0,
+        projects: Sequence[str] = (),
     ) -> None:
         self.light = InMemoryLight()
         self.calendar = InMemoryCalendar()
@@ -60,6 +61,7 @@ class World:
             max_steps=max_steps,
             history_limit=history_limit,
             timeout_seconds=timeout_seconds,
+            projects=projects,
         )
 
 

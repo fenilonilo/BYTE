@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.application.prompts import SYSTEM_PROMPT, now_line
+from app.application.prompts import SYSTEM_PROMPT, now_line, projects_line
 from app.application.tool_runner import CONFIRM_ACTION
 from app.domain.entities import Message
 from app.domain.exceptions import LiveSessionError
@@ -23,7 +23,7 @@ from app.domain.live import (
 from app.domain.tools import ToolResult
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
     from app.application.live_transport import LiveTransport
     from app.application.music_ducker import MusicDucker
@@ -61,7 +61,9 @@ class RunLiveSession:
         clock: Callable[[], datetime],
         limits: LiveLimits | None = None,
         ducker: MusicDucker | None = None,
+        projects: Sequence[str] = (),
     ) -> None:
+        self._projects_line = projects_line(projects)
         self._clock = clock
         self._ducker = ducker
         self._live = live
@@ -73,12 +75,19 @@ class RunLiveSession:
         self._limits = limits or LiveLimits()
 
     async def execute(
-        self, transport: LiveTransport, conversation_id: str, segment: str | None
+        self,
+        transport: LiveTransport,
+        conversation_id: str,
+        segment: str | None,
+        *,
+        panel: bool = False,
     ) -> None:
         try:
             # sessions last minutes, so the time at the start is close enough
-            instructions = f"{LIVE_INSTRUCTIONS} {now_line(self._clock())}"
-            session = await self._live.open(instructions, self._runner.specs(segment))
+            instructions = " ".join(
+                p for p in (LIVE_INSTRUCTIONS, now_line(self._clock()), self._projects_line) if p
+            )
+            session = await self._live.open(instructions, self._runner.specs(segment, panel=panel))
         except LiveSessionError:
             await transport.send_event({"type": "error", "code": "model_unavailable"})
             raise
@@ -87,6 +96,7 @@ class RunLiveSession:
             transport=transport,
             conversation_id=conversation_id,
             segment=segment,
+            panel=panel,
             store=self._store,
             runner=self._runner,
             pending=self._pending,
@@ -121,6 +131,7 @@ class LiveRun:
         transport: LiveTransport,
         conversation_id: str,
         segment: str | None,
+        panel: bool,
         store: ConversationStorePort,
         runner: ToolRunner,
         pending: PendingActionStore,
@@ -132,6 +143,7 @@ class LiveRun:
         self._transport = transport
         self._cid = conversation_id
         self._segment = segment
+        self._panel = panel
         self._store = store
         self._runner = runner
         self._pending = pending
@@ -259,7 +271,9 @@ class LiveRun:
                 if call.name == CONFIRM_ACTION and not await self._transcript_arrived():
                     results.append(ToolResult(call.id, "erro: não ouvi a confirmação do usuário"))
                     continue
-                results.append(await self._runner.run(call, self._cid, self._segment))
+                results.append(
+                    await self._runner.run(call, self._cid, self._segment, panel=self._panel)
+                )
             self._touch()
             await self._session.send_tool_results(results)
             await self._request_response()

@@ -150,6 +150,7 @@ class LiveWorld:
         extra_tools: Sequence[Tool] = (),
         limits: LiveLimits | None = None,
         open_error: Exception | None = None,
+        projects: Sequence[str] = (),
     ) -> None:
         self.light = InMemoryLight()
         self.calendar = InMemoryCalendar()
@@ -182,6 +183,7 @@ class LiveWorld:
             clock=wall,
             limits=limits or LiveLimits(),
             ducker=self.ducker,
+            projects=projects,
         )
 
     def start(self, segment: str | None = None) -> asyncio.Task[None]:

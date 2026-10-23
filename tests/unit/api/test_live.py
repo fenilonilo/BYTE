@@ -12,6 +12,8 @@ from starlette.websockets import WebSocketDisconnect
 from app.api.deps import get_live_slot, get_run_live_session, get_runner, get_settings
 from app.api.live import router as live_router
 from app.api.live_slot import LiveSlot
+from app.application.tool import Tool
+from app.application.tools.args import object_schema
 from app.domain.exceptions import LiveSessionError
 from app.domain.live import (
     AssistantAudio,
@@ -19,11 +21,12 @@ from app.domain.live import (
     ResponseDone,
     UserSpeechStarted,
 )
+from app.domain.tools import ToolSpec
 from tests.fakes.live import LiveWorld
 from tests.fakes.world import TOKEN, make_settings
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from fastapi import WebSocket
     from starlette.testclient import WebSocketTestSession
@@ -247,3 +250,44 @@ def test_garbage_frames_are_ignored_and_the_session_survives() -> None:
         ws.send_bytes(b"\x07")
         until(lambda: world.session.audio_in == [b"\x07"])
         leave(ws, slot)
+
+
+@pytest.mark.unit
+def test_closing_an_already_gone_client_still_releases_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def gone(self: object, code: int = 1000, reason: str | None = None) -> None:
+        raise WebSocketDisconnect(code=1006)  # what Starlette raises when the peer vanished
+
+    client, slot = make_client(LiveWorld())
+    with client.websocket_connect(URL, headers=AUTH) as ws:
+        start(ws)
+        monkeypatch.setattr("starlette.websockets.WebSocket.close", gone)
+        leave(ws, slot)
+
+
+class PanelOnly(Tool):
+    spec = ToolSpec("open_project", "d", object_schema({}), "projects", panel_only=True)
+
+    async def execute(self, args: Mapping[str, object], key: str) -> str:
+        return "ok"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("extra", "offered"), [({"client": "panel"}, True), ({}, False)])
+def test_start_client_decides_panel_only_tools(extra: dict[str, str], offered: bool) -> None:
+    world = LiveWorld(extra_tools=[PanelOnly()])
+    client, slot = make_client(world)
+    with client.websocket_connect(URL, headers=AUTH) as ws:
+        start(ws, **extra)
+        leave(ws, slot)
+    assert world.adapter.opened_with is not None
+    assert ("open_project" in {t.name for t in world.adapter.opened_with[1]}) is offered
+
+
+@pytest.mark.unit
+def test_start_unknown_client_rejected() -> None:
+    client, _ = make_client(LiveWorld())
+    with client.websocket_connect(URL, headers=AUTH) as ws:
+        ws.send_json({"type": "start", "client": "esp32"})
+        assert ws.receive_json() == {"type": "error", "code": "bad_start"}

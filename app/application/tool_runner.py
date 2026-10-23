@@ -47,6 +47,14 @@ def _parse(arguments: str) -> Mapping[str, object]:
     return cast("dict[str, object]", parsed)  # JSON object keys are always str
 
 
+def _refusal(spec: ToolSpec, segment: str | None, *, panel: bool) -> str | None:
+    if segment is not None and spec.segment != segment:
+        return "erro: ferramenta fora do segmento"
+    if spec.panel_only and not panel:
+        return "erro: ferramenta disponível só no painel"
+    return None
+
+
 class ToolRunner:
     """Runs tool calls: allowlist, confirmation gate, timeout, shielded execution."""
 
@@ -69,29 +77,35 @@ class ToolRunner:
     def segments(self) -> frozenset[str]:
         return frozenset(t.spec.segment for t in self._tools.values())
 
-    def specs(self, segment: str | None) -> tuple[ToolSpec, ...]:
+    def specs(self, segment: str | None, *, panel: bool = False) -> tuple[ToolSpec, ...]:
         chosen = tuple(
-            t.spec for t in self._tools.values() if segment is None or t.spec.segment == segment
+            t.spec
+            for t in self._tools.values()
+            if (segment is None or t.spec.segment == segment) and (panel or not t.spec.panel_only)
         )
         return (*chosen, CONFIRM_SPEC)
 
-    async def run(self, call: ToolCall, conversation_id: str, segment: str | None) -> ToolResult:
-        output = await self._dispatch(call, conversation_id, segment)
+    async def run(
+        self, call: ToolCall, conversation_id: str, segment: str | None, *, panel: bool = False
+    ) -> ToolResult:
+        output = await self._dispatch(call, conversation_id, segment, panel=panel)
         return ToolResult(call_id=call.id, output=output[: self._max_chars])
 
     async def drain(self) -> None:
         """Wait for tool tasks still running (called on shutdown)."""
         await asyncio.gather(*list(self._tasks), return_exceptions=True)
 
-    async def _dispatch(self, call: ToolCall, conversation_id: str, segment: str | None) -> str:
+    async def _dispatch(
+        self, call: ToolCall, conversation_id: str, segment: str | None, *, panel: bool
+    ) -> str:
         if call.name == CONFIRM_ACTION:
             return await self._confirm(conversation_id)
         try:
             tool = self._tools.get(call.name)
         except RegistryKeyError:
             return "erro: ferramenta desconhecida"
-        if segment is not None and tool.spec.segment != segment:
-            return "erro: ferramenta fora do segmento"
+        if (refusal := _refusal(tool.spec, segment, panel=panel)) is not None:
+            return refusal
         try:
             args = _parse(call.arguments)
             if not tool.needs_confirmation(args):

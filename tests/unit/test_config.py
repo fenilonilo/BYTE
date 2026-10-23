@@ -108,3 +108,12 @@ def test_unknown_timezone_refuses_to_boot(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("BYTE_TIMEZONE", "Mars/Olympus")
     with pytest.raises(ConfigError, match="timezone"):
         load_settings()
+
+
+@pytest.mark.unit
+def test_weather_home_defaults_to_goiania_and_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BYTE_API_TOKEN", GOOD_TOKEN)
+    monkeypatch.setenv("BYTE_OPENAI_API_KEY", "sk-test")
+    assert load_settings().weather_home == "Goiânia, GO"
+    monkeypatch.setenv("BYTE_WEATHER_HOME", "Florianópolis, SC")
+    assert load_settings().weather_home == "Florianópolis, SC"

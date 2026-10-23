@@ -335,3 +335,37 @@ async def test_tool_failed_log_carries_a_reason_category(error: Exception, reaso
     failed = [f for _, name, f in log.events if name == "tool.failed"]
     assert [f["reason"] for f in failed] == [reason]
     assert "senha" not in str(failed)
+
+
+def panel_tool() -> RecordingTool:
+    tool = RecordingTool("open_thing", segment="projects")
+    tool.spec = ToolSpec("open_thing", "d", object_schema({}), "projects", panel_only=True)
+    return tool
+
+
+@pytest.mark.unit
+def test_panel_only_hidden_from_non_panel_specs() -> None:
+    runner, _, _ = build(panel_tool(), RecordingTool("t"))
+    assert {s.name for s in runner.specs(None)} == {"t", CONFIRM_ACTION}
+
+
+@pytest.mark.unit
+def test_panel_only_listed_for_panel() -> None:
+    runner, _, _ = build(panel_tool())
+    assert "open_thing" in {s.name for s in runner.specs(None, panel=True)}
+
+
+@pytest.mark.unit
+async def test_panel_only_refused_when_not_panel() -> None:
+    tool = panel_tool()
+    runner, _, _ = build(tool)
+    result = await runner.run(call("open_thing"), CID, None)
+    assert result.output == "erro: ferramenta disponível só no painel"
+    assert tool.calls == []
+
+
+@pytest.mark.unit
+async def test_panel_only_runs_for_panel() -> None:
+    tool = panel_tool()
+    runner, _, _ = build(tool)
+    assert (await runner.run(call("open_thing"), CID, None, panel=True)).output == "ok"

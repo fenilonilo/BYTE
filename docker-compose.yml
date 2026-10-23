@@ -12,7 +12,32 @@ services:
       - ./models:/app/models:ro
       # reminders.json: a named volume keeps the non-root owner from the image
       - byte-data:/app/data
+    environment:
+      # inside compose the API reaches the database by service name
+      BYTE_DATABASE_URL: postgresql+asyncpg://byte:${BYTE_DB_PASSWORD}@db:5432/byte
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Vector store for project knowledge (Spec 4). Loopback only; Byte on Windows/uvicorn uses it too.
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: byte
+      POSTGRES_USER: byte
+      POSTGRES_PASSWORD: ${BYTE_DB_PASSWORD:?set BYTE_DB_PASSWORD in .env}
+    volumes:
+      - byte-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U byte -d byte"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
 volumes:
   byte-data:
+  byte-db:

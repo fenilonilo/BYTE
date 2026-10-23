@@ -11,11 +11,46 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/xterm/xterm.css">
 <link rel="stylesheet" href="style.css">
+<!-- xterm.js 5.5.0 + addon-fit 0.10.0, vendored (MIT, vendor/xterm/LICENSE): UMD globals -->
+<script src="vendor/xterm/xterm.js"></script>
+<script src="vendor/xterm/addon-fit.js"></script>
 <script type="module" src="app.js"></script>
 </head>
 <body>
-<a class="skip" href="#console">Pular para os controles</a>
+<a class="skip" href="#console">Pular para as funções</a>
+<!-- Shared shading for the objects in art.js: neutral light and shadow laid over any colour. -->
+<svg id="art-defs" width="0" height="0" aria-hidden="true" style="position:absolute">
+  <defs>
+    <linearGradient id="g-cyl" x1="0" x2="1">
+      <stop offset="0" stop-color="#000" stop-opacity=".5"/><stop offset=".3" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/>
+    </linearGradient>
+    <linearGradient id="g-top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".3"/>
+    </linearGradient>
+    <radialGradient id="g-ball" cx=".36" cy=".3" r=".78">
+      <stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".5"/>
+    </radialGradient>
+    <linearGradient id="g-brass" x1="0" x2="1">
+      <stop offset="0" stop-color="#4a3d2a"/><stop offset=".35" stop-color="#c9a466"/><stop offset=".5" stop-color="#f3dcaa"/>
+      <stop offset=".7" stop-color="#9a7a48"/><stop offset="1" stop-color="#3a2f20"/>
+    </linearGradient>
+    <radialGradient id="g-sun" cx=".4" cy=".36" r=".7">
+      <stop offset="0" stop-color="#fff1cc"/><stop offset=".45" stop-color="#f0b65a"/><stop offset="1" stop-color="#b8731f"/>
+    </radialGradient>
+    <linearGradient id="g-wx-area" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e3a548" stop-opacity=".22"/><stop offset=".6" stop-color="#e3a548" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="g-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+    <radialGradient id="g-spot"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
+    <mask id="m-fade" maskContentUnits="objectBoundingBox"><rect width="1" height="1" fill="url(#g-fade)"/></mask>
+    <mask id="m-spot" maskContentUnits="objectBoundingBox"><rect width="1" height="1" fill="url(#g-spot)"/></mask>
+  </defs>
+</svg>
 
 <!-- Token gate -->
 <section class="gate" id="gate" hidden aria-labelledby="gate-title">
@@ -40,25 +75,50 @@
   <header class="bar">
     <div class="brand"><span class="mark" aria-hidden="true">01</span><strong>Byte</strong></div>
     <p class="agent-state" role="status" aria-live="polite"><span class="led" aria-hidden="true"></span><span id="agent-state">em espera</span></p>
-    <nav class="index" aria-label="Seções">
-      <a href="#sec-lights">Luzes</a><a href="#sec-climate">Clima</a><a href="#sec-music">Música</a><a href="#sec-agenda">Agenda</a><a href="#sec-finance">Finanças</a>
-    </nav>
+    <a class="next-alert" id="next-alert" href="#sec-alerts" hidden></a>
+    <a class="wx-chip" id="wx-chip" href="#sec-weather" hidden></a>
     <div class="bar-end">
       <span class="tag mock-only" hidden>mock</span>
-      <time id="clock" class="mono">--:--</time>
+      <span class="clock-wrap">
+        <svg class="art clock3d" id="clock-art" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="15" fill="url(#g-brass)"/>
+          <circle cx="16" cy="16" r="12.5" fill="#1b1915"/>
+          <path d="M16 5.5v2M26.5 16h-2M16 26.5v-2M5.5 16h2" stroke="#a8a091" stroke-width="1.3" stroke-linecap="round"/>
+          <g class="ck-h"><path d="M16 16V10" stroke="#ebe5d9" stroke-width="2" stroke-linecap="round"/></g>
+          <g class="ck-m"><path d="M16 16V7" stroke="#ebe5d9" stroke-width="1.4" stroke-linecap="round"/></g>
+          <g class="ck-s"><path d="M16 18.5V6" stroke="#e3a548" stroke-width=".8" stroke-linecap="round"/></g>
+          <circle cx="16" cy="16" r="1.3" fill="#e3a548"/>
+          <ellipse cx="12" cy="10" rx="7" ry="3.6" fill="#fff" opacity=".08" transform="rotate(-30 12 10)"/>
+        </svg>
+        <time id="clock" class="mono">--:--:--</time>
+      </span>
       <button class="btn ghost small" id="logout" type="button">Sair</button>
     </div>
   </header>
 
-  <main class="shell">
-    <!-- Agent core: sphere + chat -->
-    <section class="core" aria-label="Agente">
+  <main class="shell" id="shell" data-pane="core">
+    <!-- 1. Terminal: activity log + local commands -->
+    <section class="pane term" id="pane-term" aria-label="Terminal">
+      <header class="term-head">
+        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="term-title mono" id="term-title">byte@casa: ~</span>
+        <button class="icon-btn" type="button" id="term-clear" aria-label="Limpar terminal"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
+      </header>
+      <div class="term-out" id="term-out" role="log" aria-live="polite" aria-label="Atividade"></div>
+      <div class="term-xterm" id="term-xterm" aria-label="Claude Code no projeto aberto" hidden></div>
+      <form class="term-in" id="term-form" autocomplete="off">
+        <label for="term-input" class="term-prompt mono">byte@casa:~$</label>
+        <input id="term-input" class="mono" spellcheck="false" maxlength="200" aria-describedby="term-hint">
+        <span class="sr-only" id="term-hint">Digite help para ver os comandos.</span>
+      </form>
+    </section>
+
+    <!-- 2. Agent core: sphere, voice, chat -->
+    <section class="pane core" id="pane-core" aria-label="Agente">
       <div class="orb-wrap">
         <canvas id="orb" aria-hidden="true"></canvas>
       </div>
-      <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversa">
-        <p class="t-empty">Escreva para o Byte. Ações destrutivas sempre pedem confirmação aqui.</p>
-      </div>
+      <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversa por texto" hidden></div>
       <div class="voice" id="voice" data-voice="off">
         <button class="btn talk" type="button" id="talk" aria-describedby="voice-note">
           <span class="talk-led" aria-hidden="true"></span><span id="talk-word">Falar</span><span class="talk-stop" aria-hidden="true">parar</span>
@@ -68,112 +128,197 @@
       </div>
       <form class="chat" id="chat-form">
         <label for="chat-input" class="sr-only">Mensagem para o Byte</label>
-        <input id="chat-input" maxlength="4000" autocomplete="off" placeholder="Ex.: o que tenho hoje na agenda?">
+        <input id="chat-input" maxlength="4000" autocomplete="off" placeholder="Escreva para o Byte…">
         <button class="btn primary" type="submit" id="chat-send">Enviar</button>
       </form>
     </section>
 
-    <!-- Direct control -->
-    <div class="console" id="console" tabindex="-1">
-      <div class="global-pending" id="global-pending"></div>
+    <!-- 3. Functions: alerts, agent, every tool segment -->
+    <section class="pane fn" id="pane-fn" aria-label="Funções">
+      <nav class="index" aria-label="Seções">
+        <a href="#sec-alerts">Alertas</a><a href="#sec-agent">Agente</a><a href="#sec-lights">Luzes</a><a href="#sec-climate">Clima</a><a href="#sec-music">Música</a><a href="#sec-weather">Tempo</a><a href="#sec-agenda">Agenda</a><a href="#sec-finance">Finanças</a>
+      </nav>
+      <div class="console" id="console" tabindex="-1">
+        <div class="global-pending" id="global-pending"></div>
 
-      <section class="sec" id="sec-lights" aria-labelledby="h-lights">
-        <header class="sec-head">
-          <span class="num">01</span><h2 id="h-lights">Luzes</h2>
-          <button class="icon-btn" type="button" data-refresh="lights" aria-label="Atualizar luzes"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
-        </header>
-        <ul class="rows" id="lights-list"></ul>
-        <p class="note" role="status" data-note="lights"></p>
-      </section>
-
-      <section class="sec" id="sec-climate" aria-labelledby="h-climate">
-        <header class="sec-head">
-          <span class="num">02</span><h2 id="h-climate">Clima</h2>
-          <button class="icon-btn" type="button" data-refresh="climate" aria-label="Atualizar clima"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
-        </header>
-        <div id="climate-list"></div>
-        <p class="note" role="status" data-note="climate"></p>
-      </section>
-
-      <section class="sec wide" id="sec-music" aria-labelledby="h-music">
-        <header class="sec-head">
-          <span class="num">03</span><h2 id="h-music">Música</h2>
-          <button class="icon-btn" type="button" data-refresh="music" aria-label="Atualizar música"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
-        </header>
-        <div class="devices" role="group" aria-labelledby="devices-label">
-          <span class="label" id="devices-label">aparelho</span>
-          <div class="devices-slot" id="music-devices"></div>
-          <button class="btn ghost small" type="button" id="devices-refresh" aria-label="Atualizar aparelhos do Spotify">Atualizar</button>
-        </div>
-        <div class="music">
-          <div class="now" id="music-now"></div>
-          <div class="finder">
-            <form class="search" id="music-search">
-              <label for="music-q" class="sr-only">Buscar música</label>
-              <input id="music-q" maxlength="200" placeholder="Buscar no Spotify" autocomplete="off">
-              <label for="music-kind" class="sr-only">Tipo</label>
-              <select id="music-kind">
-                <option value="track">faixa</option><option value="album">álbum</option>
-                <option value="playlist">playlist</option><option value="artist">artista</option>
-              </select>
-              <button class="btn" type="submit">Buscar</button>
+        <section class="sec alerts" id="sec-alerts" aria-labelledby="h-alerts">
+          <header class="sec-head">
+            <span class="num">00</span><h2 id="h-alerts">Lembretes e alarmes</h2>
+            <button class="icon-btn" type="button" data-refresh="alerts" aria-label="Atualizar lembretes"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+          </header>
+          <ul class="rows" id="alerts-list"></ul>
+          <details class="add">
+            <summary>Novo lembrete ou alarme</summary>
+            <form id="alert-form" class="form-grid" novalidate>
+              <div class="field span-3"><label for="al-text">O quê</label><input id="al-text" required maxlength="200" placeholder="Tomar o remédio"></div>
+              <div class="field span-2"><label for="al-at">Quando</label><input id="al-at" type="datetime-local" required></div>
+              <div class="field"><label for="al-kind">Tipo</label><select id="al-kind"><option value="lembrete">lembrete</option><option value="alarme">alarme</option></select></div>
+              <div class="field end span-3"><button class="btn primary" type="submit">Criar</button></div>
+              <p class="error span-3" role="alert" data-form-error></p>
             </form>
-            <button class="link" type="button" id="music-playlists">Minhas playlists</button>
-            <ul class="rows results" id="music-results"><li><div class="empty-state">Busque uma faixa ou abra suas playlists.</div></li></ul>
-          </div>
-        </div>
-        <p class="note" role="status" data-note="music"></p>
-      </section>
+          </details>
+          <p class="note" role="status" data-note="alerts"></p>
+        </section>
 
-      <section class="sec" id="sec-agenda" aria-labelledby="h-agenda">
-        <header class="sec-head">
-          <span class="num">04</span><h2 id="h-agenda">Agenda</h2>
-          <div class="day-nav">
-            <button class="icon-btn" type="button" id="day-prev" aria-label="Dia anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
-            <label for="agenda-date" class="sr-only">Dia</label>
-            <input type="date" id="agenda-date">
-            <button class="icon-btn" type="button" id="day-next" aria-label="Próximo dia"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
-          </div>
-        </header>
-        <ul class="rows" id="agenda-list"></ul>
-        <details class="add">
-          <summary>Novo evento</summary>
-          <form id="event-form" class="form-grid" novalidate>
-            <div class="field span-3"><label for="ev-title">Título</label><input id="ev-title" required maxlength="200"></div>
-            <div class="field"><label for="ev-time">Início</label><input id="ev-time" type="time" required value="09:00"></div>
-            <div class="field"><label for="ev-dur">Duração (min)</label><input id="ev-dur" type="number" min="5" step="5" value="60" required></div>
-            <div class="field end"><button class="btn primary" type="submit">Criar</button></div>
-            <p class="error span-3" role="alert" data-form-error></p>
-          </form>
-        </details>
-        <p class="note" role="status" data-note="agenda"></p>
-      </section>
+        <section class="sec" id="sec-agent" aria-labelledby="h-agent">
+          <header class="sec-head">
+            <span class="num">01</span><h2 id="h-agent">Agente</h2>
+            <button class="btn ghost small" type="button" id="new-conv">Nova conversa</button>
+          </header>
+          <dl class="facts">
+            <div><dt>estado</dt><dd id="ag-state">em espera</dd></div>
+            <div><dt>voz</dt><dd id="ag-voice">desligada</dd></div>
+            <div><dt>escuta ativa</dt><dd id="ag-wake">desligada</dd></div>
+            <div><dt>conversa</dt><dd id="ag-conv" class="mono">nova</dd></div>
+            <div><dt>confirmação</dt><dd id="ag-pending">nenhuma</dd></div>
+            <div><dt>painel aberto há</dt><dd id="ag-uptime" class="mono">00:00</dd></div>
+          </dl>
+        </section>
 
-      <section class="sec" id="sec-finance" aria-labelledby="h-finance">
-        <header class="sec-head">
-          <span class="num">05</span><h2 id="h-finance">Finanças</h2>
-          <div class="day-nav">
-            <label for="finance-month" class="sr-only">Mês</label>
-            <input type="month" id="finance-month">
+        <section class="sec" id="sec-lights" aria-labelledby="h-lights">
+          <header class="sec-head">
+            <span class="num">02</span><h2 id="h-lights">Luzes</h2>
+            <button class="icon-btn" type="button" data-refresh="lights" aria-label="Atualizar luzes"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+          </header>
+          <ul class="rows" id="lights-list"></ul>
+          <p class="note" role="status" data-note="lights"></p>
+        </section>
+
+        <section class="sec" id="sec-climate" aria-labelledby="h-climate">
+          <header class="sec-head">
+            <span class="num">03</span><h2 id="h-climate">Clima</h2>
+            <button class="icon-btn" type="button" data-refresh="climate" aria-label="Atualizar clima"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+          </header>
+          <div id="climate-list"></div>
+          <p class="note" role="status" data-note="climate"></p>
+        </section>
+
+        <section class="sec wide" id="sec-music" aria-labelledby="h-music">
+          <header class="sec-head">
+            <span class="num">04</span><h2 id="h-music">Música</h2>
+            <button class="icon-btn" type="button" data-refresh="music" aria-label="Atualizar música"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+          </header>
+          <div class="devices" role="group" aria-labelledby="devices-label">
+            <span class="label" id="devices-label">aparelho</span>
+            <div class="devices-slot" id="music-devices"></div>
+            <button class="btn ghost small" type="button" id="devices-refresh" aria-label="Atualizar aparelhos do Spotify">Atualizar</button>
           </div>
-        </header>
-        <div class="total"><span class="label">Total do mês</span><strong id="finance-total" class="mono">—</strong></div>
-        <ul class="rows" id="finance-list"></ul>
-        <details class="add">
-          <summary>Novo gasto</summary>
-          <form id="expense-form" class="form-grid" novalidate>
-            <div class="field"><label for="ex-amount">Valor (R$)</label><input id="ex-amount" inputmode="decimal" placeholder="54,30" required></div>
-            <div class="field"><label for="ex-cat">Categoria</label><input id="ex-cat" list="ex-cats" required maxlength="60"><datalist id="ex-cats"></datalist></div>
-            <div class="field"><label for="ex-date">Data</label><input id="ex-date" type="date" required></div>
-            <div class="field span-2"><label for="ex-desc">Descrição</label><input id="ex-desc" required maxlength="200"></div>
-            <div class="field end"><button class="btn primary" type="submit">Registrar</button></div>
-            <p class="error span-3" role="alert" data-form-error></p>
-          </form>
-        </details>
-        <p class="note" role="status" data-note="finance"></p>
-      </section>
-    </div>
+          <div class="music">
+            <div class="player">
+              <button class="art-btn deck" type="button" id="deck" aria-label="Tocar" hidden></button>
+              <div class="now" id="music-now"></div>
+            </div>
+            <div class="finder">
+              <form class="search" id="music-search">
+                <label for="music-q" class="sr-only">Buscar música</label>
+                <input id="music-q" maxlength="200" placeholder="Buscar no Spotify" autocomplete="off">
+                <label for="music-kind" class="sr-only">Tipo</label>
+                <select id="music-kind">
+                  <option value="track">faixa</option><option value="album">álbum</option>
+                  <option value="playlist">playlist</option><option value="artist">artista</option>
+                </select>
+                <button class="btn" type="submit">Buscar</button>
+              </form>
+              <button class="link" type="button" id="music-playlists">Minhas playlists</button>
+              <ul class="rows results" id="music-results"><li><div class="empty-state">Busque uma faixa ou abra suas playlists.</div></li></ul>
+            </div>
+          </div>
+          <p class="note" role="status" data-note="music"></p>
+        </section>
+
+        <section class="sec" id="sec-weather" aria-labelledby="h-weather">
+          <header class="sec-head">
+            <span class="num">05</span><h2 id="h-weather">Tempo</h2>
+            <div class="wx-where">
+              <span class="label" id="wx-place"></span>
+              <button class="btn ghost small" type="button" id="wx-home" hidden></button>
+              <button class="icon-btn" type="button" data-refresh="weather" aria-label="Atualizar tempo"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+            </div>
+          </header>
+          <div class="wx" id="wx-body"></div>
+          <p class="note" role="status" data-note="weather"></p>
+        </section>
+
+        <section class="sec" id="sec-agenda" aria-labelledby="h-agenda">
+          <header class="sec-head">
+            <span class="num">06</span><h2 id="h-agenda">Agenda</h2>
+            <div class="day-nav">
+              <button class="art-btn cal" type="button" id="agenda-cal" aria-label="Voltar para hoje">
+                <svg class="art" viewBox="0 0 36 40" aria-hidden="true">
+                  <rect x="4" y="9" width="30" height="30" rx="5" fill="#0a0907" opacity=".5"/>
+                  <rect x="3" y="7" width="30" height="30" rx="5" fill="#efe8da"/>
+                  <path d="M3 12a5 5 0 0 1 5-5h20a5 5 0 0 1 5 5v4H3z" fill="#c9624a"/>
+                  <rect x="3" y="7" width="30" height="30" rx="5" fill="url(#g-top)"/>
+                  <text class="cal-mon" x="18" y="14.3"></text>
+                  <text class="cal-day" x="18" y="32"></text>
+                  <g class="cal-tear"><path d="M3 16h30v16a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5z" fill="#efe8da"/><text class="cal-day" x="18" y="32"></text></g>
+                  <rect x="10" y="3.5" width="2.6" height="7" rx="1.3" fill="url(#g-brass)"/>
+                  <rect x="23.4" y="3.5" width="2.6" height="7" rx="1.3" fill="url(#g-brass)"/>
+                </svg>
+              </button>
+              <button class="icon-btn" type="button" id="day-prev" aria-label="Dia anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+              <label for="agenda-date" class="sr-only">Dia</label>
+              <input type="date" id="agenda-date">
+              <button class="icon-btn" type="button" id="day-next" aria-label="Próximo dia"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+            </div>
+          </header>
+          <ul class="rows" id="agenda-list"></ul>
+          <details class="add">
+            <summary>Novo evento</summary>
+            <form id="event-form" class="form-grid" novalidate>
+              <div class="field span-3"><label for="ev-title">Título</label><input id="ev-title" required maxlength="200"></div>
+              <div class="field"><label for="ev-time">Início</label><input id="ev-time" type="time" required value="09:00"></div>
+              <div class="field"><label for="ev-dur">Duração (min)</label><input id="ev-dur" type="number" min="5" step="5" value="60" required></div>
+              <div class="field end"><button class="btn primary" type="submit">Criar</button></div>
+              <p class="error span-3" role="alert" data-form-error></p>
+            </form>
+          </details>
+          <p class="note" role="status" data-note="agenda"></p>
+        </section>
+
+        <section class="sec" id="sec-finance" aria-labelledby="h-finance">
+          <header class="sec-head">
+            <span class="num">07</span><h2 id="h-finance">Finanças</h2>
+            <div class="day-nav">
+              <label for="finance-month" class="sr-only">Mês</label>
+              <input type="month" id="finance-month">
+            </div>
+          </header>
+          <div class="total">
+            <svg class="art coins" id="coins" viewBox="0 0 44 40" aria-hidden="true">
+              <ellipse cx="22" cy="35.5" rx="17" ry="3.5" fill="#0a0907" opacity=".5"/>
+              <path d="M8 28v4a14 4 0 0 0 28 0v-4z" fill="url(#g-brass)"/><ellipse cx="22" cy="28" rx="14" ry="4" fill="#e3bf78"/>
+              <path d="M8 22.5v4a14 4 0 0 0 28 0v-4z" fill="url(#g-brass)"/><ellipse cx="22" cy="22.5" rx="14" ry="4" fill="#e3bf78"/>
+              <g class="c-drop">
+                <path d="M8 17v4a14 4 0 0 0 28 0v-4z" fill="url(#g-brass)"/><ellipse cx="22" cy="17" rx="14" ry="4" fill="#ecca86"/>
+                <ellipse cx="22" cy="17" rx="9.5" ry="2.6" fill="none" stroke="#b08a4c" stroke-width=".8"/>
+              </g>
+            </svg>
+            <span class="label">Total do mês</span><strong id="finance-total" class="mono">—</strong></div>
+          <ul class="rows" id="finance-list"></ul>
+          <details class="add">
+            <summary>Novo gasto</summary>
+            <form id="expense-form" class="form-grid" novalidate>
+              <div class="field"><label for="ex-amount">Valor (R$)</label><input id="ex-amount" inputmode="decimal" placeholder="54,30" required></div>
+              <div class="field"><label for="ex-cat">Categoria</label><input id="ex-cat" list="ex-cats" required maxlength="60"><datalist id="ex-cats"></datalist></div>
+              <div class="field"><label for="ex-date">Data</label><input id="ex-date" type="date" required></div>
+              <div class="field span-2"><label for="ex-desc">Descrição</label><input id="ex-desc" required maxlength="200"></div>
+              <div class="field end"><button class="btn primary" type="submit">Registrar</button></div>
+              <p class="error span-3" role="alert" data-form-error></p>
+            </form>
+          </details>
+          <p class="note" role="status" data-note="finance"></p>
+        </section>
+      </div>
+    </section>
   </main>
+
+  <!-- Narrow screens show one pane at a time. -->
+  <nav class="panes-nav" id="panes-nav" aria-label="Painéis">
+    <button type="button" data-pane="term">Terminal</button>
+    <button type="button" data-pane="core" aria-current="page">Byte</button>
+    <button type="button" data-pane="fn">Funções<span class="badge" id="fn-badge" hidden></span></button>
+  </nav>
 </div>
 
 <template id="tpl-pending">

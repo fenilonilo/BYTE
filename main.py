@@ -18,10 +18,13 @@ from app.api.deps import (
     get_calendar,
     get_chat_model,
     get_climate,
+    get_indexer,
+    get_knowledge,
     get_light,
     get_live_port,
     get_logger,
     get_music,
+    get_project_session,
     get_reminder_hub,
     get_runner,
     get_settings,
@@ -31,11 +34,31 @@ from app.api.deps import (
 from app.api.errors import install_error_handlers
 from app.api.live import router as live_router
 from app.api.notifications import router as notifications_router, run_reminders
+from app.api.panel import router as panel_router
 from app.api.router import router
+from app.api.terminal import router as terminal_router
 from app.api.web import mount_web
+from app.application.knowledge_indexer import run_indexer
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Awaitable, Callable
+
+    from app.config import Settings
+
+
+def _migration(settings: Settings) -> Callable[[], Awaitable[None]] | None:
+    """The vector store's migration, run by the indexer loop: a database that is still starting
+    delays the project index, never the lights, reminders or voice."""
+    if settings.database_url is None:
+        return None
+    url = settings.database_url.get_secret_value()
+
+    async def migrate() -> None:
+        from app.adapters.postgres.migrate import upgrade  # noqa: PLC0415 - optional extra
+
+        await asyncio.to_thread(upgrade, url)
+
+    return migrate
 
 
 @asynccontextmanager
@@ -55,16 +78,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         music=type(get_music()).__name__,
         calendar=type(get_calendar()).__name__,
         speech=type(get_speech()).__name__,
+        knowledge=type(get_knowledge()).__name__,
+        terminal=(session := get_project_session()) is not None,
         web=settings.web,
     )
     reminders = asyncio.create_task(
         run_reminders(get_reminder_hub(), get_wall_clock(), get_logger())
     )
+    background = [reminders]
+    if (indexer := get_indexer()) is not None:
+        background.append(
+            asyncio.create_task(
+                run_indexer(
+                    indexer,
+                    settings.knowledge_scan_seconds,
+                    get_logger(),
+                    prepare=_migration(settings),
+                )
+            )
+        )
     yield
-    reminders.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await reminders
+    for task in background:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
     await runner.drain()
+    if session is not None:
+        await session.aclose()  # never leave a claude process behind the server
+    if (close := getattr(get_knowledge(), "aclose", None)) is not None:
+        await close()
 
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -74,6 +116,8 @@ app.include_router(router, prefix="/api/v1")
 app.include_router(live_router, prefix="/api/v1")
 app.include_router(control_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
+app.include_router(terminal_router, prefix="/api/v1")
+app.include_router(panel_router, prefix="/api/v1")
 install_error_handlers(app)
 
 

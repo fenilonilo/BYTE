@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from datetime import datetime
 
 SYSTEM_PROMPT = (
@@ -35,3 +36,8 @@ WEEKDAYS = (
 def now_line(now: datetime) -> str:
     """The model has no clock: one short line lets it resolve "amanhã às 9"."""
     return f"Agora: {now.isoformat(timespec='minutes')}, {WEEKDAYS[now.weekday()]}."
+
+
+def projects_line(names: Sequence[str]) -> str:
+    """Only the names: project content reaches the model through search_projects."""
+    return f"Projetos: {', '.join(names)}." if names else ""

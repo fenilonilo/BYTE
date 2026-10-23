@@ -16,8 +16,11 @@ from app.api.deps import (
     get_light,
     get_music,
     get_pending,
+    get_reminder_store,
     get_runner,
     get_settings,
+    get_weather,
+    get_weather_display,
 )
 from app.api.schemas import (
     ActionSchema,
@@ -40,13 +43,19 @@ from app.api.schemas import (
     MusicPlaySchema,
     MusicSchema,
     PendingConfirmationSchema,
+    PlaceSchema,
+    ReminderCreateSchema,
+    RemindersSchema,
     StateSchema,
+    WeatherForecastSchema,
+    WeatherSchema,
 )
 from app.application.pending_actions import NOTHING_PENDING, PendingActionStore
 from app.application.tool_runner import CONFIRM_ACTION, UNKNOWN_STATE, ToolRunner
 
 # FastAPI resolves these annotations at runtime, so they are real imports.
 from app.application.tools.music import KnownUris  # noqa: TC001
+from app.application.weather_display import WeatherDisplay
 from app.config import Settings  # noqa: TC001
 from app.domain.exceptions import (
     DomainError,
@@ -61,9 +70,13 @@ from app.ports.climate import ClimatePort  # noqa: TC001
 from app.ports.expenses import ExpensesPort  # noqa: TC001
 from app.ports.light import LightPort  # noqa: TC001
 from app.ports.music import MusicPort  # noqa: TC001
+from app.ports.reminders import ReminderStorePort  # noqa: TC001
+from app.ports.weather import WeatherPort
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
+
+    from app.domain.weather import Forecast, Place
 
 # One owner, one panel: all direct-control actions share one conversation, so there is one
 # pending action at a time and it can never be confirmed from chat or live.
@@ -76,6 +89,8 @@ router = APIRouter(dependencies=[Depends(require_token)])
 Name = Annotated[str, Path(min_length=1, max_length=64)]
 Runner = Annotated[ToolRunner, Depends(get_runner)]
 Pending = Annotated[PendingActionStore, Depends(get_pending)]
+Weather = Annotated[WeatherPort, Depends(get_weather)]
+Display = Annotated[WeatherDisplay, Depends(get_weather_display)]
 
 
 async def _run(runner: ToolRunner, tool: str, args: dict[str, object]) -> str:
@@ -308,6 +323,27 @@ async def add_expense(body: ExpenseCreateSchema, runner: Runner, pending: Pendin
     return await _act(runner, pending, "add_expense", _args(body))
 
 
+@router.get("/reminders", response_model=RemindersSchema)
+async def list_reminders(
+    store: Annotated[ReminderStorePort, Depends(get_reminder_store)],
+) -> RemindersSchema:
+    # calendar warnings are derived from the agenda, which the panel already shows
+    reminders = [r for r in await store.all() if not r.is_calendar]
+    return RemindersSchema.model_validate({"reminders": reminders})
+
+
+@router.post("/reminders", response_model=ActionSchema)
+async def create_reminder(
+    body: ReminderCreateSchema, runner: Runner, pending: Pending
+) -> ActionSchema:
+    return await _act(runner, pending, "create_reminder", _args(body))
+
+
+@router.delete("/reminders/{reminder_id}", response_model=ActionSchema)
+async def cancel_reminder(reminder_id: Name, runner: Runner, pending: Pending) -> ActionSchema:
+    return await _act(runner, pending, "cancel_reminder", {"id": reminder_id})
+
+
 @router.post("/confirm", response_model=ActionSchema)
 async def confirm(body: ConfirmSchema, runner: Runner, pending: Pending) -> ActionSchema:
     if not body.approve:
@@ -318,3 +354,42 @@ async def confirm(body: ConfirmSchema, runner: Runner, pending: Pending) -> Acti
     pending.on_user_utterance(PANEL, "sim")
     output = await _run(runner, CONFIRM_ACTION, {})
     return _action(output, pending, conflict=f"{ERROR_PREFIX}{NOTHING_PENDING}")
+
+
+async def _forecast(weather: WeatherPort, place: Place) -> Forecast | None:
+    try:
+        return await weather.forecast(place)
+    except DomainError:
+        return None
+
+
+async def _weather(weather: WeatherPort, display: WeatherDisplay) -> WeatherSchema:
+    # Like /state: the shown city and the bar chip fail on their own, never the whole body.
+    try:
+        place, home = await display.shown(), await display.home()
+    except DomainError:
+        return WeatherSchema(
+            is_home=True, home=None, forecast=None, home_now=None, errors=["forecast", "home"]
+        )
+    shown = await _forecast(weather, place)
+    at_home = shown if place == home else await _forecast(weather, home)
+    return WeatherSchema(
+        is_home=place == home,
+        home=PlaceSchema.model_validate(home),
+        forecast=None if shown is None else WeatherForecastSchema.model_validate(shown),
+        home_now=None if at_home is None else WeatherForecastSchema.model_validate(at_home).current,
+        errors=[name for name, f in (("forecast", shown), ("home", at_home)) if f is None],
+    )
+
+
+@router.get("/weather", response_model=WeatherSchema)
+async def weather_now(weather: Weather, display: Display) -> WeatherSchema:
+    return await _weather(weather, display)
+
+
+@router.delete("/weather/display", response_model=WeatherSchema)
+async def weather_home(
+    runner: Runner, pending: Pending, weather: Weather, display: Display
+) -> WeatherSchema:
+    await _act(runner, pending, "show_weather", {})
+    return await _weather(weather, display)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -7,6 +9,7 @@ from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validat
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.exceptions import ConfigError
+from app.domain.projects import PROJECT_NAME_PATTERN, Project
 
 MIN_TOKEN_LENGTH = 32
 
@@ -16,6 +19,20 @@ class TuyaLightSettings(BaseModel):
     address: str
     local_key: SecretStr
     version: float = 3.3
+
+
+class ProjectSettings(BaseModel):
+    path: str
+    docs: list[str] = ["CLAUDE.md"]
+
+    @field_validator("docs")
+    @classmethod
+    def _docs_stay_inside(cls, value: list[str]) -> list[str]:
+        for doc in value:
+            win, posix = PureWindowsPath(doc), PurePosixPath(doc)
+            if win.is_absolute() or win.anchor or posix.is_absolute() or ".." in win.parts:
+                raise ValueError("docs must be relative paths inside the project")
+        return value
 
 
 class Settings(BaseSettings):
@@ -63,6 +80,15 @@ class Settings(BaseSettings):
     # Reminders: kept in a JSON file; spoken with a local Piper voice (.onnx), beep-only if unset.
     reminders_path: str = "data/reminders.json"
     piper_model: str | None = None
+    # Weather (Spec 6): the home city, "Cidade, UF". Open-Meteo needs no key.
+    weather_home: str = "Goiânia, GO"
+    # Projects (Spec 4): name -> folder + Markdown docs to index. Empty: the feature is off.
+    projects: dict[str, ProjectSettings] = {}
+    database_url: SecretStr | None = None  # postgresql+asyncpg://...; unset: in-memory index
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_cache: str = "data/models"
+    knowledge_scan_seconds: float = Field(default=300.0, gt=0)
+    claude_command: str = "claude"
 
     model_config = SettingsConfigDict(
         env_prefix="BYTE_",
@@ -78,6 +104,21 @@ class Settings(BaseSettings):
         if len(value.get_secret_value()) < MIN_TOKEN_LENGTH:
             raise ValueError(f"must be at least {MIN_TOKEN_LENGTH} characters")
         return value
+
+    @field_validator("projects")
+    @classmethod
+    def _project_names_are_keys(
+        cls, value: dict[str, ProjectSettings]
+    ) -> dict[str, ProjectSettings]:
+        for name in value:
+            if not re.fullmatch(PROJECT_NAME_PATTERN, name):
+                raise ValueError("project names must match " + PROJECT_NAME_PATTERN)
+        return value
+
+    def project_list(self) -> tuple[Project, ...]:
+        return tuple(
+            Project(name, s.path, tuple(s.docs)) for name, s in sorted(self.projects.items())
+        )
 
     @field_validator("timezone")
     @classmethod

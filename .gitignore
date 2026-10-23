@@ -90,3 +90,4 @@ client_secret*.json
 cliente_secret*.json
 *secret*.json
 *credentials*.json
+.superpowers/

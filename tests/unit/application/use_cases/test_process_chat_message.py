@@ -187,3 +187,10 @@ async def test_system_prompt_tells_the_model_the_current_time() -> None:
     world = World([text_turn("oi")])
     await world.chat.execute(CID, "que horas são?", None)
     assert "Agora: 2026-10-21T12:00+00:00, quarta-feira." in world.model.calls[0][0][0].content
+
+
+@pytest.mark.unit
+async def test_system_prompt_names_the_projects() -> None:
+    world = World([text_turn("oi")], projects=("FinFlow",))
+    await world.chat.execute(CID, "oi", None)
+    assert "Projetos: FinFlow." in world.model.calls[0][0][0].content

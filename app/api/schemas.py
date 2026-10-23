@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domain.climate import ClimateMode, FanSpeed
 from app.domain.light import LightMode
 from app.domain.music import MediaKind, Repeat, Skip
+from app.domain.reminders import ReminderKind
+from app.domain.weather import Condition
 
 MAX_CONTENT_CHARS = 4000
 
@@ -18,6 +20,7 @@ class IncomingMessageSchema(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_CONTENT_CHARS)
     segment: str = "auto"
     conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    client: Literal["panel", "api"] = "api"
 
 
 class PendingConfirmationSchema(BaseModel):
@@ -40,6 +43,8 @@ class LiveStartSchema(BaseModel):
     type: Literal["start"]
     segment: str = "auto"
     conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    # routing, not security: every client holds the same owner token
+    client: Literal["panel", "api"] = "api"
 
 
 # --- web control panel -----------------------------------------------------------------------
@@ -149,6 +154,17 @@ class ExpensesSchema(BaseModel):
     total_cents: int
 
 
+class ReminderSchema(_View):
+    id: str
+    text: str
+    at: dt.datetime
+    kind: ReminderKind
+
+
+class RemindersSchema(BaseModel):
+    reminders: list[ReminderSchema]
+
+
 class StateSchema(BaseModel):
     lights: list[LightSchema] | None
     climates: list[ClimateSchema] | None
@@ -212,5 +228,59 @@ class ExpenseCreateSchema(_Body):
     date: dt.date
 
 
+class ReminderCreateSchema(_Body):
+    text: str = Field(min_length=1, max_length=200)
+    at: dt.datetime
+    kind: ReminderKind
+
+
 class ConfirmSchema(_Body):
     approve: bool
+
+
+class PlaceSchema(_View):
+    name: str
+    region: str
+    country: str
+    label: str
+
+
+class CurrentWeatherSchema(_View):
+    temperature: float
+    feels_like: float
+    humidity: int
+    wind_kmh: float
+    condition: Condition
+    raining: bool
+    is_day: bool
+
+
+class HourSchema(_View):
+    time: dt.datetime
+    temperature: float
+    rain_chance: int
+    condition: Condition
+    is_day: bool
+
+
+class DaySchema(_View):
+    day: dt.date
+    condition: Condition
+    low: float
+    high: float
+    rain_chance: int
+
+
+class WeatherForecastSchema(_View):
+    place: PlaceSchema
+    current: CurrentWeatherSchema
+    hours: list[HourSchema]
+    days: list[DaySchema]
+
+
+class WeatherSchema(BaseModel):
+    is_home: bool
+    home: PlaceSchema | None
+    forecast: WeatherForecastSchema | None
+    home_now: CurrentWeatherSchema | None
+    errors: list[str]  # "forecast" and/or "home"

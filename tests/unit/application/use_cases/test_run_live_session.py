@@ -330,3 +330,12 @@ async def test_volume_the_agent_sets_by_voice_survives_the_restore() -> None:
     await eventually(lambda: len(world.session.tool_results) == 1)
     await finish(world, task)
     await eventually(lambda: world.music.volume == 60)
+
+
+@pytest.mark.unit
+async def test_instructions_name_the_projects() -> None:
+    world = LiveWorld(projects=("FinFlow",))
+    task = await start_and_wait_ready(world)
+    assert world.adapter.opened_with is not None
+    assert "Projetos: FinFlow." in world.adapter.opened_with[0]
+    await finish(world, task)

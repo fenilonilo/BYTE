@@ -14,6 +14,7 @@ class ToolSpec:
     parameters: Mapping[str, object]
     segment: str
     requires_confirmation: bool = False
+    panel_only: bool = False  # offered and run only for the web panel (chat or its voice)
 
 
 @dataclass(frozen=True, slots=True)
