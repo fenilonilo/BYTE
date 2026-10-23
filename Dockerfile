@@ -9,7 +9,8 @@ COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
 
 COPY app ./app
-COPY main.py ./
+COPY main.py alembic.ini ./
+COPY migrations ./migrations
 COPY web ./web
 
 RUN useradd --system --no-create-home --uid 10001 byte     && mkdir data && chown byte data
