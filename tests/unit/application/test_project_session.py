@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.application.project_session import ProjectSession, child_env
-from app.domain.exceptions import UnknownProjectError
+from app.domain.exceptions import ProjectError, UnknownProjectError
 from app.domain.projects import Project
 from tests.fakes.logger import RecordingLogger
 from tests.fakes.terminal import FakeTerminal, RecordingListener, settle
@@ -229,3 +229,39 @@ def test_child_env_drops_the_parent_claude_session_markers() -> None:
         "HOME": "C:/u",
         "CLAUDE_CODE_USE_BEDROCK": "1",
     }
+
+
+class BrokenStart(FakeTerminal):
+    async def start(self, *args: object, **kwargs: object) -> None:
+        raise ProjectError("spawn failed")
+
+
+class BrokenStop(FakeTerminal):
+    async def stop(self) -> None:
+        await super().stop()
+        raise ProjectError("kill failed")
+
+
+@pytest.mark.unit
+async def test_failed_start_tells_the_panel_nothing_is_open() -> None:
+    terminal = BrokenStart()
+    session = ProjectSession(terminal, [BYTE], ["claude"], {}, RecordingLogger())
+    listener = RecordingListener()
+    await session.attach(listener)
+    with pytest.raises(ProjectError):
+        await session.open("Byte")
+    assert session.current is None
+    assert listener.states == [None, None]
+
+
+@pytest.mark.unit
+async def test_failed_stop_still_resets_the_session() -> None:
+    terminal = BrokenStop()
+    session = ProjectSession(terminal, [BYTE], ["claude"], {}, RecordingLogger())
+    listener = RecordingListener()
+    await session.attach(listener)
+    await session.open("Byte")
+    with pytest.raises(ProjectError):
+        await session.close()
+    assert session.current is None
+    assert listener.states[-1] is None

@@ -95,22 +95,26 @@ class ProjectSession:
         project = self._projects.get(name)
         if project is None:
             raise UnknownProjectError(f"projeto desconhecido; válidos: {', '.join(self._projects)}")
-        async with self._lock:
-            await self._stop()
-            await self._terminal.start(project.path, self._command, self._env, *self._size)
-            self._current = name
-            self._reader = asyncio.create_task(self._pump(name))
-        self._log.info("project.opened", project=name)
-        await self._broadcast_state()
+        try:
+            async with self._lock:
+                await self._stop()
+                await self._terminal.start(project.path, self._command, self._env, *self._size)
+                self._current = name
+                self._reader = asyncio.create_task(self._pump(name))
+            self._log.info("project.opened", project=name)
+        finally:  # a failed start still killed the old project: the panel must know
+            await self._broadcast_state()
 
     async def close(self) -> bool:
         async with self._lock:
             name = self._current
             if name is None:
                 return False
-            await self._stop()
+            try:
+                await self._stop()
+            finally:
+                await self._broadcast_state()
         self._log.info("project.closed", project=name)
-        await self._broadcast_state()
         return True
 
     async def attach(self, listener: TerminalListener) -> None:
@@ -143,10 +147,12 @@ class ProjectSession:
             reader.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await reader
-        if self._current is not None:
-            await self._terminal.stop()
-        self._current = None
-        self._buffer.clear()
+        try:
+            if self._current is not None:
+                await self._terminal.stop()
+        finally:  # whatever the kill did, this session is over
+            self._current = None
+            self._buffer.clear()
 
     async def _pump(self, name: str) -> None:
         # read even with nobody attached: a full pipe would block the process

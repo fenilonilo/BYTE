@@ -171,3 +171,28 @@ async def test_run_indexer_survives_scan_error() -> None:
     assert scans == 2
     assert sleeps == [300, 300]
     assert "knowledge.scan_failed" in w.log.names()
+
+
+@pytest.mark.unit
+async def test_run_indexer_retries_prepare_before_scanning() -> None:
+    w = World()
+    attempts = 0
+
+    async def prepare() -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("database starting")
+
+    sleeps: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise StopAsyncIteration
+
+    with pytest.raises(StopAsyncIteration):
+        await run_indexer(w.indexer(), 300, w.log, prepare=prepare, sleep=sleep)
+    assert attempts == 2
+    assert await w.store.documents() == (REF,)  # scanned only once prepare succeeded
+    assert "knowledge.prepare_failed" in w.log.names()

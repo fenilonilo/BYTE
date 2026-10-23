@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from typing import TYPE_CHECKING
 
 from winpty import PtyProcess
@@ -61,19 +62,23 @@ class WinPtyTerminal(ProjectTerminalPort):
         proc, self._proc = self._proc, None
         if proc is None:
             return
-        if proc.isalive():
-            # claude spawns node and tool processes: kill the whole tree, not just the shell
-            killer = await asyncio.create_subprocess_exec(
-                "taskkill",
-                "/PID",
-                str(proc.pid),
-                "/T",
-                "/F",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await killer.wait()
-        await asyncio.to_thread(proc.close, True)
+        try:
+            await asyncio.to_thread(_kill_tree, proc)
+        except Exception as exc:
+            raise ProjectError("could not stop the project terminal") from exc
+
+
+def _kill_tree(proc: PtyProcess) -> None:
+    # claude spawns node and tool processes: kill the whole tree, not just the shell.
+    # subprocess.run in a thread, not asyncio's: uvicorn --reload runs a SelectorEventLoop,
+    # which cannot spawn subprocesses on Windows.
+    if proc.isalive():
+        subprocess.run(  # noqa: S603 - fixed argv, pid from our own child
+            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],  # noqa: S607 - Windows system tool
+            capture_output=True,
+            check=False,
+        )
+    proc.close(True)
 
 
 def _read(proc: PtyProcess) -> bytes:

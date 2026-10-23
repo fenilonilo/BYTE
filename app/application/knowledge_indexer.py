@@ -89,13 +89,25 @@ async def run_indexer(
     every: float,
     log: LoggerPort,
     *,
+    prepare: Callable[[], Awaitable[None]] | None = None,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> None:
-    """Background loop of the lifespan: scan now, then every `every` seconds."""
+    """Background loop of the lifespan: scan now, then every `every` seconds.
+
+    `prepare` (the database migration) is retried each round until it succeeds, so a
+    database that comes up after Byte delays the index instead of the whole assistant."""
     # ponytail: polling by hash; a file watcher if minutes of staleness ever matter
+    ready = prepare is None
     while True:
         try:
-            await indexer.scan()
-        except Exception as exc:  # the loop must outlive any one scan
-            log.error("knowledge.scan_failed", error=type(exc).__name__)
+            if not ready and prepare is not None:
+                await prepare()
+                ready = True
+        except Exception as exc:  # the loop must outlive an unreachable database
+            log.error("knowledge.prepare_failed", error=type(exc).__name__)
+        if ready:
+            try:
+                await indexer.scan()
+            except Exception as exc:  # the loop must outlive any one scan
+                log.error("knowledge.scan_failed", error=type(exc).__name__)
         await sleep(every)

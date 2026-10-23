@@ -40,7 +40,24 @@ from app.api.web import mount_web
 from app.application.knowledge_indexer import run_indexer
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Awaitable, Callable
+
+    from app.config import Settings
+
+
+def _migration(settings: Settings) -> Callable[[], Awaitable[None]] | None:
+    """The vector store's migration, run by the indexer loop: a database that is still starting
+    delays the project index, never the lights, reminders or voice."""
+    if settings.database_url is None:
+        return None
+    url = settings.database_url.get_secret_value()
+
+    async def migrate() -> None:
+        from app.adapters.postgres.migrate import upgrade  # noqa: PLC0415 - optional extra
+
+        await asyncio.to_thread(upgrade, url)
+
+    return migrate
 
 
 @asynccontextmanager
@@ -49,10 +66,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     configure_logging(settings.log_level, json=not sys.stdout.isatty())
     if settings.web:
         mount_web(app, WEB_DIR)
-    if settings.database_url is not None:
-        from app.adapters.postgres.migrate import upgrade  # noqa: PLC0415 - optional extra
-
-        await asyncio.to_thread(upgrade, settings.database_url.get_secret_value())
     get_chat_model()
     get_live_port()
     runner = get_runner()
@@ -74,7 +87,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     background = [reminders]
     if (indexer := get_indexer()) is not None:
         background.append(
-            asyncio.create_task(run_indexer(indexer, settings.knowledge_scan_seconds, get_logger()))
+            asyncio.create_task(
+                run_indexer(
+                    indexer,
+                    settings.knowledge_scan_seconds,
+                    get_logger(),
+                    prepare=_migration(settings),
+                )
+            )
         )
     yield
     for task in background:

@@ -92,3 +92,17 @@ def test_boot_indexes_the_projects_and_stops_cleanly(
                 break
             time.sleep(0.01)
         assert refs == (DocumentRef("Byte", "CLAUDE.md"),)
+
+
+@pytest.mark.unit
+def test_boot_survives_an_unreachable_database(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "CLAUDE.md").write_text("# Byte", encoding="utf-8")
+    monkeypatch.setenv("BYTE_API_TOKEN", "k" * 32)
+    monkeypatch.setenv("BYTE_OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("BYTE_PROJECTS", json.dumps({"Byte": {"path": str(tmp_path)}}))
+    monkeypatch.setenv("BYTE_DATABASE_URL", "postgresql+asyncpg://byte:x@127.0.0.1:1/byte")
+    monkeypatch.setattr(deps, "get_embedder", FakeEmbedder)
+    with TestClient(app) as client:
+        assert client.get("/api/v1/health").status_code == 200

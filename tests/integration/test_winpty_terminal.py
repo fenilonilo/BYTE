@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 
@@ -40,3 +41,16 @@ async def test_stop_kills_a_running_process() -> None:
     assert not terminal.alive
     assert await read_all(terminal) is not None
     await terminal.stop()  # idempotent
+
+
+def test_stop_works_on_a_selector_loop() -> None:
+    """uvicorn --reload runs a SelectorEventLoop, which cannot spawn asyncio subprocesses."""
+    from app.adapters.pty.winpty_terminal import WinPtyTerminal  # noqa: PLC0415 - win32 only
+
+    async def main() -> bool:
+        terminal = WinPtyTerminal()
+        await terminal.start(os.getcwd(), ["cmd"], dict(os.environ), 80, 24)
+        await terminal.stop()
+        return terminal.alive
+
+    assert asyncio.run(main(), loop_factory=asyncio.SelectorEventLoop) is False
