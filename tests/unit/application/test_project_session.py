@@ -211,3 +211,21 @@ async def test_aclose_stops_terminal() -> None:
     await session.aclose()
     assert terminal.stops == 1
     assert session.current is None
+
+
+@pytest.mark.unit
+def test_child_env_drops_the_parent_claude_session_markers() -> None:
+    parent = {
+        "CLAUDECODE": "1",
+        "CLAUDE_PID": "42",
+        "CLAUDE_CODE_CHILD_SESSION": "1",
+        "CLAUDE_CODE_ENTRYPOINT": "cli",
+        "CLAUDE_CODE_SESSION_ID": "s",
+        "CLAUDE_CODE_MESSAGING_TOKEN": "t",
+        "CLAUDE_CODE_USE_BEDROCK": "1",  # owner config: must survive
+    }
+    assert child_env({**ENV, **parent}) == {
+        "PATH": "C:/bin",
+        "HOME": "C:/u",
+        "CLAUDE_CODE_USE_BEDROCK": "1",
+    }

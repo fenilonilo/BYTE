@@ -16,15 +16,33 @@ if TYPE_CHECKING:
 
 DEFAULT_SIZE = (120, 30)
 PROVIDER_KEYS = frozenset({"OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"})
+# Markers of a parent `claude` session (Byte started from inside Claude Code). Inherited, they
+# make the new session think it is a child and hand it the parent's messaging token.
+CLAUDE_SESSION_KEYS = frozenset(
+    {
+        "CLAUDECODE",
+        "CLAUDE_PID",
+        "CLAUDE_EFFORT",
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CODE_EXECPATH",
+    }
+)
+CLAUDE_SESSION_PREFIXES = ("CLAUDE_CODE_SESSION_", "CLAUDE_CODE_MESSAGING_")
+
+
+def _secret_or_inherited(name: str) -> bool:
+    key = name.upper()
+    return (
+        key.startswith(("BYTE_", *CLAUDE_SESSION_PREFIXES))
+        or key in PROVIDER_KEYS
+        or key in CLAUDE_SESSION_KEYS
+    )
 
 
 def child_env(environ: Mapping[str, str]) -> dict[str, str]:
-    """The server's environment minus Byte's own secrets: `claude` must never read our token."""
-    return {
-        k: v
-        for k, v in environ.items()
-        if not k.upper().startswith("BYTE_") and k.upper() not in PROVIDER_KEYS
-    }
+    """The server's environment minus Byte's secrets and any parent Claude session's markers."""
+    return {k: v for k, v in environ.items() if not _secret_or_inherited(k)}
 
 
 class TerminalListener(ABC):
