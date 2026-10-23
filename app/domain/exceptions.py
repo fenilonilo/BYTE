@@ -97,6 +97,18 @@ class UnknownProjectError(ProjectError):
     """Raised when a project name is not in the configured list."""
 
 
+class WeatherError(DomainError):
+    """Raised when a weather lookup fails."""
+
+
+class UnknownPlaceError(WeatherError):
+    """Raised when no city matches the name the model gave."""
+
+
+class WeatherUnavailableError(WeatherError):
+    """Raised when the weather service fails or returns something unreadable."""
+
+
 def failure_reason(exc: BaseException) -> str:
     """Short, content-free category for logs: guard, offline, validation or upstream."""
     # ponytail: domain validators raise plain LightError/MusicError, so those read as upstream

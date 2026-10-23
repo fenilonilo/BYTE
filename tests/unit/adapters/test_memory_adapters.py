@@ -5,12 +5,15 @@ import pytest
 from app.adapters.memory.in_memory_calendar import InMemoryCalendar
 from app.adapters.memory.in_memory_conversation_store import InMemoryConversationStore
 from app.adapters.memory.in_memory_expenses import InMemoryExpenses
+from app.adapters.memory.in_memory_weather import GOIANIA, InMemoryWeather
+from app.domain.weather import Condition
 from tests.contracts.calendar_contract import CalendarPortContract
 from tests.contracts.conversation_store_contract import (
     ConversationStorePortContract,
     msg,
 )
 from tests.contracts.expenses_contract import ExpensesPortContract
+from tests.contracts.weather_contract import WeatherPortContract
 
 
 @pytest.mark.unit
@@ -45,3 +48,16 @@ class TestInMemoryConversationStore(ConversationStorePortContract):
         await store.append("b", [msg(2)])
         await store.append("a", [msg(3)])
         assert [m.id for m in await store.recent("a", 20)] == ["m3"]
+
+
+@pytest.mark.unit
+class TestInMemoryWeather(WeatherPortContract):
+    def make(self) -> InMemoryWeather:
+        return InMemoryWeather()
+
+
+@pytest.mark.unit
+async def test_in_memory_weather_can_be_raining() -> None:
+    current = (await InMemoryWeather(raining=True).forecast(GOIANIA)).current
+    assert current.raining is True
+    assert current.condition is Condition.RAIN
