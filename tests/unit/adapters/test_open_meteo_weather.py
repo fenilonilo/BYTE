@@ -7,7 +7,8 @@ from typing import Any, Self
 import aiohttp
 import pytest
 
-from app.adapters.openmeteo.open_meteo_weather import OpenMeteoWeather, condition
+from app.adapters.openmeteo.open_meteo_weather import HTTP_TIMEOUT, OpenMeteoWeather, condition
+from app.config import Settings
 from app.domain.exceptions import UnknownPlaceError, WeatherUnavailableError
 from app.domain.weather import Condition, Place
 from tests.fakes.clock import FakeClock
@@ -221,3 +222,10 @@ async def test_network_error_becomes_unavailable() -> None:
 async def test_unreadable_body_becomes_unavailable() -> None:
     with pytest.raises(WeatherUnavailableError):
         await adapter(FakeResponse(200, {"current": {}})).forecast(GOIANIA)
+
+
+def test_geocoding_plus_forecast_fit_inside_the_tool_timeout() -> None:
+    # A cold lookup makes two calls in a row; both must fail before ToolRunner gives up,
+    # or the owner hears "estado desconhecido" instead of "Previsão indisponível agora."
+    tool_timeout = Settings.model_fields["tool_timeout_seconds"].default
+    assert tool_timeout > 2 * HTTP_TIMEOUT

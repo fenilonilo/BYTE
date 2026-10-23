@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 FORECAST_TTL = 600.0
+HTTP_TIMEOUT = 4.0  # two calls in a row must fail before the 10 s tool timeout
 HOURS = 24
 OK = 200
 FORECAST_PARAMS = {
@@ -126,7 +127,7 @@ class OpenMeteoWeather(WeatherPort):
 
     def _http(self) -> aiohttp.ClientSession:
         if self._session is None:
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT))
         return self._session
 
     async def _get(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
