@@ -149,10 +149,23 @@ Schemas in `api/schemas.py` (`WeatherSchema`, …). When both fail the body stil
 with both `null`; the panel shows the section error like the other sections (*builder's call*,
 mirrors `/state`).
 
-`GET /state` gains one additive field, `weather_shown` (the displayed place's name, or `null` for
-home). The panel compares it on each 20 s poll and reloads `/weather` when it changes — so a
-`show_weather` from the ESP32, which the panel's own sockets never see, shows up within ~20 s
-(*builder's call*). Bearer auth as everywhere.
+**Instant switch (owner's requirement).** A `show_weather` — from the panel, chat or the ESP32 —
+must reach an open panel at once, not on a poll. New socket:
+
+| Route | Purpose |
+|---|---|
+| `WS /ws/panel` | Server → panel pushes. Today one message: `{"type":"weather"}` sent whenever `WeatherDisplay` changes (set or reset). The panel reacts by reloading `GET /weather`. One listener; a new connection replaces the old (close 4000), like `/ws/notifications` and `/ws/terminal`. |
+
+- Auth exactly like the other panel sockets: bearer token as the `["bearer", <token>]`
+  subprotocol (`accept_authorized` in `api/auth.py`). Never in the URL.
+- `WeatherDisplay` takes an optional listener (an ABC in `application/`, same pattern as
+  `TerminalListener` in `project_session.py`); the socket handler registers itself as it. A failed
+  send must not fail the tool: the tool's result does not depend on whether a panel is open.
+- The panel keeps the socket open while signed in and reconnects with backoff; on every (re)connect
+  it reloads `/weather`, so a change made while it was disconnected is never missed.
+- The message carries no data on purpose: the panel always reads the truth from `GET /weather`.
+- *Builder's call*: the socket is generic (`/ws/panel`, typed messages) so later pushes (a light
+  switched by voice) can reuse it — but only `weather` is built now. Bearer auth as everywhere.
 
 ### Panel (`web/`)
 
@@ -176,9 +189,8 @@ Layout A — "Instrumento" (mockup kept at
   in `style.css`: drifting cloud, falling drops, slowly turning sun rays, a flash for storm. All
   motion off under `prefers-reduced-motion`.
 - New colour token `--rain` (≈ `#7fb3d5`) on `:root`.
-- **Refresh**: on load, every 10 minutes, after each chat reply, and on each live `turn_done`
-  (so "mostra Floripa" by voice shows up without waiting for the session to end). Not part of the
-  20 s `/state` poll. A refresh that changed nothing leaves the section alone (same rule as
+- **Refresh**: on load, every 10 minutes, on every `/ws/panel` `weather` message, and on every
+  `/ws/panel` (re)connect. Not part of the 20 s `/state` poll. A refresh that changed nothing leaves the section alone (same rule as
   `applyState`), so animations do not restart.
 - **No weather provider configured switch**: Open-Meteo needs no key, so production always uses
   it; if it is down, the chip hides and the section shows the usual section error.
@@ -209,7 +221,11 @@ state), `.env.example`, `docs/web-api-contract.md`.
 - Cache: second call within 10 min does not hit HTTP; after 10 min it does (injected clock).
 - Tools: `get_weather` default home, `days` bounds, unknown city, unavailable; `show_weather`
   sets/resets `WeatherDisplay`.
-- API: `GET /weather` home vs displayed, `DELETE /weather/display`, 401, 502.
+- API: `GET /weather` home vs displayed, partial failure (`null` + `errors`), `DELETE
+  /weather/display`, 401.
+- `/ws/panel`: rejects a missing/wrong token; `show_weather` and `DELETE /weather/display` push
+  `{"type":"weather"}`; a second connection replaces the first (4000); a dead listener does not
+  break the tool.
 - Port contract suite against `InMemoryWeather`; against `OpenMeteoWeather` under `integration`.
 
 ## Left to the builder
