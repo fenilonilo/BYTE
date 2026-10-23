@@ -1,6 +1,8 @@
 import { api, MOCK, token } from './api.js';
 import { IDLE_WARN_SECONDS, createVoice } from './live.js';
 import { createSphere } from './sphere.js';
+import { createTerminal } from './terminal.js';
+import { countdown, elapsed, urgency } from './time.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -29,12 +31,15 @@ const ICON = {
   shuffle: 'M2 4.5h2.5c3 0 4 7 7 7H14M2 11.5h2.5c1.2 0 2-1 2.7-2.3M9 6.6C9.6 5.4 10.3 4.5 11.5 4.5H14M12.5 3 14 4.5 12.5 6M12.5 10 14 11.5 12.5 13',
   trash: 'M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5',
   minus: 'M3.5 8h9', plus: 'M3.5 8h9M8 3.5v9',
+  bell: 'M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3', alarm: 'M8 4.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM8 6.5V9l1.5 1M2.5 4 4.5 2M13.5 4l-2-2',
 };
 
 const MODES = { cool: 'frio', dry: 'seco', fan: 'ventilar', auto: 'auto' };
 const FANS = { auto: 'auto', low: 'baixa', mid: 'média', high: 'alta', nature: 'natural' };
 const KINDS = { track: 'faixa', album: 'álbum', playlist: 'playlist', artist: 'artista' };
 const AGENT_LABEL = { idle: 'em espera', listening: 'ouvindo', thinking: 'pensando', speaking: 'falando' };
+const VOICE_LABEL = { off: 'desligada', wake: 'esperando “Ei Byte”', connecting: 'conectando', listening: 'ouvindo', thinking: 'pensando', speaking: 'falando' };
+const SECTION_TAG = { lights: 'luzes', climate: 'clima', music: 'música', agenda: 'agenda', finance: 'finanças', alerts: 'alertas' };
 
 const brl = (cents) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const localDate = (d = new Date()) => d.toLocaleDateString('sv-SE');
@@ -49,7 +54,44 @@ const tzOffset = () => {
 };
 const temp = (t) => t.toLocaleString('pt-BR', { minimumFractionDigits: t % 1 ? 1 : 0, maximumFractionDigits: 1 });
 
-const state = { lights: null, climates: null, music: null, devices: null, conversationId: null };
+const state = { lights: null, climates: null, music: null, devices: null, reminders: null, conversationId: null, since: 0 };
+// ---------------------------------------------------------------- terminal
+
+const hm = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const term = createTerminal({
+  out: $('#term-out'), form: $('#term-form'), input: $('#term-input'),
+  commands: {
+    status: { help: 'estado do agente, da voz e da conversa', run: () => {
+      renderAgent();
+      return [...document.querySelectorAll('.facts > div')]
+        .map((d) => `${$('dt', d).textContent.padEnd(16)} ${$('dd', d).textContent}`).join('\n');
+    } },
+    lembretes: { help: 'lembretes e alarmes pendentes', run: async () => {
+      await loadReminders(true);
+      if (!state.reminders?.length) return 'nenhum lembrete ou alarme';
+      return state.reminders.map((r) => {
+        const ms = new Date(r.at) - Date.now();
+        return `${(ms > 0 ? countdown(ms) : dueWord(r)).padEnd(8)} ${r.text} · ${r.kind} ${hm(new Date(r.at))} · ${r.id}`;
+      }).join('\n');
+    } },
+    luzes: { help: 'estado das luzes', run: () => (state.lights?.length
+      ? state.lights.map((l) => `${l.name.padEnd(14)} ${lightMeta(l)}`).join('\n') : 'nenhuma luz lida') },
+    agenda: { help: 'eventos de hoje', run: async () => {
+      const { events } = await api.events(localDate());
+      return events.length
+        ? events.map((e) => `${hm(new Date(e.start))}  ${e.title} (${e.duration_minutes} min)`).join('\n') : 'nada hoje';
+    } },
+    atualizar: { help: 'relê casa, lembretes, agenda e gastos', run: async () => {
+      await Promise.all([refreshAll(null), loadReminders(true), loadAgenda(true), loadFinance(true)]);
+      return 'ok';
+    } },
+    falar: { help: 'abre ou fecha a conversa por voz', run: () => { voice.toggle(); } },
+    nova: { help: 'começa uma conversa de chat nova', run: () => { newConversation(); } },
+    hora: { help: 'data e hora local', run: () => new Date().toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'medium' }) },
+    sair: { help: 'encerra a sessão do painel', run: () => { signOut(); } },
+  },
+});
+
 let sphere = null;
 let busy = 0;
 let speaking = 0;
@@ -92,6 +134,7 @@ function note(section, text, isError = false) {
   if (!el) return;
   el.textContent = section === 'climate' ? climateText(text) : text;
   el.classList.toggle('error', isError);
+  if (text) term.log(SECTION_TAG[section] || section, el.textContent, isError ? 'error' : '');
   clearTimeout(noteTimers[section]);
   if (!isError) noteTimers[section] = setTimeout(() => { el.textContent = ''; }, 6000);
 }
@@ -506,12 +549,110 @@ async function loadFinance(quiet = false) {
   }
 }
 
+// ---------------------------------------------------------------- reminders and alarms
+
+// Ids already announced as due, so the terminal says "tocando" once per reminder.
+const announced = new Set();
+const whenText = (d) => d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const dueWord = (r) => (r.kind === 'alarme' ? 'tocando' : 'agora');
+
+function reminderRow(r) {
+  const at = new Date(r.at);
+  const alarm = r.kind === 'alarme';
+  return h('li', { class: `reminder${alarm ? ' alarm' : ''}`, 'data-id': r.id },
+    h('span', { class: 'kind', title: r.kind }, svg(alarm ? ICON.alarm : ICON.bell)),
+    h('div', { style: 'min-width:0' },
+      h('div', { class: 'row-title' }, r.text),
+      h('div', { class: 'row-meta' }, `${r.kind} · ${whenText(at)}`)),
+    h('span', { class: 'left', 'data-at': at.getTime() }, countdown(at - Date.now())),
+    h('button', {
+      class: 'icon-btn', type: 'button', 'aria-label': `Cancelar ${r.kind} ${r.text}`,
+      onclick: () => runAction('alerts', () => api.cancelReminder(r.id)),
+    }, svg(ICON.trash)));
+}
+
+async function loadReminders(quiet = false) {
+  const list = $('#alerts-list');
+  if (!quiet) list.replaceChildren(h('li', {}, skeleton()));
+  try {
+    const { reminders } = await api.reminders();
+    if (!token.get()) return;
+    const ids = new Set(reminders.map((r) => r.id));
+    for (const old of state.reminders || []) {
+      // Gone after its time = the device played it and acked; gone before = cancelled elsewhere.
+      if (!ids.has(old.id) && new Date(old.at) <= Date.now()) term.log(old.kind, `${old.text}: concluído`, 'alert');
+    }
+    state.reminders = reminders.sort((a, b) => new Date(a.at) - new Date(b.at));
+    if (quiet && inUse(list)) return tickAlerts();
+    list.replaceChildren(...(reminders.length ? state.reminders.map(reminderRow)
+      : [h('li', {}, empty('Nenhum lembrete ou alarme.', 'Crie um abaixo ou peça ao Byte: “me lembra às 18h de ligar pro João”.'))]));
+  } catch (err) {
+    if (err.status === 401) return handleError('alerts', err);
+    if (!quiet || !state.reminders) list.replaceChildren(h('li', {}, sectionError('Não consegui ler os lembretes.', () => loadReminders())));
+  }
+  tickAlerts();
+}
+
+// Runs every second: countdowns, urgency, the bar's "next" chip and the Funções badge.
+function tickAlerts() {
+  const now = Date.now();
+  let due = 0;
+  for (const el of document.querySelectorAll('#alerts-list [data-at]')) {
+    const ms = Number(el.dataset.at) - now;
+    const level = urgency(ms);
+    const row = el.closest('li');
+    const r = state.reminders?.find((x) => x.id === row.dataset.id);
+    el.textContent = level === 'due' ? dueWord(r || {}) : countdown(ms);
+    row.classList.toggle('soon', level === 'soon');
+    row.classList.toggle('due', level === 'due');
+    if (level === 'due') {
+      due++;
+      if (r && !announced.has(r.id)) {
+        announced.add(r.id);
+        term.log(r.kind, `${r.text}: ${dueWord(r)}`, 'alert');
+      }
+    }
+  }
+  const next = state.reminders?.[0];
+  const chip = $('#next-alert');
+  chip.hidden = !next;
+  if (next) {
+    const ms = new Date(next.at) - now;
+    const level = urgency(ms);
+    chip.className = `next-alert ${level}`;
+    chip.replaceChildren(svg(next.kind === 'alarme' ? ICON.alarm : ICON.bell),
+      h('span', { class: 'na-text' }, next.text),
+      h('span', { class: 'na-left' }, level === 'due' ? dueWord(next) : countdown(ms)));
+    chip.setAttribute('aria-label', `Próximo ${next.kind}: ${next.text}, ${level === 'due' ? dueWord(next) : `em ${countdown(ms)}`}`);
+  }
+  const badge = $('#fn-badge');
+  badge.hidden = !due;
+  badge.textContent = due || '';
+}
+
+// A datetime-local value (local wall time) for `d`, minutes precision.
+const localInput = (d) => `${localDate(d)}T${d.toTimeString().slice(0, 5)}`;
+
+function submitAlert(e) {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const text = $('#al-text');
+  const at = $('#al-at');
+  const when = at.value ? new Date(at.value) : null;
+  const bad = [!text.value.trim() && text, !(when > Date.now()) && at].filter(Boolean);
+  if (formError(form, bad, bad.length ? 'Escreva o lembrete e escolha um horário no futuro.' : '')) return;
+  runAction('alerts', () => api.createReminder({
+    text: text.value.trim(), at: `${at.value}:00${tzOffset()}`, kind: $('#al-kind').value,
+  }), () => { text.value = ''; at.value = localInput(new Date(Date.now() + 10 * 60_000)); });
+}
+
 // ---------------------------------------------------------------- refresh
 
 const RENDER = { lights: renderLights, climate: renderClimate, music: renderMusic };
 const BOX = { lights: '#lights-list', climate: '#climate-list', music: '#music-now' };
 
 async function refreshAll(section, quiet = false) {
+  if (section === 'alerts') return loadReminders(quiet);
   if (section === 'agenda') return loadAgenda(quiet);
   if (section === 'finance') return loadFinance(quiet);
   try {
@@ -536,9 +677,10 @@ function applyState(s, quiet) {
 
 // ---------------------------------------------------------------- chat
 
+// Only typed chat lands here; speech goes to the terminal.
 function addMsg(kind, text) {
   const box = $('#transcript');
-  $('.t-empty', box)?.remove();
+  box.hidden = false;
   const who = { me: 'você', agent: 'byte', error: 'erro', system: 'sys' }[kind];
   const body = h('span', { class: 'body' }, text);
   const msg = h('p', { class: `msg ${kind}` }, h('span', { class: 'who' }, who), body);
@@ -613,14 +755,17 @@ const voice = createVoice({
   getConversationId: () => state.conversationId,
   onConversation: (id) => { state.conversationId = id; },
   onLevel: (x) => sphere?.setLevel(x),
-  onNotice: voiceNote,
+  onNotice: (text, isError) => {
+    voiceNote(text, isError);
+    if (isError && text) term.log('voz', text, 'error');
+  },
   onClosing: (on) => {
     $('#voice').style.setProperty('--closing', `${IDLE_WARN_SECONDS}s`);
     $('#voice').toggleAttribute('data-closing', on);
   },
   onTranscript: (role, text) => {
     if (role === 'user') clearPending($('#transcript')); // a spoken utterance drops it server-side too
-    addMsg(role === 'user' ? 'me' : 'agent', text);
+    term.log('voz', `${role === 'user' ? 'você' : 'byte'}: ${text}`, 'voice');
   },
   onState: (next) => {
     const wasLive = Boolean(VOICE_AGENT[voiceState]);
@@ -628,10 +773,33 @@ const voice = createVoice({
     $('#voice').dataset.voice = next;
     $('#talk-word').textContent = TALK_WORD[next];
     $('#talk').setAttribute('aria-label', VOICE_AGENT[next] ? `${TALK_WORD[next]}. Parar a conversa por voz` : 'Falar com o Byte');
-    if (wasLive && !VOICE_AGENT[next]) refreshAll(null, true); // tools may have changed the house
+    if (!wasLive && VOICE_AGENT[next]) term.log('voz', 'conversa por voz aberta', 'voice');
+    if (wasLive && !VOICE_AGENT[next]) {
+      term.log('voz', 'conversa por voz encerrada', 'voice');
+      refreshAll(null, true); // tools may have changed the house
+      loadReminders(true);
+    }
     idleOrListening();
   },
 });
+
+function renderAgent() {
+  const set = (id, text) => { const el = $(id); if (el.textContent !== text) el.textContent = text; };
+  set('#ag-state', $('#agent-state').textContent);
+  set('#ag-voice', VOICE_LABEL[voiceState] || voiceState);
+  set('#ag-wake', $('#wake-toggle').getAttribute('aria-pressed') === 'true' ? 'ligada' : 'desligada');
+  set('#ag-conv', state.conversationId || 'nova');
+  set('#ag-pending', $('.pending .summary')?.textContent || 'nenhuma');
+  set('#ag-uptime', elapsed(Date.now() - state.since));
+}
+
+function newConversation() {
+  state.conversationId = null;
+  clearPending($('#transcript'));
+  $('#transcript').replaceChildren();
+  $('#transcript').hidden = true;
+  term.log('chat', 'nova conversa');
+}
 
 function setWakeUi(on) {
   $('#wake-toggle').setAttribute('aria-pressed', String(on));
@@ -678,8 +846,14 @@ function wipePanel() {
   Object.assign(state, { lights: null, climates: null, music: null, devices: null, conversationId: null });
   devicesAt = 0;
   $('#music-devices').replaceChildren();
-  $('#transcript').replaceChildren(h('p', { class: 't-empty' }, 'Escreva para o Byte. Ações destrutivas sempre pedem confirmação aqui.'));
-  [...Object.values(BOX), '#agenda-list', '#finance-list'].forEach((sel) => $(sel).replaceChildren());
+  $('#transcript').replaceChildren();
+  $('#transcript').hidden = true;
+  state.reminders = null;
+  announced.clear();
+  term.wipe();
+  $('#next-alert').hidden = true;
+  $('#fn-badge').hidden = true;
+  [...Object.values(BOX), '#agenda-list', '#finance-list', '#alerts-list'].forEach((sel) => $(sel).replaceChildren());
   $('#music-results').replaceChildren(h('li', {}, h('div', { class: 'empty-state' }, 'Busque uma faixa ou abra suas playlists.')));
   $('#finance-total').textContent = '—';
   $('#ex-cats').replaceChildren();
@@ -726,23 +900,33 @@ function enter(initial) {
   $('#gate').hidden = true;
   $('#app').hidden = false;
   if (!sphere) sphere = createSphere($('#orb'));
+  state.since = Date.now();
+  term.log('sys', `painel conectado${MOCK ? ' (mock)' : ''}. Digite help para ver os comandos.`);
   setAgent('idle');
   applyState(initial, false);
   if (initial.pending_confirmation) showPanelPending(initial.pending_confirmation.summary, null);
+  loadReminders();
   loadAgenda();
   loadFinance();
   armStoredWake();
+  const tick = () => {
+    $('#clock').textContent = new Date().toLocaleTimeString('pt-BR');
+    tickMusic();
+    tickAlerts();
+    renderAgent();
+  };
+  tick();
   timers.push(
-    setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }, 1000),
-    setInterval(tickMusic, 1000),
-    // ponytail: polling every 20 s; switch to /ws/notifications pushes once it exists.
+    setInterval(tick, 1000),
+    // ponytail: polling; /ws/notifications has one listener and it belongs to the device.
     setInterval(() => { if (!document.hidden && busy === 0) refreshAll(null, true); }, 20_000),
+    setInterval(() => { if (!document.hidden) loadReminders(true); }, 10_000),
   );
 }
 
 // ---------------------------------------------------------------- wiring
 
-// Marks the section nav link whose section sits in the upper band of the viewport.
+// Marks the section nav link whose section sits in the upper band of the Funções pane.
 function trackSections() {
   const links = [...document.querySelectorAll('.index a')];
   const seen = new Set();
@@ -751,8 +935,18 @@ function trackSections() {
     const current = links.find((a) => seen.has(a.hash.slice(1)));
     if (!current) return;
     links.forEach((a) => (a === current ? a.setAttribute('aria-current', 'location') : a.removeAttribute('aria-current')));
-  }, { rootMargin: '-110px 0px -55% 0px' });
+  }, { root: $('#pane-fn'), rootMargin: '-56px 0px -55% 0px' });
   links.forEach((a) => io.observe($(a.hash)));
+}
+
+// Narrow screens show one pane; the others stay mounted (voice and timers keep running).
+function showPane(name) {
+  $('#shell').dataset.pane = name;
+  document.querySelectorAll('#panes-nav button').forEach((b) => {
+    if (b.dataset.pane === name) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  if (name === 'term' && matchMedia('(pointer: fine)').matches) $('#term-input').focus({ preventScroll: true });
 }
 
 // Connect devices come and go (a Chromecast sleeps), so the list reloads whenever Música comes
@@ -770,8 +964,17 @@ function wire() {
   $('#gate-form').addEventListener('submit', signIn);
   $('#logout').addEventListener('click', () => signOut());
 
+  document.querySelectorAll('#panes-nav button').forEach((b) => b.addEventListener('click', () => showPane(b.dataset.pane)));
+  $('#next-alert').addEventListener('click', () => showPane('fn'));
+  document.querySelectorAll('.index a').forEach((a) => a.addEventListener('click', () => showPane('fn')));
+  $('#term-clear').addEventListener('click', () => term.clear());
+  $('#new-conv').addEventListener('click', newConversation);
+  $('#alert-form').addEventListener('submit', submitAlert);
+  $('#al-at').value = localInput(new Date(Date.now() + 10 * 60_000));
+
   document.querySelectorAll('[data-refresh]').forEach((b) => b.addEventListener('click', () => {
     const key = b.dataset.refresh;
+    if (key === 'alerts') return loadReminders();
     const box = $(BOX[key]);
     box.replaceChildren(box.tagName === 'UL' ? h('li', {}, skeleton()) : skeleton());
     refreshAll(key);

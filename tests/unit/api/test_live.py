@@ -247,3 +247,17 @@ def test_garbage_frames_are_ignored_and_the_session_survives() -> None:
         ws.send_bytes(b"\x07")
         until(lambda: world.session.audio_in == [b"\x07"])
         leave(ws, slot)
+
+
+@pytest.mark.unit
+def test_closing_an_already_gone_client_still_releases_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def gone(self: object, code: int = 1000, reason: str | None = None) -> None:
+        raise WebSocketDisconnect(code=1006)  # what Starlette raises when the peer vanished
+
+    client, slot = make_client(LiveWorld())
+    with client.websocket_connect(URL, headers=AUTH) as ws:
+        start(ws)
+        monkeypatch.setattr("starlette.websockets.WebSocket.close", gone)
+        leave(ws, slot)

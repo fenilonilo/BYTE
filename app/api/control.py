@@ -16,6 +16,7 @@ from app.api.deps import (
     get_light,
     get_music,
     get_pending,
+    get_reminder_store,
     get_runner,
     get_settings,
 )
@@ -40,6 +41,8 @@ from app.api.schemas import (
     MusicPlaySchema,
     MusicSchema,
     PendingConfirmationSchema,
+    ReminderCreateSchema,
+    RemindersSchema,
     StateSchema,
 )
 from app.application.pending_actions import NOTHING_PENDING, PendingActionStore
@@ -61,6 +64,7 @@ from app.ports.climate import ClimatePort  # noqa: TC001
 from app.ports.expenses import ExpensesPort  # noqa: TC001
 from app.ports.light import LightPort  # noqa: TC001
 from app.ports.music import MusicPort  # noqa: TC001
+from app.ports.reminders import ReminderStorePort  # noqa: TC001
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -306,6 +310,27 @@ async def list_expenses(
 @router.post("/finance/expenses", response_model=ActionSchema)
 async def add_expense(body: ExpenseCreateSchema, runner: Runner, pending: Pending) -> ActionSchema:
     return await _act(runner, pending, "add_expense", _args(body))
+
+
+@router.get("/reminders", response_model=RemindersSchema)
+async def list_reminders(
+    store: Annotated[ReminderStorePort, Depends(get_reminder_store)],
+) -> RemindersSchema:
+    # calendar warnings are derived from the agenda, which the panel already shows
+    reminders = [r for r in await store.all() if not r.is_calendar]
+    return RemindersSchema.model_validate({"reminders": reminders})
+
+
+@router.post("/reminders", response_model=ActionSchema)
+async def create_reminder(
+    body: ReminderCreateSchema, runner: Runner, pending: Pending
+) -> ActionSchema:
+    return await _act(runner, pending, "create_reminder", _args(body))
+
+
+@router.delete("/reminders/{reminder_id}", response_model=ActionSchema)
+async def cancel_reminder(reminder_id: Name, runner: Runner, pending: Pending) -> ActionSchema:
+    return await _act(runner, pending, "cancel_reminder", {"id": reminder_id})
 
 
 @router.post("/confirm", response_model=ActionSchema)

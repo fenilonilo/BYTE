@@ -20,6 +20,7 @@ routes. Never send raw device or spreadsheet ids; an unknown name is `422`.
 | `GET /music/playlists` | `{items: MusicItem[]}` |
 | `GET /agenda?date=YYYY-MM-DD` | `{events: Event[]}` |
 | `GET /finance/expenses?year=2026&month=10` | `{expenses: Expense[], total_cents: int}` |
+| `GET /reminders` | `{reminders: Reminder[]}`, soonest first. Calendar warnings are left out (the agenda shows the events). A reminder stays listed after its time until the device has played it and acked. |
 
 ```
 Light    {name, power, mode: "white"|"colour"|"scene"|"music", brightness 1-100,
@@ -33,6 +34,7 @@ Music    {playing, item: MusicItem|null, progress_ms, duration_ms, volume 0-100,
 MusicItem {uri, name, kind, artist}
 Event    {id, title, start (ISO 8601), duration_minutes}
 Expense  {amount_cents, category, description, date (YYYY-MM-DD)}
+Reminder {id, text, at (ISO 8601), kind: "lembrete"|"alarme"}
 ```
 
 ## Actions
@@ -49,6 +51,8 @@ All send only the fields to change (omit the rest; unknown fields are `422`).
 | `POST /agenda` | `{title, start (ISO 8601), duration_minutes (>0)}` |
 | `DELETE /agenda/{event_id}` | none. Always asks confirmation. |
 | `POST /finance/expenses` | `{amount_cents (>0), category, description, date}`. Always asks confirmation. |
+| `POST /reminders` | `{text (1-200), at (ISO 8601, future), kind: "lembrete"\|"alarme"}`. A past time is `422`. |
+| `DELETE /reminders/{id}` | none. Unknown id is `422`. |
 
 Response (`200`), shape `Action`:
 
