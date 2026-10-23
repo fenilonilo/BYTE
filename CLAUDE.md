@@ -55,6 +55,7 @@ filter (`segment` omitted or `auto` = all tools; unknown segment = `404`).
 | `music` | Spotify playback on a Spotify Connect device | `MusicPort` |
 | `agenda` | Events (Google Calendar), reminders and alarms | `CalendarPort`, `ReminderStorePort` |
 | `finance` | Monthly expenses, bills (Google Sheets) | `ExpensesPort` |
+| `projects` | Owner's programming projects: RAG over their `CLAUDE.md`; open/close `claude` in the panel terminal | `KnowledgeStorePort`, `EmbedderPort`, `DocumentSourcePort`, `ProjectTerminalPort` |
 
 **Adding a tool:**
 
@@ -192,13 +193,17 @@ hold no state. Time-dependent code receives an injected monotonic clock.
 
 ## Persistence
 
+**Project knowledge (Spec 4)** lives in Postgres 16 + pgvector (`BYTE_DATABASE_URL`,
+SQLAlchemy asyncio + Alembic, `migrations/`, run at boot), or in memory when unset. Embeddings
+are local (fastembed, CPU). Spec: `docs/superpowers/specs/2026-10-22-project-knowledge-terminal-design.md`.
+`open_project`/`close_project` are `panel_only`: offered and run only when the request or live
+start carries `client: "panel"` — routing, not security.
+
 Today the conversation store is in memory: last 20 messages per request context,
 max 50 conversations (LRU), lost on restart. `ConversationStorePort.append` is
-atomic. **PostgreSQL 16 + pgvector** (SQLAlchemy asyncio, Alembic) is a later
-spec and arrives behind the same port; the `db` extra is not declared until then.
+atomic. Moving it to the same Postgres is a later spec, behind the same port.
 
-It will store conversation history, OAuth tokens, pending reminders and memory
-embeddings. It will **not** store calendar events or expenses — Google owns those.
+Postgres will also store OAuth tokens and pending reminders. It will **not** store calendar events or expenses — Google owns those.
 
 `InMemoryRepository` style adapters stay: unit tests use them. Integration tests
 against Postgres use a real Postgres via testcontainers, never a mock.
@@ -212,6 +217,7 @@ Prefix `/api/v1`. FastAPI. Everything async.
 | `GET /health` | Liveness. Used by the Docker healthcheck. |
 | `POST /messages` | Text in, text out. `segment` optional. May return `pending_confirmation.summary`. |
 | `WS /live` | Spoken conversation. One session at a time; a new connection replaces the old (close code 4000). |
+| `WS /ws/terminal` | Panel only: the open project's `claude` PTY (state JSON + binary I/O). One panel; a new one replaces the old (4000). 1008 where no terminal exists. |
 | `WS /ws/notifications` | Proactive pushes: `{"type":"reminder","id","kind"}` + one binary PCM frame; the device replies `{"type":"ack","id"}`. One listener; a new one replaces the old (4000). |
 
 Rules:
@@ -325,7 +331,9 @@ expense adapters. What is left is replacing those adapters with real ones.
 | Google Calendar adapter, reminders/alarms, Piper TTS, `/ws/notifications` (Spec 3) | done (real Google and Docker image not yet checked by hand) |
 | Google Sheets adapter | not started (later spec) |
 | Gemini Live adapter, A/B against OpenAI | not started (later spec) |
-| Postgres + pgvector + Alembic | not started (later spec) |
+| Project knowledge (pgvector + local embeddings) and panel project terminal (Spec 4) | done (opening by voice in the panel not checked by hand) |
+| Postgres for conversations, OAuth tokens, reminders | not started (later spec) |
+| Byte driving Claude Code on its own (Spec 5) | not started |
 
 ## Before you finish
 
