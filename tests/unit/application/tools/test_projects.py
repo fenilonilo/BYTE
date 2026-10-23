@@ -5,10 +5,14 @@ import json
 import pytest
 
 from app.adapters.memory.in_memory_knowledge import InMemoryKnowledge
-from app.application.tools.projects import SearchProjects
+from app.application.project_session import ProjectSession
+from app.application.tools.projects import CloseProject, OpenProject, SearchProjects
 from app.domain.exceptions import UnknownProjectError
 from app.domain.knowledge import HEADING_SEPARATOR as SEP, Chunk, DocumentRef
+from app.domain.projects import Project
 from tests.fakes.embedder import FakeEmbedder, fake_vector
+from tests.fakes.logger import RecordingLogger
+from tests.fakes.terminal import FakeTerminal
 
 BYTE = DocumentRef("Byte", "CLAUDE.md")
 FIN = DocumentRef("FinFlow", "CLAUDE.md")
@@ -87,3 +91,36 @@ def test_search_spec_is_read_only_in_projects_segment() -> None:
     assert spec.segment == "projects"
     assert not spec.requires_confirmation
     assert json.loads(json.dumps(spec.parameters))["required"] == ["query"]
+
+
+def session_tools() -> tuple[OpenProject, CloseProject, FakeTerminal, ProjectSession]:
+    terminal = FakeTerminal()
+    projects = [Project("Byte", "D:/P/Byte", ("CLAUDE.md",))]
+    session = ProjectSession(terminal, projects, ["claude"], {}, RecordingLogger())
+    return OpenProject(session), CloseProject(session), terminal, session
+
+
+@pytest.mark.unit
+async def test_open_project_opens_and_reports() -> None:
+    open_, _, terminal, session = session_tools()
+    assert await open_.execute({"project": "Byte"}, "k") == "aberto: Byte"
+    assert terminal.started[0][0] == "D:/P/Byte"
+    await session.aclose()
+
+
+@pytest.mark.unit
+async def test_close_project_reports_both_outcomes() -> None:
+    open_, close, _, _ = session_tools()
+    assert await close.execute({}, "k") == "nenhum projeto aberto"
+    await open_.execute({"project": "Byte"}, "k")
+    assert await close.execute({}, "k") == "fechado"
+
+
+@pytest.mark.unit
+def test_open_and_close_are_panel_only_without_confirmation() -> None:
+    open_, close, _, _ = session_tools()
+    for spec in (open_.spec, close.spec):
+        assert spec.panel_only
+        assert not spec.requires_confirmation
+        assert spec.segment == "projects"
+    assert (open_.spec.name, close.spec.name) == ("open_project", "close_project")

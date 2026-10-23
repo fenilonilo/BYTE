@@ -11,6 +11,7 @@ from app.domain.tools import ToolSpec
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from app.application.project_session import ProjectSession
     from app.domain.knowledge import SearchHit
     from app.ports.embedder import EmbedderPort
     from app.ports.knowledge import KnowledgeStorePort
@@ -71,3 +72,40 @@ class SearchProjects(Tool):
                 break
             out = joined
         return out
+
+
+class OpenProject(Tool):
+    spec = ToolSpec(
+        name="open_project",
+        description=(
+            "Abre um projeto no terminal do painel e inicia uma sessão nova do Claude Code. "
+            "Fecha o projeto que estiver aberto."
+        ),
+        parameters=object_schema({"project": ("string", "Nome do projeto.")}),
+        segment=SEGMENT,
+        panel_only=True,
+    )
+
+    def __init__(self, session: ProjectSession) -> None:
+        self._session = session
+
+    async def execute(self, args: Mapping[str, object], key: str) -> str:
+        name = str_arg(args, "project")
+        await self._session.open(name)
+        return f"aberto: {name}"
+
+
+class CloseProject(Tool):
+    spec = ToolSpec(
+        name="close_project",
+        description="Fecha o projeto aberto no terminal do painel e volta ao terminal do Byte.",
+        parameters=object_schema({}),
+        segment=SEGMENT,
+        panel_only=True,
+    )
+
+    def __init__(self, session: ProjectSession) -> None:
+        self._session = session
+
+    async def execute(self, args: Mapping[str, object], key: str) -> str:
+        return "fechado" if await self._session.close() else "nenhum projeto aberto"
