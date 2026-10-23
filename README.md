@@ -128,7 +128,7 @@ Regenerate the locked dependencies used by the Docker image:
 
 ```bash
 uv pip compile pyproject.toml --extra api --extra gemini --extra openai --extra thinq \
-  --extra tuya --extra spotify --extra google --extra tts --extra db --extra embed \
+  --extra tuya --extra spotify --extra google --extra weather --extra tts --extra db --extra embed \
   --python-version 3.12 --python-platform x86_64-manylinux_2_28 -o requirements.lock
 ```
 
