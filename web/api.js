@@ -65,6 +65,8 @@ export const api = {
   deleteEvent: (id) => request('DELETE', `/agenda/${seg(id)}`),
   expenses: (year, month) => request('GET', '/finance/expenses' + q({ year, month })),
   addExpense: (expense) => request('POST', '/finance/expenses', expense),
+  weather: () => request('GET', '/weather'),
+  weatherHome: () => request('DELETE', '/weather/display'),
   reminders: () => request('GET', '/reminders'),
   createReminder: (reminder) => request('POST', '/reminders', reminder),
   cancelReminder: (id) => request('DELETE', `/reminders/${seg(id)}`),
@@ -155,6 +157,8 @@ const db = {
     { id: '9f8e7d', text: 'Tirar a roupa da máquina', at: inMinutes(38), kind: 'lembrete' },
     { id: 'd4e5f6', text: 'Acordar', at: `${ymd(1)}T07:00:00${tz()}`, kind: 'alarme' },
   ],
+  // `?mock=1&wx=away` previews another city on the panel; `wx=rain` makes it rain at home.
+  wxAway: new URLSearchParams(location.search).get('wx') === 'away',
   pending: null,
   chatPending: null,
   lastToggle: {},
@@ -167,6 +171,44 @@ const fail = (status, detail) => ({ status, json: { detail } });
 const done = (message) => ok({ status: 'done', message, pending_confirmation: null });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clone = (x) => JSON.parse(JSON.stringify(x));
+
+const WX = new URLSearchParams(location.search).get('wx');
+const HOME = { name: 'Goiânia', region: 'Goiás', country: 'Brasil', label: 'Goiânia, Goiás' };
+const AWAY = { name: 'Florianópolis', region: 'Santa Catarina', country: 'Brasil', label: 'Florianópolis, Santa Catarina' };
+
+function mockForecast(place, rain) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const local = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const hours = Array.from({ length: 24 }, (_, i) => {
+    const d = new Date(now.getTime() + i * 3600_000);
+    const h = d.getHours();
+    return {
+      time: `${local(d)}T${pad(h)}:00:00${tz()}`,
+      temperature: 19 + 8 * Math.sin(((h - 9) / 24) * 2 * Math.PI) + (rain ? -2 : 0),
+      rain_chance: rain ? Math.max(0, 85 - i * 6) : (h >= 15 && h <= 19 ? 35 : 5),
+      condition: rain && i < 4 ? 'rain' : h >= 15 && h <= 19 ? 'partly_cloudy' : 'clear',
+      is_day: h >= 6 && h < 18,
+    };
+  });
+  const conditions = rain ? ['rain', 'storm', 'cloudy', 'partly_cloudy', 'clear', 'drizzle', 'clear'] : ['partly_cloudy', 'clear', 'clear', 'cloudy', 'rain', 'partly_cloudy', 'clear'];
+  const days = conditions.map((condition, i) => ({
+    day: local(new Date(now.getTime() + i * 86400_000)), condition,
+    low: 17 + (i % 3), high: 27 + ((i * 2) % 5), rain_chance: [80, 60, 20, 10, 0, 40, 5][i],
+  }));
+  const h0 = now.getHours();
+  const current = {
+    temperature: hours[0].temperature, feels_like: hours[0].temperature + 1, humidity: rain ? 88 : 54,
+    wind_kmh: 12, condition: rain ? 'rain' : hours[0].condition, raining: rain, is_day: h0 >= 6 && h0 < 18,
+  };
+  return { place, current, hours, days };
+}
+
+function mockWeather() {
+  const home = mockForecast(HOME, WX === 'rain');
+  const forecast = db.wxAway ? mockForecast(AWAY, false) : home;
+  return ok({ is_home: !db.wxAway, forecast, home_now: home.current, errors: [] });
+}
 
 function ask(summary, run) {
   db.pending = { summary, run, expires: Date.now() + 60_000 };
@@ -187,6 +229,10 @@ async function mockRoute(method, path, body) {
   if (method !== 'GET' && route !== '/confirm' && route !== '/messages') db.pending = null;
 
   const [head, sub] = parts;
+  if (head === 'weather') {
+    if (method === 'DELETE') db.wxAway = false;
+    return mockWeather();
+  }
   if (method === 'GET' && head === 'state') {
     const p = livePending();
     return ok({
