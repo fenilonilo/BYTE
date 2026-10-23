@@ -96,6 +96,6 @@ async def run_indexer(
     while True:
         try:
             await indexer.scan()
-        except Exception as exc:  # noqa: BLE001 - the loop must outlive any one scan
+        except Exception as exc:  # the loop must outlive any one scan
             log.error("knowledge.scan_failed", error=type(exc).__name__)
         await sleep(every)

@@ -6,13 +6,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
-from app.application.prompts import SYSTEM_PROMPT, now_line
+from app.application.prompts import SYSTEM_PROMPT, now_line, projects_line
 from app.domain.entities import Message
 from app.domain.exceptions import AgentError
 from app.domain.model import ModelMessage
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from app.application.pending_actions import PendingActionStore
     from app.application.tool_runner import ToolRunner
@@ -46,6 +46,7 @@ class ProcessChatMessage:
         max_steps: int = 6,
         history_limit: int = 20,
         timeout_seconds: float = 30.0,
+        projects: Sequence[str] = (),
     ) -> None:
         self._model = model
         self._store = store
@@ -56,6 +57,7 @@ class ProcessChatMessage:
         self._max_steps = max_steps
         self._history_limit = history_limit
         self._timeout = timeout_seconds
+        self._projects_line = projects_line(projects)
 
     async def execute(self, conversation_id: str, text: str, segment: str | None) -> ChatReply:
         try:
@@ -92,7 +94,9 @@ class ProcessChatMessage:
         raise AgentError("tool loop exceeded the step limit")
 
     def _system_prompt(self, conversation_id: str) -> str:
-        base = f"{SYSTEM_PROMPT} {now_line(self._clock())}"
+        base = " ".join(
+            p for p in (SYSTEM_PROMPT, now_line(self._clock()), self._projects_line) if p
+        )
         action = self._pending.peek(conversation_id)
         if action is None or not action.armed:
             return base

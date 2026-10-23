@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.application.prompts import SYSTEM_PROMPT, now_line
+from app.application.prompts import SYSTEM_PROMPT, now_line, projects_line
 from app.application.tool_runner import CONFIRM_ACTION
 from app.domain.entities import Message
 from app.domain.exceptions import LiveSessionError
@@ -23,7 +23,7 @@ from app.domain.live import (
 from app.domain.tools import ToolResult
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
     from app.application.live_transport import LiveTransport
     from app.application.music_ducker import MusicDucker
@@ -61,7 +61,9 @@ class RunLiveSession:
         clock: Callable[[], datetime],
         limits: LiveLimits | None = None,
         ducker: MusicDucker | None = None,
+        projects: Sequence[str] = (),
     ) -> None:
+        self._projects_line = projects_line(projects)
         self._clock = clock
         self._ducker = ducker
         self._live = live
@@ -77,7 +79,9 @@ class RunLiveSession:
     ) -> None:
         try:
             # sessions last minutes, so the time at the start is close enough
-            instructions = f"{LIVE_INSTRUCTIONS} {now_line(self._clock())}"
+            instructions = " ".join(
+                p for p in (LIVE_INSTRUCTIONS, now_line(self._clock()), self._projects_line) if p
+            )
             session = await self._live.open(instructions, self._runner.specs(segment))
         except LiveSessionError:
             await transport.send_event({"type": "error", "code": "model_unavailable"})
