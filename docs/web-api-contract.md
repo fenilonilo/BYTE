@@ -20,6 +20,7 @@ routes. Never send raw device or spreadsheet ids; an unknown name is `422`.
 | `GET /music/playlists` | `{items: MusicItem[]}` |
 | `GET /agenda?date=YYYY-MM-DD` | `{events: Event[]}` |
 | `GET /finance/expenses?year=2026&month=10` | `{expenses: Expense[], total_cents: int}` |
+| `GET /weather` | `{is_home, forecast: Forecast\|null, home_now: Current\|null, errors: string[]}`. `forecast` is the city the panel shows (home unless the owner asked Byte to show another); `home_now` is the home city's current weather, for the bar chip. Each fails on its own: `null` plus `"forecast"` / `"home"` in `errors`, still 200. |
 | `GET /reminders` | `{reminders: Reminder[]}`, soonest first. Calendar warnings are left out (the agenda shows the events). A reminder stays listed after its time until the device has played it and acked. |
 
 ```
@@ -35,6 +36,12 @@ MusicItem {uri, name, kind, artist}
 Event    {id, title, start (ISO 8601), duration_minutes}
 Expense  {amount_cents, category, description, date (YYYY-MM-DD)}
 Reminder {id, text, at (ISO 8601), kind: "lembrete"|"alarme"}
+Forecast {place: {name, region, country, label}, current: Current,
+          hours: [{time (ISO 8601, the place's own offset), temperature, rain_chance 0-100,
+                   condition, is_day}] (24, from the current hour),
+          days: [{day (YYYY-MM-DD), condition, low, high, rain_chance 0-100}] (7, today first)}
+Current  {temperature, feels_like, humidity, wind_kmh, condition, raining, is_day}
+condition: "clear"|"partly_cloudy"|"cloudy"|"fog"|"drizzle"|"rain"|"storm"
 ```
 
 ## Actions
@@ -138,6 +145,17 @@ is 422 / `bad_start`). Routing, not security: every client holds the same token.
 - The `claude` process belongs to the server: closing or reloading the tab leaves it running.
   It starts in the project folder without any `BYTE_*` variable or provider key in its
   environment. Nothing typed or printed is logged.
+
+## Panel pushes (`WS /api/v1/ws/panel`, Spec 6)
+
+- Auth like `/ws/terminal` (header or `["bearer", token]` subprotocol). One panel at a time: a
+  new connection closes the old one with 4000 (do not reconnect after 4000 or 1008).
+- Server → panel: text `{"type":"weather"}` whenever the shown city changes — by `show_weather`
+  from any client (panel chat, panel voice, the ESP32) or by `DELETE /weather/display`. No data:
+  the panel reloads `GET /weather`. Reload it on every (re)connect too, so a change made while
+  disconnected is not missed. Anything the panel sends is ignored.
+- `DELETE /weather/display` runs `show_weather` with no city through `ToolRunner` (back to home)
+  and answers with the `GET /weather` body.
 
 ## Music ducking during voice
 

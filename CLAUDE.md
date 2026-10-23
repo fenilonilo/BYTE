@@ -220,6 +220,7 @@ Prefix `/api/v1`. FastAPI. Everything async.
 | `POST /messages` | Text in, text out. `segment` optional. May return `pending_confirmation.summary`. |
 | `WS /live` | Spoken conversation. One session at a time; a new connection replaces the old (close code 4000). |
 | `WS /ws/terminal` | Panel only: the open project's `claude` PTY (state JSON + binary I/O). One panel; a new one replaces the old (4000). 1008 where no terminal exists. |
+| `WS /ws/panel` | Panel only: server pushes `{"type":"weather"}` when the shown city changes. One panel; a new one replaces the old (4000). |
 | `WS /ws/notifications` | Proactive pushes: `{"type":"reminder","id","kind"}` + one binary PCM frame; the device replies `{"type":"ack","id"}`. One listener; a new one replaces the old (4000). |
 
 Rules:

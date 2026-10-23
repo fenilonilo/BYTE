@@ -264,6 +264,11 @@ def get_terminal_slot() -> LiveSlot:
 
 
 @lru_cache
+def get_panel_slot() -> LiveSlot:
+    return LiveSlot()
+
+
+@lru_cache
 def get_weather() -> WeatherPort:
     try:
         from app.adapters.openmeteo.open_meteo_weather import (  # noqa: PLC0415 - optional extra

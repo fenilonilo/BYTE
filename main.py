@@ -34,6 +34,7 @@ from app.api.deps import (
 from app.api.errors import install_error_handlers
 from app.api.live import router as live_router
 from app.api.notifications import router as notifications_router, run_reminders
+from app.api.panel import router as panel_router
 from app.api.router import router
 from app.api.terminal import router as terminal_router
 from app.api.web import mount_web
@@ -116,6 +117,7 @@ app.include_router(live_router, prefix="/api/v1")
 app.include_router(control_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(terminal_router, prefix="/api/v1")
+app.include_router(panel_router, prefix="/api/v1")
 install_error_handlers(app)
 
 

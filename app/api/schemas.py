@@ -9,6 +9,7 @@ from app.domain.climate import ClimateMode, FanSpeed
 from app.domain.light import LightMode
 from app.domain.music import MediaKind, Repeat, Skip
 from app.domain.reminders import ReminderKind
+from app.domain.weather import Condition
 
 MAX_CONTENT_CHARS = 4000
 
@@ -235,3 +236,50 @@ class ReminderCreateSchema(_Body):
 
 class ConfirmSchema(_Body):
     approve: bool
+
+
+class PlaceSchema(_View):
+    name: str
+    region: str
+    country: str
+    label: str
+
+
+class CurrentWeatherSchema(_View):
+    temperature: float
+    feels_like: float
+    humidity: int
+    wind_kmh: float
+    condition: Condition
+    raining: bool
+    is_day: bool
+
+
+class HourSchema(_View):
+    time: dt.datetime
+    temperature: float
+    rain_chance: int
+    condition: Condition
+    is_day: bool
+
+
+class DaySchema(_View):
+    day: dt.date
+    condition: Condition
+    low: float
+    high: float
+    rain_chance: int
+
+
+class WeatherForecastSchema(_View):
+    place: PlaceSchema
+    current: CurrentWeatherSchema
+    hours: list[HourSchema]
+    days: list[DaySchema]
+
+
+class WeatherSchema(BaseModel):
+    is_home: bool
+    forecast: WeatherForecastSchema | None
+    home_now: CurrentWeatherSchema | None
+    errors: list[str]  # "forecast" and/or "home"
