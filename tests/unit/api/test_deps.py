@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from app.adapters.gemini.chat_model import GeminiChatModel
 from app.adapters.gemini.live_session import GeminiLiveSessionAdapter
 from app.adapters.memory.in_memory_climate import InMemoryClimate
+from app.adapters.memory.in_memory_knowledge import InMemoryKnowledge
 from app.adapters.memory.in_memory_light import InMemoryLight
 from app.adapters.memory.in_memory_music import InMemoryMusic
 from app.adapters.openai.live_session import OpenAILiveSessionAdapter
@@ -16,6 +18,7 @@ from app.adapters.tuya.tuya_light import TuyaLight
 from app.api import deps
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 LAMP = '{"lampada": {"device_id": "d", "address": "192.168.0.5", "local_key": "k", "version": 3.3}}'
@@ -24,6 +27,8 @@ DEVICE_VARIABLES = (
     "BYTE_THINQ_ACCESS_SECRET",
     "BYTE_SPOTIFY_CLIENT_ID",
     "BYTE_SPOTIFY_REFRESH_TOKEN",
+    "BYTE_PROJECTS",
+    "BYTE_DATABASE_URL",
 )
 
 
@@ -95,3 +100,41 @@ def test_chat_provider_picks_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BYTE_GEMINI_API_KEY", "g-test")
     monkeypatch.delenv("BYTE_OPENAI_API_KEY")
     assert isinstance(deps.get_chat_model(), GeminiChatModel)
+
+
+PROJECTS = '{"Byte": {"path": "D:/P/Byte"}}'
+
+
+def which(found: str | None) -> Callable[[str], str | None]:
+    return lambda _name: found
+
+
+@pytest.mark.unit
+def test_no_projects_means_no_project_tools_session_or_indexer() -> None:
+    assert deps.get_project_session() is None
+    assert deps.get_indexer() is None
+    assert "search_projects" not in {t.spec.name for t in deps.get_tools().values()}
+
+
+@pytest.mark.unit
+def test_knowledge_memory_without_database_url() -> None:
+    assert isinstance(deps.get_knowledge(), InMemoryKnowledge)
+
+
+@pytest.mark.unit
+def test_projects_register_search_and_terminal_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BYTE_PROJECTS", PROJECTS)
+    monkeypatch.setattr(deps.shutil, "which", which("C:/bin/claude.exe"))
+    names = {t.spec.name for t in deps.get_tools().values()}
+    assert "search_projects" in names
+    if sys.platform == "win32":
+        assert {"open_project", "close_project"} <= names
+    assert deps.get_project_names() == ("Byte",)
+
+
+@pytest.mark.unit
+def test_session_none_without_claude(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BYTE_PROJECTS", PROJECTS)
+    monkeypatch.setattr(deps.shutil, "which", which(None))
+    assert deps.get_project_session() is None
+    assert "open_project" not in {t.spec.name for t in deps.get_tools().values()}

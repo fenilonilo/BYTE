@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import time
 from datetime import datetime
 from functools import lru_cache
@@ -11,19 +13,23 @@ from fastapi import Depends
 from openai import AsyncOpenAI
 
 from app.adapters.files.json_reminder_store import JsonReminderStore
+from app.adapters.files.local_documents import LocalDocuments
 from app.adapters.logging.structlog_logger import StructlogLogger
 from app.adapters.memory.in_memory_calendar import InMemoryCalendar
 from app.adapters.memory.in_memory_climate import InMemoryClimate
 from app.adapters.memory.in_memory_conversation_store import InMemoryConversationStore
 from app.adapters.memory.in_memory_expenses import InMemoryExpenses
+from app.adapters.memory.in_memory_knowledge import InMemoryKnowledge
 from app.adapters.memory.in_memory_light import InMemoryLight
 from app.adapters.memory.in_memory_music import InMemoryMusic
 from app.adapters.memory.silent_speech import SilentSpeech
 from app.adapters.openai.chat_model import OpenAIChatModel
 from app.adapters.openai.live_session import OpenAILiveSessionAdapter
 from app.api.live_slot import LiveSlot
+from app.application.knowledge_indexer import KnowledgeIndexer
 from app.application.music_ducker import MusicDucker
 from app.application.pending_actions import PendingActionStore
+from app.application.project_session import ProjectSession
 from app.application.reminder_hub import ReminderHub
 from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
@@ -31,6 +37,7 @@ from app.application.tools.music import KnownUris
 from app.application.use_cases.process_chat_message import ProcessChatMessage
 from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
 from app.config import Settings, load_settings
+from app.domain.exceptions import ConfigError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,7 +50,9 @@ if TYPE_CHECKING:
     from app.ports.chat_model import ChatModelPort
     from app.ports.climate import ClimatePort
     from app.ports.conversation_store import ConversationStorePort
+    from app.ports.embedder import EmbedderPort
     from app.ports.expenses import ExpensesPort
+    from app.ports.knowledge import KnowledgeStorePort
     from app.ports.light import LightPort
     from app.ports.live_session import LiveSessionPort
     from app.ports.logger import LoggerPort
@@ -190,6 +199,68 @@ def get_ducker() -> MusicDucker:
     return MusicDucker(get_music(), get_logger(), get_settings().live_duck_percent)
 
 
+def get_project_names() -> tuple[str, ...]:
+    return tuple(p.name for p in get_settings().project_list())
+
+
+@lru_cache
+def get_embedder() -> EmbedderPort:
+    s = get_settings()
+    try:
+        from app.adapters.fastembed.embedder import FastEmbedder  # noqa: PLC0415 - optional extra
+    except ImportError as exc:
+        raise ConfigError("BYTE_PROJECTS needs the 'embed' extra (fastembed)") from exc
+    return FastEmbedder(s.embedding_model, s.embedding_cache)
+
+
+@lru_cache
+def get_knowledge() -> KnowledgeStorePort:
+    url = get_settings().database_url
+    if url is None:
+        return InMemoryKnowledge()
+    from app.adapters.postgres.knowledge_store import (  # noqa: PLC0415 - optional extra
+        PostgresKnowledge,
+    )
+
+    return PostgresKnowledge(url.get_secret_value())
+
+
+@lru_cache
+def get_indexer() -> KnowledgeIndexer | None:
+    projects = get_settings().project_list()
+    if not projects:
+        return None
+    return KnowledgeIndexer(
+        projects, LocalDocuments(), get_embedder(), get_knowledge(), get_logger()
+    )
+
+
+@lru_cache
+def get_project_session() -> ProjectSession | None:
+    """The terminal exists only where `claude` and a pty do: today, Windows under uvicorn."""
+    s = get_settings()
+    projects = s.project_list()
+    if not projects:
+        return None
+    command = shutil.which(s.claude_command)
+    if command is None:
+        get_logger().warning("projects.terminal_unavailable", reason="claude_not_found")
+        return None
+    try:
+        from app.adapters.pty.winpty_terminal import (
+            WinPtyTerminal,
+        )
+    except ImportError:
+        get_logger().warning("projects.terminal_unavailable", reason="no_pty")
+        return None
+    return ProjectSession(WinPtyTerminal(), projects, [command], dict(os.environ), get_logger())
+
+
+@lru_cache
+def get_terminal_slot() -> LiveSlot:
+    return LiveSlot()
+
+
 @lru_cache
 def get_tools() -> Registry[Tool]:
     return build_tool_registry(
@@ -201,6 +272,10 @@ def get_tools() -> Registry[Tool]:
         known=get_known_uris(),
         on_volume=get_ducker().note_volume,
         reminders=(get_reminder_store(), get_wall_clock()),
+        knowledge=(get_knowledge(), get_embedder(), names)
+        if (names := get_project_names())
+        else None,
+        session=get_project_session(),
     )
 
 
@@ -282,6 +357,7 @@ def get_process_chat(
         max_steps=settings.max_steps,
         history_limit=settings.history_limit,
         timeout_seconds=settings.chat_timeout_seconds,
+        projects=get_project_names(),
     )
 
 
@@ -303,6 +379,7 @@ def get_run_live_session(
         now=time.monotonic,
         clock=get_wall_clock(),
         ducker=ducker,
+        projects=get_project_names(),
         limits=LiveLimits(
             idle_seconds=settings.live_idle_seconds,
             max_seconds=settings.live_max_seconds,
