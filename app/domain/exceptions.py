@@ -85,6 +85,18 @@ class SpeechError(DomainError):
     """Raised when text-to-speech fails."""
 
 
+class KnowledgeError(DomainError):
+    """Raised when the knowledge store, the embedder or a document source fails."""
+
+
+class ProjectError(DomainError):
+    """Raised when a project terminal cannot be started or driven."""
+
+
+class UnknownProjectError(ProjectError):
+    """Raised when a project name is not in the configured list."""
+
+
 def failure_reason(exc: BaseException) -> str:
     """Short, content-free category for logs: guard, offline, validation or upstream."""
     # ponytail: domain validators raise plain LightError/MusicError, so those read as upstream
@@ -100,7 +112,8 @@ def failure_reason(exc: BaseException) -> str:
         | ReminderNotFoundError
         | UnknownLightDeviceError
         | UnknownClimateDeviceError
-        | UnknownMusicDeviceError,
+        | UnknownMusicDeviceError
+        | UnknownProjectError,
     ):
         return "validation"
     return "upstream"
