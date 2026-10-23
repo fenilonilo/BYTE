@@ -247,7 +247,7 @@ def get_project_session() -> ProjectSession | None:
         get_logger().warning("projects.terminal_unavailable", reason="claude_not_found")
         return None
     try:
-        from app.adapters.pty.winpty_terminal import (
+        from app.adapters.pty.winpty_terminal import (  # noqa: PLC0415 - optional extra
             WinPtyTerminal,
         )
     except ImportError:
