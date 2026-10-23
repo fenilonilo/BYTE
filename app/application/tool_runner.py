@@ -69,21 +69,27 @@ class ToolRunner:
     def segments(self) -> frozenset[str]:
         return frozenset(t.spec.segment for t in self._tools.values())
 
-    def specs(self, segment: str | None) -> tuple[ToolSpec, ...]:
+    def specs(self, segment: str | None, *, panel: bool = False) -> tuple[ToolSpec, ...]:
         chosen = tuple(
-            t.spec for t in self._tools.values() if segment is None or t.spec.segment == segment
+            t.spec
+            for t in self._tools.values()
+            if (segment is None or t.spec.segment == segment) and (panel or not t.spec.panel_only)
         )
         return (*chosen, CONFIRM_SPEC)
 
-    async def run(self, call: ToolCall, conversation_id: str, segment: str | None) -> ToolResult:
-        output = await self._dispatch(call, conversation_id, segment)
+    async def run(
+        self, call: ToolCall, conversation_id: str, segment: str | None, *, panel: bool = False
+    ) -> ToolResult:
+        output = await self._dispatch(call, conversation_id, segment, panel=panel)
         return ToolResult(call_id=call.id, output=output[: self._max_chars])
 
     async def drain(self) -> None:
         """Wait for tool tasks still running (called on shutdown)."""
         await asyncio.gather(*list(self._tasks), return_exceptions=True)
 
-    async def _dispatch(self, call: ToolCall, conversation_id: str, segment: str | None) -> str:
+    async def _dispatch(
+        self, call: ToolCall, conversation_id: str, segment: str | None, *, panel: bool
+    ) -> str:
         if call.name == CONFIRM_ACTION:
             return await self._confirm(conversation_id)
         try:
@@ -92,6 +98,8 @@ class ToolRunner:
             return "erro: ferramenta desconhecida"
         if segment is not None and tool.spec.segment != segment:
             return "erro: ferramenta fora do segmento"
+        if tool.spec.panel_only and not panel:
+            return "erro: ferramenta disponível só no painel"
         try:
             args = _parse(call.arguments)
             if not tool.needs_confirmation(args):

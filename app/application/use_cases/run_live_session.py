@@ -75,14 +75,19 @@ class RunLiveSession:
         self._limits = limits or LiveLimits()
 
     async def execute(
-        self, transport: LiveTransport, conversation_id: str, segment: str | None
+        self,
+        transport: LiveTransport,
+        conversation_id: str,
+        segment: str | None,
+        *,
+        panel: bool = False,
     ) -> None:
         try:
             # sessions last minutes, so the time at the start is close enough
             instructions = " ".join(
                 p for p in (LIVE_INSTRUCTIONS, now_line(self._clock()), self._projects_line) if p
             )
-            session = await self._live.open(instructions, self._runner.specs(segment))
+            session = await self._live.open(instructions, self._runner.specs(segment, panel=panel))
         except LiveSessionError:
             await transport.send_event({"type": "error", "code": "model_unavailable"})
             raise
@@ -91,6 +96,7 @@ class RunLiveSession:
             transport=transport,
             conversation_id=conversation_id,
             segment=segment,
+            panel=panel,
             store=self._store,
             runner=self._runner,
             pending=self._pending,
@@ -125,6 +131,7 @@ class LiveRun:
         transport: LiveTransport,
         conversation_id: str,
         segment: str | None,
+        panel: bool,
         store: ConversationStorePort,
         runner: ToolRunner,
         pending: PendingActionStore,
@@ -136,6 +143,7 @@ class LiveRun:
         self._transport = transport
         self._cid = conversation_id
         self._segment = segment
+        self._panel = panel
         self._store = store
         self._runner = runner
         self._pending = pending
@@ -263,7 +271,9 @@ class LiveRun:
                 if call.name == CONFIRM_ACTION and not await self._transcript_arrived():
                     results.append(ToolResult(call.id, "erro: não ouvi a confirmação do usuário"))
                     continue
-                results.append(await self._runner.run(call, self._cid, self._segment))
+                results.append(
+                    await self._runner.run(call, self._cid, self._segment, panel=self._panel)
+                )
             self._touch()
             await self._session.send_tool_results(results)
             await self._request_response()

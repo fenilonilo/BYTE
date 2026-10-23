@@ -59,13 +59,20 @@ class ProcessChatMessage:
         self._timeout = timeout_seconds
         self._projects_line = projects_line(projects)
 
-    async def execute(self, conversation_id: str, text: str, segment: str | None) -> ChatReply:
+    async def execute(
+        self, conversation_id: str, text: str, segment: str | None, *, panel: bool = False
+    ) -> ChatReply:
+        """`panel`: the request comes from the web panel, which alone gets panel-only tools."""
         try:
-            return await asyncio.wait_for(self._run(conversation_id, text, segment), self._timeout)
+            return await asyncio.wait_for(
+                self._run(conversation_id, text, segment, panel), self._timeout
+            )
         except TimeoutError as exc:
             raise AgentError("chat request timed out") from exc
 
-    async def _run(self, conversation_id: str, text: str, segment: str | None) -> ChatReply:
+    async def _run(
+        self, conversation_id: str, text: str, segment: str | None, panel: bool
+    ) -> ChatReply:
         self._pending.on_user_utterance(conversation_id, text)
         user_msg = Message(
             id=str(uuid4()), role="user", content=text, timestamp=datetime.now(tz=UTC)
@@ -76,7 +83,7 @@ class ProcessChatMessage:
             *(ModelMessage(role=_role(m.role), content=m.content) for m in history),
             ModelMessage(role="user", content=text),
         ]
-        tools = self._runner.specs(segment)
+        tools = self._runner.specs(segment, panel=panel)
         self._log.info("chat.start", conversation_id=conversation_id)
 
         for _ in range(self._max_steps):
@@ -87,7 +94,7 @@ class ProcessChatMessage:
                 ModelMessage(role="assistant", content=turn.text, tool_calls=turn.tool_calls)
             )
             for call in turn.tool_calls:
-                result = await self._runner.run(call, conversation_id, segment)
+                result = await self._runner.run(call, conversation_id, segment, panel=panel)
                 messages.append(
                     ModelMessage(role="tool", content=result.output, tool_call_id=result.call_id)
                 )

@@ -83,6 +83,7 @@ async def live(
             transport,
             start.conversation_id or uuid4().hex,
             None if segment == AUTO else segment,
+            panel=start.client == "panel",
         )
     except LiveSessionError as exc:
         cause = type(exc.__cause__).__name__ if exc.__cause__ is not None else None

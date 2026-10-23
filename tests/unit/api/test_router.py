@@ -25,8 +25,22 @@ class ExplodingChat:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    async def execute(self, conversation_id: str, text: str, segment: str | None) -> object:
+    async def execute(
+        self, conversation_id: str, text: str, segment: str | None, *, panel: bool = False
+    ) -> object:
         raise self._error
+
+
+class PanelRecorder:
+    def __init__(self, chat: object) -> None:
+        self.chat = chat
+        self.panel: list[bool] = []
+
+    async def execute(
+        self, conversation_id: str, text: str, segment: str | None, *, panel: bool = False
+    ) -> object:
+        self.panel.append(panel)
+        return await self.chat.execute(conversation_id, text, segment)  # type: ignore[attr-defined]
 
 
 def make_client(turns: Sequence[ModelTurn] = ()) -> tuple[TestClient, World]:
@@ -153,3 +167,21 @@ def test_other_domain_errors_are_a_generic_500() -> None:
     res = client.post(URL, json={"content": "oi"}, headers=AUTH)
     assert res.status_code == 500
     assert res.json() == {"detail": "Internal error"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("client_field", "panel"), [({"client": "panel"}, True), ({}, False)])
+def test_client_panel_reaches_use_case(client_field: dict[str, str], panel: bool) -> None:
+    client, world = make_client([text_turn("ok")])
+    recorder = PanelRecorder(world.chat)
+    client.app.dependency_overrides[get_process_chat] = lambda: recorder  # type: ignore[attr-defined]
+    res = client.post(URL, json={"content": "oi", **client_field}, headers=AUTH)
+    assert res.status_code == 200
+    assert recorder.panel == [panel]
+
+
+@pytest.mark.unit
+def test_unknown_client_is_422() -> None:
+    client, _ = make_client()
+    res = client.post(URL, json={"content": "oi", "client": "esp32"}, headers=AUTH)
+    assert res.status_code == 422

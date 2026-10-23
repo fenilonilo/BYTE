@@ -19,6 +19,7 @@ class IncomingMessageSchema(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_CONTENT_CHARS)
     segment: str = "auto"
     conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    client: Literal["panel", "api"] = "api"
 
 
 class PendingConfirmationSchema(BaseModel):
@@ -41,6 +42,8 @@ class LiveStartSchema(BaseModel):
     type: Literal["start"]
     segment: str = "auto"
     conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    # routing, not security: every client holds the same owner token
+    client: Literal["panel", "api"] = "api"
 
 
 # --- web control panel -----------------------------------------------------------------------
