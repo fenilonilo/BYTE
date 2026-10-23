@@ -70,7 +70,7 @@ export const api = {
   cancelReminder: (id) => request('DELETE', `/reminders/${seg(id)}`),
   confirm: (approve) => request('POST', '/confirm', { approve }),
   chat: (content, conversationId) => request('POST', '/messages', {
-    content, ...(conversationId ? { conversation_id: conversationId } : {}),
+    content, client: 'panel', ...(conversationId ? { conversation_id: conversationId } : {}),
   }),
 };
 

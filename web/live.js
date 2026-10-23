@@ -380,7 +380,8 @@ export function createVoice({
     socket.onopen = () => {
       opened = true;
       const id = getConversationId();
-      socket.send(JSON.stringify({ type: 'start', segment: 'auto', ...(id ? { conversation_id: id } : {}) }));
+      // client 'panel': only the panel may open a project in its terminal
+      socket.send(JSON.stringify({ type: 'start', segment: 'auto', client: 'panel', ...(id ? { conversation_id: id } : {}) }));
     };
     socket.onmessage = (e) => {
       if (ws !== socket) return;

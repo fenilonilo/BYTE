@@ -266,6 +266,10 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .tl.voice .tg { color: #9cc3a2; }
 .tl.alert .tg, .tl.alert .tb { color: var(--accent); font-weight: 500; }
 .tl.error .tg, .tl.error .tb { color: var(--danger); }
+/* The open project's claude session (xterm.js): takes the log's row while a project is open. */
+.term-xterm { min-height: 0; padding: 8px 4px 8px 12px; overflow: hidden; }
+.term-xterm .xterm { height: 100%; }
+.term-xterm .xterm-viewport { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 .term-in { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .term-prompt { color: var(--accent); flex: none; font-size: 12.5px; }
 .term-in input {

@@ -1,6 +1,7 @@
 import { api, MOCK, token } from './api.js';
 import { IDLE_WARN_SECONDS, createVoice } from './live.js';
 import { createSphere } from './sphere.js';
+import { connectProjectTerm, paneView } from './project-term.js';
 import { createTerminal } from './terminal.js';
 import { countdown, elapsed, urgency } from './time.js';
 
@@ -862,7 +863,39 @@ function wipePanel() {
   document.querySelectorAll('.note').forEach((n) => { n.textContent = ''; });
 }
 
+// ---------------------------------------------------------------- project terminal
+
+let projectTerm = null;
+
+function showProject(project) {
+  const view = paneView(project);
+  const xterm = view.mode === 'xterm';
+  $('#term-out').hidden = xterm;
+  $('#term-form').hidden = xterm;
+  $('#term-clear').hidden = xterm;
+  $('#term-xterm').hidden = !xterm;
+  $('#term-title').textContent = view.title;
+  if (xterm) projectTerm?.focus();
+}
+
+function startProjectTerm() {
+  if (MOCK || projectTerm) return;
+  let shown = null;
+  projectTerm = connectProjectTerm({
+    getToken: () => token.get(),
+    el: $('#term-xterm'),
+    onState: (project) => {
+      if (project !== shown) term.log('dev', project ? `projeto aberto: ${project}` : 'projeto fechado');
+      shown = project;
+      showProject(project);
+    },
+  });
+}
+
 function signOut(message = '') {
+  projectTerm?.close();
+  projectTerm = null;
+  showProject(null);
   token.clear();
   voice.shutdown();
   setWakeUi(false);
@@ -909,6 +942,7 @@ function enter(initial) {
   loadAgenda();
   loadFinance();
   armStoredWake();
+  startProjectTerm();
   const tick = () => {
     $('#clock').textContent = new Date().toLocaleTimeString('pt-BR');
     tickMusic();

@@ -11,7 +11,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/xterm/xterm.css">
 <link rel="stylesheet" href="style.css">
+<!-- xterm.js 5.5.0 + addon-fit 0.10.0, vendored (MIT, vendor/xterm/LICENSE): UMD globals -->
+<script src="vendor/xterm/xterm.js"></script>
+<script src="vendor/xterm/addon-fit.js"></script>
 <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -53,10 +57,11 @@
     <section class="pane term" id="pane-term" aria-label="Terminal">
       <header class="term-head">
         <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="term-title mono">byte@casa: ~</span>
+        <span class="term-title mono" id="term-title">byte@casa: ~</span>
         <button class="icon-btn" type="button" id="term-clear" aria-label="Limpar terminal"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
       </header>
       <div class="term-out" id="term-out" role="log" aria-live="polite" aria-label="Atividade"></div>
+      <div class="term-xterm" id="term-xterm" aria-label="Claude Code no projeto aberto" hidden></div>
       <form class="term-in" id="term-form" autocomplete="off">
         <label for="term-input" class="term-prompt mono">byte@casa:~$</label>
         <input id="term-input" class="mono" spellcheck="false" maxlength="200" aria-describedby="term-hint">

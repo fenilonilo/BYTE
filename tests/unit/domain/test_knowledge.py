@@ -65,4 +65,4 @@ def test_content_hash_is_stable_sha256() -> None:
 
 @pytest.mark.unit
 def test_heading_separator_is_the_angle_quote() -> None:
-    assert HEADING_SEPARATOR == f" {chr(0x203A)} "
+    assert f" {chr(0x203A)} " == HEADING_SEPARATOR
