@@ -50,6 +50,9 @@ db = [
 embed = [
     "fastembed>=0.7",
 ]
+pty = [
+    "pywinpty>=2.0; sys_platform == 'win32'",
+]
 voice = [
     "sounddevice>=0.5",
     "websockets>=14",
@@ -76,6 +79,7 @@ dev = [
     "alembic>=1.13",
     "fastembed>=0.7",
     "testcontainers[postgres]>=4.8",
+    "pywinpty>=2.0; sys_platform == 'win32'",
 ]
 
 [build-system]
@@ -173,7 +177,7 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["app", "voice"]
-omit = ["app/adapters/openai/**", "app/adapters/gemini/live_session.py", "app/adapters/postgres/**", "app/adapters/fastembed/**", "app/ports/**", "voice/audio.py", "voice/wake.py"]  # openai + gemini session, postgres, fastembed: integration only; ports: pure ABCs; voice/audio+wake: hardware and model, tested by hand
+omit = ["app/adapters/openai/**", "app/adapters/gemini/live_session.py", "app/adapters/postgres/**", "app/adapters/fastembed/**", "app/adapters/pty/**", "app/ports/**", "voice/audio.py", "voice/wake.py"]  # openai + gemini session, postgres, fastembed, pty: integration only; ports: pure ABCs; voice/audio+wake: hardware and model, tested by hand
 
 [tool.coverage.report]
 exclude_lines = [
