@@ -6,7 +6,7 @@ import pytest
 
 from app.adapters.memory.in_memory_knowledge import InMemoryKnowledge
 from app.application.project_session import ProjectSession
-from app.application.tools.projects import CloseProject, OpenProject, SearchProjects
+from app.application.tools.projects import STOP, CloseProject, OpenProject, SearchProjects
 from app.domain.exceptions import UnknownProjectError
 from app.domain.knowledge import HEADING_SEPARATOR as SEP, Chunk, DocumentRef
 from app.domain.projects import Project
@@ -39,20 +39,20 @@ def tool(store: InMemoryKnowledge) -> SearchProjects:
 async def test_search_returns_tagged_blocks() -> None:
     store = await store_with((BYTE, "Safety", "loopback only"))
     out = await tool(store).execute({"query": "pergunta"}, "k")
-    assert out == f"[Byte{SEP}Safety] loopback only"
+    assert out == f"[Byte{SEP}Safety] loopback only\n{STOP}"
 
 
 @pytest.mark.unit
 async def test_search_tags_chunk_without_heading_with_project_only() -> None:
     store = await store_with((BYTE, "", "intro"))
-    assert await tool(store).execute({"query": "pergunta"}, "k") == "[Byte] intro"
+    assert await tool(store).execute({"query": "pergunta"}, "k") == f"[Byte] intro\n{STOP}"
 
 
 @pytest.mark.unit
 async def test_search_filters_by_project() -> None:
     store = await store_with((BYTE, "A", "byte"), (FIN, "B", "fin"))
     out = await tool(store).execute({"query": "pergunta", "project": "FinFlow"}, "k")
-    assert out == f"[FinFlow{SEP}B] fin"
+    assert out == f"[FinFlow{SEP}B] fin\n{STOP}"
 
 
 @pytest.mark.unit
@@ -74,7 +74,8 @@ async def test_search_caps_at_2000_chars() -> None:
 async def test_search_truncates_a_single_huge_hit() -> None:
     store = await store_with((BYTE, "h", "z" * 3000))
     out = await tool(store).execute({"query": "pergunta"}, "k")
-    assert len(out) == 2000
+    assert len(out) <= 2000
+    assert out.endswith(STOP)
     assert out.startswith(f"[Byte{SEP}h] zzz")
 
 

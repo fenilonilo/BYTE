@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 SEGMENT = "projects"
 TOP_K = 4
 MAX_CHARS = 2000
+# Said in the result, not only in the description: models obey a tool's output more readily,
+# and every extra search is a full round trip of tokens.
+STOP = (
+    "(fim dos trechos: responda com base neles; se não estiverem aqui, diga que os "
+    "documentos não falam disso. Não busque de novo.)"
+)
 
 
 def _known(names: Sequence[str], name: str) -> str:
@@ -37,9 +43,7 @@ class SearchProjects(Tool):
         name="search_projects",
         description=(
             "Busca nos documentos dos projetos de programação do usuário (CLAUDE.md e outros). "
-            "Use para qualquer pergunta sobre esses projetos. Uma busca costuma bastar, no "
-            "máximo duas: se a resposta não estiver nos trechos, diga que os documentos do "
-            "projeto não falam disso."
+            "Use para qualquer pergunta sobre esses projetos. Uma busca basta."
         ),
         parameters=object_schema(
             {
@@ -67,13 +71,14 @@ class SearchProjects(Tool):
         hits = await self._store.search(vector, self._embedder.model, TOP_K, project)
         if not hits:
             return "nada encontrado nos projetos"
-        out = _block(hits[0])[:MAX_CHARS]
+        budget = MAX_CHARS - len(STOP) - 1
+        out = _block(hits[0])[:budget]
         for hit in hits[1:]:
             joined = f"{out}\n{_block(hit)}"
-            if len(joined) > MAX_CHARS:
+            if len(joined) > budget:
                 break
             out = joined
-        return out
+        return f"{out}\n{STOP}"
 
 
 class OpenProject(Tool):
