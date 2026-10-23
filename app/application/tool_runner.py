@@ -47,6 +47,14 @@ def _parse(arguments: str) -> Mapping[str, object]:
     return cast("dict[str, object]", parsed)  # JSON object keys are always str
 
 
+def _refusal(spec: ToolSpec, segment: str | None, *, panel: bool) -> str | None:
+    if segment is not None and spec.segment != segment:
+        return "erro: ferramenta fora do segmento"
+    if spec.panel_only and not panel:
+        return "erro: ferramenta disponível só no painel"
+    return None
+
+
 class ToolRunner:
     """Runs tool calls: allowlist, confirmation gate, timeout, shielded execution."""
 
@@ -96,10 +104,8 @@ class ToolRunner:
             tool = self._tools.get(call.name)
         except RegistryKeyError:
             return "erro: ferramenta desconhecida"
-        if segment is not None and tool.spec.segment != segment:
-            return "erro: ferramenta fora do segmento"
-        if tool.spec.panel_only and not panel:
-            return "erro: ferramenta disponível só no painel"
+        if (refusal := _refusal(tool.spec, segment, panel=panel)) is not None:
+            return refusal
         try:
             args = _parse(call.arguments)
             if not tool.needs_confirmation(args):
