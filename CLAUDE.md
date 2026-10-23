@@ -55,6 +55,7 @@ filter (`segment` omitted or `auto` = all tools; unknown segment = `404`).
 | `music` | Spotify playback on a Spotify Connect device | `MusicPort` |
 | `agenda` | Events (Google Calendar), reminders and alarms | `CalendarPort`, `ReminderStorePort` |
 | `finance` | Monthly expenses, bills (Google Sheets) | `ExpensesPort` |
+| `weather` | Current weather and forecast for the home city or any city (Open-Meteo) | `WeatherPort` |
 | `projects` | Owner's programming projects: RAG over their `CLAUDE.md`; open/close `claude` in the panel terminal | `KnowledgeStorePort`, `EmbedderPort`, `DocumentSourcePort`, `ProjectTerminalPort` |
 
 **Adding a tool:**
@@ -104,6 +105,7 @@ live:  WS /live ⇄ RunLiveSession ⇄ LiveSessionPort ⇄ ToolRunner
 | Google Calendar | OAuth 2.0 refresh token, REST over aiohttp | Google is the system of record, not our DB. `scripts/google_login.py` gets the token. |
 | Piper | Local TTS (`piper-tts`, CPU, pt-BR voice in `models/`) behind `SpeechPort` | Speaks reminders. No network, no tokens. |
 | Google Sheets | OAuth 2.0 | The expense spreadsheet you already use. |
+| Open-Meteo | HTTPS over aiohttp, no key | Weather and city geocoding. Home city from `BYTE_WEATHER_HOME`. |
 
 **Every integration is a driven adapter behind a port.** A vendor SDK type never
 crosses the port boundary. Vendor errors are wrapped in a `DomainError`
@@ -332,6 +334,7 @@ expense adapters. What is left is replacing those adapters with real ones.
 | Google Sheets adapter | not started (later spec) |
 | Gemini Live adapter, A/B against OpenAI | not started (later spec) |
 | Project knowledge (pgvector + local embeddings) and panel project terminal (Spec 4) | done (opening by voice in the panel not checked by hand) |
+| Weather: tools, panel section, `/ws/panel` push (Spec 6) | done |
 | Postgres for conversations, OAuth tokens, reminders | not started (later spec) |
 | Byte driving Claude Code on its own (Spec 5) | not started |
 

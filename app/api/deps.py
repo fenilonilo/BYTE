@@ -36,6 +36,7 @@ from app.application.tools.catalog import build_tool_registry
 from app.application.tools.music import KnownUris
 from app.application.use_cases.process_chat_message import ProcessChatMessage
 from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
+from app.application.weather_display import WeatherDisplay
 from app.config import Settings, load_settings
 from app.domain.exceptions import ConfigError
 
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
     from app.ports.music import MusicPort
     from app.ports.reminders import ReminderStorePort
     from app.ports.speech import SpeechPort
+    from app.ports.weather import WeatherPort
 
 
 @lru_cache
@@ -262,6 +264,22 @@ def get_terminal_slot() -> LiveSlot:
 
 
 @lru_cache
+def get_weather() -> WeatherPort:
+    try:
+        from app.adapters.openmeteo.open_meteo_weather import (  # noqa: PLC0415 - optional extra
+            OpenMeteoWeather,
+        )
+    except ImportError as exc:
+        raise ConfigError("weather needs the 'weather' extra (aiohttp)") from exc
+    return OpenMeteoWeather()
+
+
+@lru_cache
+def get_weather_display() -> WeatherDisplay:
+    return WeatherDisplay(get_weather(), get_settings().weather_home)
+
+
+@lru_cache
 def get_tools() -> Registry[Tool]:
     return build_tool_registry(
         get_light(),
@@ -276,6 +294,7 @@ def get_tools() -> Registry[Tool]:
         if (names := get_project_names())
         else None,
         session=get_project_session(),
+        weather=(get_weather(), get_weather_display()),
     )
 
 

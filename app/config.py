@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     # Reminders: kept in a JSON file; spoken with a local Piper voice (.onnx), beep-only if unset.
     reminders_path: str = "data/reminders.json"
     piper_model: str | None = None
+    # Weather (Spec 6): the home city, "Cidade, UF". Open-Meteo needs no key.
+    weather_home: str = "Goiânia, GO"
     # Projects (Spec 4): name -> folder + Markdown docs to index. Empty: the feature is off.
     projects: dict[str, ProjectSettings] = {}
     database_url: SecretStr | None = None  # postgresql+asyncpg://...; unset: in-memory index
