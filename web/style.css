@@ -13,6 +13,7 @@
   --accent-ink: #1a140a;
   --accent-wash: rgba(227, 165, 72, 0.1);
   --danger: #e2826a;
+  --rain: #7fb3d5;
   --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -386,6 +387,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 }
 .sec:nth-of-type(2) { --i: 1; } .sec:nth-of-type(3) { --i: 2; } .sec:nth-of-type(4) { --i: 3; }
 .sec:nth-of-type(5) { --i: 4; } .sec:nth-of-type(6) { --i: 5; } .sec:nth-of-type(7) { --i: 6; }
+.sec:nth-of-type(8) { --i: 7; }
 .sec-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .sec-head h2 { margin: 0; font-size: 19px; font-weight: 500; letter-spacing: -0.02em; }
 .sec-head .num { color: var(--fg-3); }
@@ -734,6 +736,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
   .bar { gap: 12px; }
   .agent-state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .next-alert { max-width: none; flex: 1 1 auto; }
+  .brand { margin-right: auto; }
 }
 @media (max-width: 420px) {
   .brand strong, #logout, .clock3d { display: none; }
@@ -760,6 +763,95 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
   .ambient { margin-left: 0; text-align: left; width: 100%; }
   .player { grid-template-columns: 84px minmax(0, 1fr); gap: 14px; }
   .deck { width: 84px; }
+}
+
+/* ---------- Weather ----------
+   The chip next to the clock is always the home city; the section shows what the owner asked for. */
+.wx-chip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 32px; padding: 0 10px 0 4px;
+  border: 1px solid var(--line-2); border-radius: 16px;
+  color: var(--fg); text-decoration: none; font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums;
+  transition: border-color 0.3s var(--ease), background-color 0.3s var(--ease);
+}
+.wx-chip:hover { border-color: var(--fg-3); background: var(--bg-3); }
+.wx-chip .art { width: 28px; height: 26px; }
+.wx-chip .wet { color: var(--rain); }
+.wx-chip.raining { border-color: color-mix(in oklab, var(--rain) 55%, transparent); }
+/* Whatever follows the agent state sits on the right, with or without the reminder chip. */
+.bar .agent-state { margin-right: auto; }
+.bar .next-alert, .bar .wx-chip, .bar .bar-end { margin-left: 0; }
+
+.wx-where { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wx-where .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx { display: grid; gap: 22px; min-width: 0; }
+.wx-now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 18px; align-items: center; }
+.wx-now .art { width: 112px; height: 100px; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.35)); }
+.wx-temp { font: 300 60px/0.95 var(--mono); letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+.wx-temp sup { font-size: 20px; letter-spacing: 0; color: var(--fg-2); vertical-align: 1.6em; margin-left: 2px; }
+.wx-state { margin: 8px 0 2px; font: 400 12.5px/1.4 var(--mono); color: var(--fg-2); }
+.wx-state.wet { color: var(--rain); }
+.wx-state.wet::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--rain); vertical-align: 1px; animation: blink 1.6s ease-in-out infinite; }
+.wx-meta { margin: 0; color: var(--fg-2); font-size: 13px; }
+
+.wx-hours { min-width: 0; }
+.wx-chart { display: block; width: 100%; height: 96px; overflow: visible; }
+.wx-chart .wx-bar { fill: var(--rain); opacity: 0.55; }
+.wx-chart .wx-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.wx-chart .wx-area { fill: url(#g-wx-area); stroke: none; }
+.wx-plot { position: relative; }
+.wx-peak {
+  position: absolute; transform: translate(-50%, -150%); white-space: nowrap;
+  font: 500 11px/1 var(--mono); color: var(--fg);
+}
+.wx-peak::after {
+  content: ""; position: absolute; left: 50%; top: calc(150% - 3px); width: 6px; height: 6px; margin-left: -3px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(227, 165, 72, 0.7);
+}
+.wx-ticks { display: flex; justify-content: space-between; margin-top: 6px; font: 400 11px/1 var(--mono); color: var(--fg-3); }
+.wx-legend { display: flex; gap: 14px; margin-top: 8px; font: 400 11px/1 var(--mono); color: var(--fg-3); }
+.wx-legend i { display: inline-block; width: 10px; height: 2px; margin-right: 6px; vertical-align: 3px; background: var(--accent); }
+.wx-legend i.rain { height: 8px; vertical-align: 0; background: var(--rain); opacity: 0.5; }
+
+.wx-days > li { grid-template-columns: 4.5ch 30px 3.5ch minmax(40px, 1fr) 3.5ch 5ch; gap: 10px; padding: 9px 0; }
+.wx-days .art { width: 30px; height: 27px; }
+.wx-day { font: 400 13px/1 var(--mono); color: var(--fg-2); }
+.wx-days li:first-child .wx-day { color: var(--fg); }
+.wx-lo, .wx-hi { font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.wx-lo { color: var(--fg-2); }
+.wx-range { position: relative; height: 5px; border-radius: 3px; background: var(--bg-3); }
+.wx-range i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: linear-gradient(90deg, var(--rain), var(--accent)); }
+.wx-chance { font: 400 12px/1 var(--mono); color: var(--rain); text-align: right; }
+.wx-chance.dry { color: var(--fg-3); }
+
+/* Weather objects: drifting clouds, falling drops, a slow sun, a storm that flashes now and then. */
+.wx-rays path { stroke: #f0b65a; stroke-width: 2.2; stroke-linecap: round; }
+.wx-rays { transform-box: view-box; animation: spin 40s linear infinite; }
+.wx-moon { fill: #ece4d2; }
+.wx-star { fill: #f3ead8; animation: blink 2.6s ease-in-out infinite; }
+.wx-star:nth-of-type(2) { animation-delay: -0.9s; }
+.wx-star:nth-of-type(3) { animation-delay: -1.7s; }
+.wx-cloud { animation: wx-drift 6s ease-in-out infinite alternate; }
+.wx-light { fill: #e9e2d4; }
+.wx-grey { fill: #a3abb4; }
+.wx-dark { fill: #6d7580; }
+.night .wx-light { fill: #b9b4aa; }
+.wx-drop { stroke: var(--rain); stroke-width: 2.2; stroke-linecap: round; animation: wx-fall 0.9s linear infinite; }
+.wx-drizzle .wx-drop { stroke-width: 1.6; animation-duration: 1.5s; }
+.wx-fog path { stroke: #a8a091; stroke-width: 2.4; stroke-linecap: round; animation: wx-mist 4s ease-in-out infinite alternate; }
+.wx-fog path:nth-child(2) { animation-delay: -1.3s; }
+.wx-fog path:nth-child(3) { animation-delay: -2.6s; }
+.wx-bolt { fill: var(--accent); filter: drop-shadow(0 0 4px rgba(227, 165, 72, 0.8)); animation: wx-flash 3.4s steps(1, end) infinite; }
+@keyframes wx-drift { to { transform: translateX(2.5px); } }
+@keyframes wx-fall { from { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } to { transform: translateY(8px); opacity: 0; } }
+@keyframes wx-mist { to { transform: translateX(4px); opacity: 0.5; } }
+@keyframes wx-flash { 0% { opacity: 0; } 6% { opacity: 1; } 9% { opacity: 0.15; } 12% { opacity: 1; } 18%, 100% { opacity: 0; } }
+
+@container (max-width: 420px) {
+  .wx-now { grid-template-columns: 84px minmax(0, 1fr); gap: 12px; }
+  .wx-now .art { width: 84px; height: 76px; }
+  .wx-temp { font-size: 48px; }
+  .wx-days > li { grid-template-columns: 4.5ch 26px 3.5ch minmax(24px, 1fr) 3.5ch 4.5ch; gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

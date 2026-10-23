@@ -280,6 +280,7 @@ class WeatherForecastSchema(_View):
 
 class WeatherSchema(BaseModel):
     is_home: bool
+    home: PlaceSchema | None
     forecast: WeatherForecastSchema | None
     home_now: CurrentWeatherSchema | None
     errors: list[str]  # "forecast" and/or "home"

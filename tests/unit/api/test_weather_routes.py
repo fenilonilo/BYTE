@@ -126,6 +126,19 @@ def test_weather_after_show_weather() -> None:
     assert body["home_now"] is not None
 
 
+def test_home_place_is_always_named() -> None:
+    env = Env()
+    assert env.weather()["home"] == {
+        "name": "Goiânia",
+        "region": "Goiás",
+        "country": "Brasil",
+        "label": "Goiânia, Goiás",
+    }
+    asyncio.run(env.display.show(FLORIPA))
+    assert env.weather()["home"]["name"] == "Goiânia"  # pyright: ignore[reportIndexIssue, reportOptionalSubscript]
+    assert Env(NoGeocoding()).weather()["home"] is None
+
+
 def test_delete_display_goes_home() -> None:
     env = Env()
     asyncio.run(env.display.show(FLORIPA))

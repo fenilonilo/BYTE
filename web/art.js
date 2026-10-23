@@ -1,4 +1,4 @@
-// The panel's objects (lamp, air conditioner, turntable, bell, alarm clock), drawn in SVG and lit
+// The panel's objects (lamp, air conditioner, turntable, bell, alarm clock, weather), drawn in SVG and lit
 // from the upper left. Colour and looping motion come from style.css; the shading overlays are the
 // shared gradients in index.html (#art-defs), so every copy reuses one set of defs.
 
@@ -97,3 +97,45 @@ export const alarmClock = () => art('alarm-art', '0 0 32 32', `
   </g>`);
 
 export const reminderArt = (kind) => (kind === 'alarme' ? alarmClock() : bell());
+
+// Weather: sun, moon, clouds, fog, rain and storm, built from parts so a partly cloudy night is a
+// moon behind a cloud. One viewBox for all, so every condition sits in the same spot.
+const SUN_RAYS = (cx, cy) => Array.from({ length: 8 }, (_, i) => {
+  const a = (i * Math.PI) / 4;
+  const p = (r) => `${(cx + r * Math.cos(a)).toFixed(1)} ${(cy + r * Math.sin(a)).toFixed(1)}`;
+  return `<path d="M${p(13.5)}L${p(18)}"/>`;
+}).join('');
+const sun = (cx, cy, r) => `
+  <g class="wx-rays" style="transform-origin:${cx}px ${cy}px">${SUN_RAYS(cx, cy)}</g>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#g-sun)"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#g-ball)" opacity=".55"/>`;
+const moon = (x, y, s) => `
+  <g transform="translate(${x} ${y}) scale(${s})">
+    <path class="wx-moon" d="M4.5-10A11 11 0 1 0 11 6.5 9 9 0 0 1 4.5-10z"/>
+    <path d="M4.5-10A11 11 0 1 0 11 6.5 9 9 0 0 1 4.5-10z" fill="url(#g-ball)" opacity=".5"/>
+  </g>`;
+const STARS = '<circle class="wx-star" cx="50" cy="12" r="1.2"/><circle class="wx-star" cx="56" cy="24" r=".9"/><circle class="wx-star" cx="12" cy="36" r="1"/>';
+const cloud = (tone) => `
+  <ellipse cx="34" cy="47" rx="19" ry="2.4" fill="#0a0907" opacity=".45"/>
+  <g class="wx-cloud wx-${tone}">
+    <circle cx="22" cy="31" r="10"/><circle cx="34" cy="24" r="13"/><circle cx="46" cy="31" r="9"/>
+    <rect x="12" y="30" width="44" height="11" rx="5.5"/>
+    <ellipse cx="29" cy="20" rx="8" ry="5" fill="#fff" opacity=".35" mask="url(#m-spot)"/>
+    <rect x="14" y="35.5" width="40" height="5.5" rx="2.75" fill="#000" opacity=".14"/>
+  </g>`;
+const DROPS = (n) => [22, 30, 38, 46].slice(0, n).map((x, i) => `<path class="wx-drop" style="animation-delay:-${(i * 0.29).toFixed(2)}s" d="M${x} 44l-1.4 5"/>`).join('');
+const FOG = '<g class="wx-fog"><path d="M14 45H50"/><path d="M20 50H56"/><path d="M10 55H44"/></g>';
+const BOLT = '<path class="wx-bolt" d="M35 39l-7 9h5l-3 8 10-11h-5.5l3-6z"/>';
+
+const SKY = {
+  clear: (day) => (day ? sun(32, 26, 11) : `${moon(30, 26, 1.1)}${STARS}`),
+  partly_cloudy: (day) => `${day ? sun(22, 18, 9) : moon(22, 19, 0.85)}${cloud('light')}`,
+  cloudy: () => cloud('light'),
+  fog: () => `${cloud('light')}${FOG}`,
+  drizzle: () => `${cloud('grey')}${DROPS(3)}`,
+  rain: () => `${cloud('grey')}${DROPS(4)}`,
+  storm: () => `${cloud('dark')}${BOLT}${DROPS(2)}`,
+};
+
+export const weather = (condition, isDay = true) =>
+  art(`wx-art wx-${condition}${isDay ? '' : ' night'}`, '0 0 64 58', (SKY[condition] || SKY.cloudy)(isDay));

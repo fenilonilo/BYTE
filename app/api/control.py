@@ -43,6 +43,7 @@ from app.api.schemas import (
     MusicPlaySchema,
     MusicSchema,
     PendingConfirmationSchema,
+    PlaceSchema,
     ReminderCreateSchema,
     RemindersSchema,
     StateSchema,
@@ -368,12 +369,13 @@ async def _weather(weather: WeatherPort, display: WeatherDisplay) -> WeatherSche
         place, home = await display.shown(), await display.home()
     except DomainError:
         return WeatherSchema(
-            is_home=True, forecast=None, home_now=None, errors=["forecast", "home"]
+            is_home=True, home=None, forecast=None, home_now=None, errors=["forecast", "home"]
         )
     shown = await _forecast(weather, place)
     at_home = shown if place == home else await _forecast(weather, home)
     return WeatherSchema(
         is_home=place == home,
+        home=PlaceSchema.model_validate(home),
         forecast=None if shown is None else WeatherForecastSchema.model_validate(shown),
         home_now=None if at_home is None else WeatherForecastSchema.model_validate(at_home).current,
         errors=[name for name, f in (("forecast", shown), ("home", at_home)) if f is None],

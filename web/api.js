@@ -207,7 +207,7 @@ function mockForecast(place, rain) {
 function mockWeather() {
   const home = mockForecast(HOME, WX === 'rain');
   const forecast = db.wxAway ? mockForecast(AWAY, false) : home;
-  return ok({ is_home: !db.wxAway, forecast, home_now: home.current, errors: [] });
+  return ok({ is_home: !db.wxAway, home: HOME, forecast, home_now: home.current, errors: [] });
 }
 
 function ask(summary, run) {

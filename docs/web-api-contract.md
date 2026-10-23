@@ -20,7 +20,7 @@ routes. Never send raw device or spreadsheet ids; an unknown name is `422`.
 | `GET /music/playlists` | `{items: MusicItem[]}` |
 | `GET /agenda?date=YYYY-MM-DD` | `{events: Event[]}` |
 | `GET /finance/expenses?year=2026&month=10` | `{expenses: Expense[], total_cents: int}` |
-| `GET /weather` | `{is_home, forecast: Forecast\|null, home_now: Current\|null, errors: string[]}`. `forecast` is the city the panel shows (home unless the owner asked Byte to show another); `home_now` is the home city's current weather, for the bar chip. Each fails on its own: `null` plus `"forecast"` / `"home"` in `errors`, still 200. |
+| `GET /weather` | `{is_home, home: {name, region, country, label}\|null, forecast: Forecast\|null, home_now: Current\|null, errors: string[]}`. `forecast` is the city the panel shows (home unless the owner asked Byte to show another); `home_now` is the home city's current weather, for the bar chip. Each fails on its own: `null` plus `"forecast"` / `"home"` in `errors`, still 200. |
 | `GET /reminders` | `{reminders: Reminder[]}`, soonest first. Calendar warnings are left out (the agenda shows the events). A reminder stays listed after its time until the device has played it and acked. |
 
 ```

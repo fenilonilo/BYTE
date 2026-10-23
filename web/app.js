@@ -3,8 +3,10 @@ import * as art from './art.js';
 import { IDLE_WARN_SECONDS, createVoice } from './live.js';
 import { createSphere } from './sphere.js';
 import { connectProjectTerm, paneView } from './project-term.js';
+import { panelSocket } from './panel-socket.js';
 import { createTerminal } from './terminal.js';
 import { countdown, elapsed, urgency } from './time.js';
+import { CONDITION_WORD, chart, dayLabel, hourLabel, rangeBar } from './weather.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -55,7 +57,7 @@ const FANS = { auto: 'auto', low: 'baixa', mid: 'média', high: 'alta', nature: 
 const KINDS = { track: 'faixa', album: 'álbum', playlist: 'playlist', artist: 'artista' };
 const AGENT_LABEL = { idle: 'em espera', listening: 'ouvindo', thinking: 'pensando', speaking: 'falando' };
 const VOICE_LABEL = { off: 'desligada', wake: 'esperando “Ei Byte”', connecting: 'conectando', listening: 'ouvindo', thinking: 'pensando', speaking: 'falando' };
-const SECTION_TAG = { lights: 'luzes', climate: 'clima', music: 'música', agenda: 'agenda', finance: 'finanças', alerts: 'alertas' };
+const SECTION_TAG = { lights: 'luzes', climate: 'clima', music: 'música', agenda: 'agenda', finance: 'finanças', alerts: 'alertas', weather: 'tempo' };
 
 const brl = (cents) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const localDate = (d = new Date()) => d.toLocaleDateString('sv-SE');
@@ -744,6 +746,7 @@ async function refreshAll(section, quiet = false) {
   if (section === 'alerts') return loadReminders(quiet);
   if (section === 'agenda') return loadAgenda(quiet);
   if (section === 'finance') return loadFinance(quiet);
+  if (section === 'weather') return loadWeather(quiet);
   try {
     const s = await api.state();
     applyState(s, quiet);
@@ -765,6 +768,122 @@ function applyState(s, quiet) {
     RENDER[key]();
   }
   for (const failed of s.errors || []) note(failed === 'climates' ? 'climate' : failed, `${failed}: leitura falhou.`, true);
+}
+
+// ---------------------------------------------------------------- weather
+
+const NS = 'http://www.w3.org/2000/svg';
+const CHART_W = 320;
+const CHART_H = 96;
+const TICKS = [0, 6, 12, 18, 23];
+const deg = (n) => `${Math.round(n)}°`;
+let homeCity = '';
+
+async function loadWeather(quiet = false) {
+  try {
+    const w = await api.weather();
+    // An unchanged reading leaves the section alone, so its objects keep their motion.
+    if (quiet && JSON.stringify(w) === JSON.stringify(state.weather)) return;
+    state.weather = w;
+    renderWeather(quiet);
+  } catch (err) {
+    if (err.status === 401) return handleError('weather', err);
+    if (!quiet) note('weather', 'Não consegui ler o tempo.', true);
+    if (!state.weather) $('#wx-body').replaceChildren(sectionError('Previsão indisponível agora.', () => loadWeather()));
+  }
+}
+
+function renderChip(now) {
+  const chip = $('#wx-chip');
+  chip.hidden = !now;
+  if (!now) return;
+  const word = now.raining ? 'chovendo' : CONDITION_WORD[now.condition];
+  chip.classList.toggle('raining', now.raining);
+  chip.setAttribute('aria-label', `Tempo em ${homeCity || 'casa'}: ${deg(now.temperature)}, ${word}`);
+  chip.replaceChildren(art.weather(now.condition, now.is_day), h('span', {}, deg(now.temperature)));
+  if (now.raining) chip.append(h('span', { class: 'wet' }, 'chuva'));
+}
+
+function weatherNow(c) {
+  return h('div', { class: 'wx-now' }, art.weather(c.condition, c.is_day), h('div', {},
+    h('div', { class: 'wx-temp' }, String(Math.round(c.temperature)), h('sup', {}, '°C')),
+    h('p', { class: `wx-state${c.raining ? ' wet' : ''}` }, c.raining ? 'chovendo agora' : `sem chuva · ${CONDITION_WORD[c.condition]}`),
+    h('p', { class: 'wx-meta' }, `sensação ${deg(c.feels_like)} · umidade ${c.humidity}% · vento ${Math.round(c.wind_kmh)} km/h`)));
+}
+
+function weatherHours(hours) {
+  const g = chart(hours, CHART_W, CHART_H);
+  const xs = g.line.split(' ').map((p) => p.split(',')[0]);
+  const s = document.createElementNS(NS, 'svg');
+  s.setAttribute('class', 'wx-chart');
+  s.setAttribute('viewBox', `0 0 ${CHART_W} ${CHART_H}`);
+  s.setAttribute('preserveAspectRatio', 'none');
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = g.bars.map((b) => `<rect class="wx-bar" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="1.5"/>`).join('')
+    + `<polygon class="wx-area" points="${g.line} ${xs.at(-1)},${CHART_H} ${xs[0]},${CHART_H}"/>`
+    + `<polyline class="wx-line" points="${g.line}"/>`;
+  // Labels are HTML: the chart stretches to the pane, text must not.
+  const peak = h('span', { class: 'wx-peak', style: `left:${(g.peak.x / CHART_W) * 100}%;top:${g.peak.y}px` }, `${g.peak.label} ${g.peak.hour}`);
+  const ticks = h('div', { class: 'wx-ticks' }, ...TICKS.map((i) => h('span', {}, i === 0 ? 'agora' : hourLabel(hours[i].time))));
+  const legend = h('div', { class: 'wx-legend' }, h('span', {}, h('i'), 'temperatura'), h('span', {}, h('i', { class: 'rain' }), 'chance de chuva'));
+  const summary = `Próximas 24 horas: máxima de ${g.peak.label} às ${g.peak.hour}, chuva até ${Math.max(...hours.map((x) => x.rain_chance))}%.`;
+  return h('div', { class: 'wx-hours', role: 'img', 'aria-label': summary },
+    h('div', { class: 'wx-plot' }, s, peak), ticks, legend);
+}
+
+function weatherDays(days, quiet) {
+  const list = h('ul', { class: `rows wx-days${quiet ? ' settled' : ''}` });
+  list.append(...days.map((d) => {
+    const label = dayLabel(d.day, days[0].day);
+    const span = rangeBar(d, days);
+    return h('li', { 'aria-label': `${label}: mínima ${deg(d.low)}, máxima ${deg(d.high)}, chuva ${d.rain_chance}%, ${CONDITION_WORD[d.condition]}` },
+      h('span', { class: 'wx-day', 'aria-hidden': 'true' }, label),
+      art.weather(d.condition, true),
+      h('span', { class: 'wx-lo', 'aria-hidden': 'true' }, deg(d.low)),
+      h('div', { class: 'wx-range', 'aria-hidden': 'true' }, h('i', { style: `left:${span.left}%;right:${span.right}%` })),
+      h('span', { class: 'wx-hi', 'aria-hidden': 'true' }, deg(d.high)),
+      h('span', { class: `wx-chance${d.rain_chance < 20 ? ' dry' : ''}`, 'aria-hidden': 'true' }, `${d.rain_chance}%`));
+  }));
+  return list;
+}
+
+function renderWeather(quiet = false) {
+  const w = state.weather;
+  const f = w.forecast;
+  if (w.home) homeCity = w.home.name;
+  renderChip(w.home_now);
+  $('#wx-place').textContent = f ? `${f.place.label.toLowerCase()} · agora` : '';
+  const back = $('#wx-home');
+  back.hidden = w.is_home;
+  back.textContent = `voltar para ${homeCity || 'casa'}`;
+  const box = $('#wx-body');
+  if (!f) return box.replaceChildren(sectionError('Previsão indisponível agora.', () => loadWeather()));
+  box.replaceChildren(weatherNow(f.current), weatherHours(f.hours), weatherDays(f.days, quiet));
+}
+
+async function weatherHome() {
+  const back = $('#wx-home');
+  back.disabled = true;
+  try {
+    state.weather = await api.weatherHome();
+    renderWeather();
+  } catch (err) {
+    handleError('weather', err);
+  } finally {
+    back.disabled = false;
+  }
+}
+
+let panelLink = null;
+function startPanelLink() {
+  if (MOCK || panelLink) return;
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  // Browsers cannot set Authorization on a WebSocket: the token rides as a subprotocol.
+  panelLink = panelSocket({
+    open: () => new WebSocket(`${scheme}://${location.host}/api/v1/ws/panel`, ['bearer', token.get() || '']),
+    onWeather: () => loadWeather(true),
+    onOpen: () => loadWeather(true),
+  });
 }
 
 // ---------------------------------------------------------------- chat
@@ -944,6 +1063,11 @@ function wipePanel() {
   announced.clear();
   term.wipe();
   $('#next-alert').hidden = true;
+  state.weather = null;
+  $('#wx-chip').hidden = true;
+  $('#wx-body').replaceChildren();
+  $('#wx-place').textContent = '';
+  $('#wx-home').hidden = true;
   $('#next-alert').replaceChildren();
   delete $('#next-alert').dataset.kind;
   $('#deck').hidden = true;
@@ -991,6 +1115,8 @@ function startProjectTerm() {
 function signOut(message = '') {
   projectTerm?.close();
   projectTerm = null;
+  panelLink?.close();
+  panelLink = null;
   showProject(null);
   token.clear();
   voice.shutdown();
@@ -1037,8 +1163,10 @@ function enter(initial) {
   loadReminders();
   loadAgenda();
   loadFinance();
+  loadWeather();
   armStoredWake();
   startProjectTerm();
+  startPanelLink();
   const tick = () => {
     $('#clock').textContent = new Date().toLocaleTimeString('pt-BR');
     // Hands as angles since local midnight: they only ever turn forward (except once at midnight).
@@ -1057,6 +1185,7 @@ function enter(initial) {
     // ponytail: polling; /ws/notifications has one listener and it belongs to the device.
     setInterval(() => { if (!document.hidden && busy === 0) refreshAll(null, true); }, 20_000),
     setInterval(() => { if (!document.hidden) loadReminders(true); }, 10_000),
+    setInterval(() => { if (!document.hidden) loadWeather(true); }, 10 * 60_000),
   );
 }
 
@@ -1097,6 +1226,7 @@ function wire() {
   trackSections();
   watchMusicSection();
   $('#devices-refresh').addEventListener('click', loadDevices);
+  $('#wx-home').addEventListener('click', weatherHome);
   $('#gate-form').addEventListener('submit', signIn);
   $('#logout').addEventListener('click', () => signOut());
 

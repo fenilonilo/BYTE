@@ -39,6 +39,12 @@
       <stop offset="0" stop-color="#4a3d2a"/><stop offset=".35" stop-color="#c9a466"/><stop offset=".5" stop-color="#f3dcaa"/>
       <stop offset=".7" stop-color="#9a7a48"/><stop offset="1" stop-color="#3a2f20"/>
     </linearGradient>
+    <radialGradient id="g-sun" cx=".4" cy=".36" r=".7">
+      <stop offset="0" stop-color="#fff1cc"/><stop offset=".45" stop-color="#f0b65a"/><stop offset="1" stop-color="#b8731f"/>
+    </radialGradient>
+    <linearGradient id="g-wx-area" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e3a548" stop-opacity=".22"/><stop offset=".6" stop-color="#e3a548" stop-opacity="0"/>
+    </linearGradient>
     <linearGradient id="g-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
     <radialGradient id="g-spot"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
     <mask id="m-fade" maskContentUnits="objectBoundingBox"><rect width="1" height="1" fill="url(#g-fade)"/></mask>
@@ -70,6 +76,7 @@
     <div class="brand"><span class="mark" aria-hidden="true">01</span><strong>Byte</strong></div>
     <p class="agent-state" role="status" aria-live="polite"><span class="led" aria-hidden="true"></span><span id="agent-state">em espera</span></p>
     <a class="next-alert" id="next-alert" href="#sec-alerts" hidden></a>
+    <a class="wx-chip" id="wx-chip" href="#sec-weather" hidden></a>
     <div class="bar-end">
       <span class="tag mock-only" hidden>mock</span>
       <span class="clock-wrap">
@@ -129,7 +136,7 @@
     <!-- 3. Functions: alerts, agent, every tool segment -->
     <section class="pane fn" id="pane-fn" aria-label="Funções">
       <nav class="index" aria-label="Seções">
-        <a href="#sec-alerts">Alertas</a><a href="#sec-agent">Agente</a><a href="#sec-lights">Luzes</a><a href="#sec-climate">Clima</a><a href="#sec-music">Música</a><a href="#sec-agenda">Agenda</a><a href="#sec-finance">Finanças</a>
+        <a href="#sec-alerts">Alertas</a><a href="#sec-agent">Agente</a><a href="#sec-lights">Luzes</a><a href="#sec-climate">Clima</a><a href="#sec-music">Música</a><a href="#sec-weather">Tempo</a><a href="#sec-agenda">Agenda</a><a href="#sec-finance">Finanças</a>
       </nav>
       <div class="console" id="console" tabindex="-1">
         <div class="global-pending" id="global-pending"></div>
@@ -219,9 +226,22 @@
           <p class="note" role="status" data-note="music"></p>
         </section>
 
+        <section class="sec" id="sec-weather" aria-labelledby="h-weather">
+          <header class="sec-head">
+            <span class="num">05</span><h2 id="h-weather">Tempo</h2>
+            <div class="wx-where">
+              <span class="label" id="wx-place"></span>
+              <button class="btn ghost small" type="button" id="wx-home" hidden></button>
+              <button class="icon-btn" type="button" data-refresh="weather" aria-label="Atualizar tempo"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+            </div>
+          </header>
+          <div class="wx" id="wx-body"></div>
+          <p class="note" role="status" data-note="weather"></p>
+        </section>
+
         <section class="sec" id="sec-agenda" aria-labelledby="h-agenda">
           <header class="sec-head">
-            <span class="num">05</span><h2 id="h-agenda">Agenda</h2>
+            <span class="num">06</span><h2 id="h-agenda">Agenda</h2>
             <div class="day-nav">
               <button class="art-btn cal" type="button" id="agenda-cal" aria-label="Voltar para hoje">
                 <svg class="art" viewBox="0 0 36 40" aria-hidden="true">
@@ -258,7 +278,7 @@
 
         <section class="sec" id="sec-finance" aria-labelledby="h-finance">
           <header class="sec-head">
-            <span class="num">06</span><h2 id="h-finance">Finanças</h2>
+            <span class="num">07</span><h2 id="h-finance">Finanças</h2>
             <div class="day-nav">
               <label for="finance-month" class="sr-only">Mês</label>
               <input type="month" id="finance-month">
