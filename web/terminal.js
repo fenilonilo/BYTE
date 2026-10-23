@@ -14,7 +14,8 @@ export function createTerminal({ out, form, input, commands }) {
 
   function log(tag, text, kind = '') {
     const line = document.createElement('p');
-    line.className = `tl ${kind}`;
+    // An untagged line continues the one above: its time would only repeat.
+    line.className = `tl ${kind}${tag ? '' : ' cont'}`;
     const time = document.createElement('span');
     time.className = 'tt';
     time.textContent = hms();
@@ -40,8 +41,9 @@ export function createTerminal({ out, form, input, commands }) {
     if (name === 'clear' || name === 'cls') return clear();
     if (name === 'help' || name === 'ajuda') {
       const width = Math.max(...Object.keys(commands).map((k) => k.length), 5);
+      out.style.setProperty('--hang', `${width + 2}ch`);
       for (const [k, c] of Object.entries({ help: { help: 'esta lista' }, clear: { help: 'limpa a tela' }, ...commands })) {
-        log('', `${k.padEnd(width)}  ${c.help}`);
+        log('', `${k.padEnd(width)}  ${c.help}`, 'help');
       }
       return;
     }

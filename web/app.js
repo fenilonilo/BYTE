@@ -1,4 +1,5 @@
 import { api, MOCK, token } from './api.js';
+import * as art from './art.js';
 import { IDLE_WARN_SECONDS, createVoice } from './live.js';
 import { createSphere } from './sphere.js';
 import { connectProjectTerm, paneView } from './project-term.js';
@@ -32,8 +33,22 @@ const ICON = {
   shuffle: 'M2 4.5h2.5c3 0 4 7 7 7H14M2 11.5h2.5c1.2 0 2-1 2.7-2.3M9 6.6C9.6 5.4 10.3 4.5 11.5 4.5H14M12.5 3 14 4.5 12.5 6M12.5 10 14 11.5 12.5 13',
   trash: 'M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5',
   minus: 'M3.5 8h9', plus: 'M3.5 8h9M8 3.5v9',
-  bell: 'M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3', alarm: 'M8 4.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM8 6.5V9l1.5 1M2.5 4 4.5 2M13.5 4l-2-2',
 };
+
+// One-shot motion (a chain tug, a coin landing); looping motion lives in style.css.
+const play = (el, frames, opts) => { if (el && !reducedMotion.matches) el.animate(frames, opts); };
+const SPRING = 'cubic-bezier(0.3, 1.6, 0.5, 1)';
+const looks = (box, sel, cls) => new Map([...box.querySelectorAll(sel)].map((n) => [n.dataset.key, n.classList.contains(cls)]));
+// A re-render builds fresh nodes. Showing the old look for one style pass lets CSS transitions play
+// for a change made elsewhere (by voice, by the phone app). Returns whether `cls` was switched on.
+function carry(node, was, cls) {
+  const now = node.classList.contains(cls);
+  if (was === undefined || was === now) return false;
+  node.classList.toggle(cls, was);
+  node.getBoundingClientRect();
+  node.classList.toggle(cls, now);
+  return now;
+}
 
 const MODES = { cool: 'frio', dry: 'seco', fan: 'ventilar', auto: 'auto' };
 const FANS = { auto: 'auto', low: 'baixa', mid: 'média', high: 'alta', nature: 'natural' };
@@ -240,8 +255,7 @@ async function runAction(section, call, onDone) {
 
 // ---------------------------------------------------------------- lights
 
-function swatchColor(l) {
-  if (!l.power) return 'transparent';
+function glowColor(l) {
   if (l.mode === 'colour') return `hsl(${l.color.hue} ${Math.max(35, l.color.saturation)}% 58%)`;
   return `color-mix(in oklab, #dfe7ff ${l.color_temperature}%, #ffc27a)`;
 }
@@ -257,12 +271,40 @@ function rangeFill(input, out, suffix = '%') {
   if (out) out.textContent = `${input.value}${suffix}`;
 }
 
+// The lamp flickers awake like a real bulb; WAAPI so a re-render of a lamp already on stays still.
+const ignite = (lamp) => play($('.l-light', lamp),
+  [{ opacity: 0 }, { opacity: 0.9, offset: 0.12 }, { opacity: 0.15, offset: 0.22 }, { opacity: 1, offset: 0.4 }, { opacity: 0.5, offset: 0.52 }, {}],
+  { duration: 700 });
+
+function lampButton(name) {
+  const btn = h('button', {
+    class: 'art-btn lamp', type: 'button', 'data-key': name,
+    onclick: () => {
+      const l = state.lights?.find((x) => x.name === name);
+      if (!l) return;
+      play($('.l-chain', btn), [{ transform: 'none' }, { transform: 'translateY(7px)', offset: 0.3 }, { transform: 'none' }], { duration: 550, easing: SPRING });
+      play($('.l-head', btn), [{ transform: 'none' }, { transform: 'rotate(-3deg)', offset: 0.3 }, { transform: 'rotate(1.5deg)', offset: 0.6 }, { transform: 'none' }], { duration: 700 });
+      // The lamp answers the hand at once; the state read after the command corrects it if it failed.
+      btn.classList.toggle('on', !l.power);
+      if (!l.power) ignite(btn);
+      runAction('lights', () => api.setLight(name, { power: !l.power }));
+    },
+  }, art.lamp());
+  return btn;
+}
+
 function lightRow(l) {
   const level = l.mode === 'colour' ? l.color.brightness : l.brightness;
+  const lamp = lampButton(l.name);
+  lamp.classList.toggle('on', l.power);
+  lamp.style.setProperty('--glow', glowColor(l));
+  lamp.style.setProperty('--lvl', level / 100);
+  lamp.setAttribute('aria-pressed', String(l.power));
+  lamp.setAttribute('aria-label', `${l.name}: ${l.power ? 'ligada' : 'desligada'}. Alternar`);
   const out = h('output', { class: 'row-meta' });
   const range = h('input', {
     type: 'range', min: 1, max: 100, value: level, 'aria-label': `Brilho de ${l.name}`,
-    oninput: () => rangeFill(range, out),
+    oninput: () => { rangeFill(range, out); lamp.style.setProperty('--lvl', range.value / 100); },
     onchange: () => {
       const b = Number(range.value);
       const change = l.mode === 'colour'
@@ -272,17 +314,9 @@ function lightRow(l) {
     },
   });
   rangeFill(range, out);
-  const swatch = h('span', { class: 'swatch', 'aria-hidden': 'true' });
-  swatch.style.background = swatchColor(l);
-  if (l.power) swatch.style.boxShadow = `0 0 10px ${swatchColor(l)}`;
-  return h('li', { class: `light${l.power ? ' on' : ''}` },
-    swatch,
-    h('div', {}, h('div', { class: 'row-title' }, l.name), h('div', { class: 'row-meta' }, lightMeta(l))),
-    h('button', {
-      class: 'toggle', type: 'button', 'aria-pressed': String(l.power),
-      'aria-label': `${l.name}: ${l.power ? 'ligada' : 'desligada'}. Alternar`,
-      onclick: () => runAction('lights', () => api.setLight(l.name, { power: !l.power })),
-    }, l.power ? 'ligada' : 'desligada'),
+  return h('li', { class: 'light' },
+    lamp,
+    h('div', { class: 'light-info' }, h('div', { class: 'row-title' }, l.name), h('div', { class: 'row-meta' }, lightMeta(l))),
     h('div', { class: 'dim' }, h('span', { class: 'label' }, 'brilho'), range, out),
   );
 }
@@ -291,7 +325,14 @@ function renderLights() {
   const list = $('#lights-list');
   if (state.lights === null) return list.replaceChildren(sectionError('Luzes indisponíveis agora.', () => refreshAll('lights')));
   if (!state.lights.length) return list.replaceChildren(empty('Nenhuma luz configurada.', 'Adicione as lâmpadas na configuração do servidor.'));
+  const was = looks(list, '.lamp', 'on');
+  const focused = list.contains(document.activeElement) && document.activeElement.dataset.key;
+  list.classList.toggle('settled', was.size > 0); // rows rise once, not on every state read
   list.replaceChildren(...state.lights.map(lightRow));
+  for (const lamp of list.querySelectorAll('.lamp')) {
+    if (carry(lamp, was.get(lamp.dataset.key), 'on')) ignite(lamp);
+    if (lamp.dataset.key === focused) lamp.focus({ preventScroll: true });
+  }
 }
 
 // ---------------------------------------------------------------- climate
@@ -306,9 +347,18 @@ function climateBlock(c) {
   const off = !c.power;
   const tempEl = h('span', {}, tempParts(c.target_temperature));
   let target = c.target_temperature;
+  const unit = h('button', {
+    class: `art-btn ac${off ? '' : ' on'}${c.swing ? ' swing' : ''}`, type: 'button', 'data-key': c.name,
+    'data-mode': c.mode, 'data-fan': c.fan_speed, 'aria-pressed': String(c.power),
+    'aria-label': `${c.name}: ${c.power ? 'ligado' : 'desligado'}. Alternar`,
+    onclick: () => runAction('climate', () => api.setClimate(c.name, { power: !c.power })),
+  }, art.aircon());
+  const showTarget = () => { $('.ac-temp', unit).textContent = `${temp(target)}°`; };
+  showTarget();
   const nudge = (delta) => {
     target = Math.min(30, Math.max(18, Math.round(target + delta)));
     tempEl.replaceChildren(...tempParts(target));
+    showTarget();
     clearTimeout(tempDebounce[c.name]);
     tempDebounce[c.name] = setTimeout(() => {
       delete tempDebounce[c.name];
@@ -332,12 +382,10 @@ function climateBlock(c) {
 
   return h('div', { class: `climate${off ? ' off' : ''}` },
     h('div', { class: 'climate-top' },
-      h('div', { class: 'row-title' }, c.name),
-      h('button', {
-        class: 'toggle', type: 'button', 'aria-pressed': String(c.power),
-        'aria-label': `${c.name}: ${c.power ? 'ligado' : 'desligado'}. Alternar (pede confirmação)`,
-        onclick: () => runAction('climate', () => api.setClimate(c.name, { power: !c.power })),
-      }, c.power ? 'ligado' : 'desligado')),
+      unit,
+      h('div', {},
+        h('div', { class: 'row-title' }, c.name),
+        h('div', { class: 'row-meta' }, off ? 'desligado' :`ligado · ${MODES[c.mode] ?? c.mode} · ventilador ${FANS[c.fan_speed] ?? c.fan_speed}`))),
     c.has_error ? h('p', { class: 'warn', role: 'alert' }, 'O aparelho está reportando erro.') : null,
     h('div', { class: 'climate-dial' },
       h('div', { class: 'temp', 'aria-live': 'polite' }, h('span', { class: 'sr-only' }, 'alvo '), tempEl, h('small', {}, '°C')),
@@ -345,7 +393,7 @@ function climateBlock(c) {
         h('button', { class: 'icon-btn big', type: 'button', disabled: off, 'aria-label': 'Diminuir um grau', onclick: () => nudge(-1) }, svg(ICON.minus)),
         h('button', { class: 'icon-btn big', type: 'button', disabled: off, 'aria-label': 'Aumentar um grau', onclick: () => nudge(1) }, svg(ICON.plus))),
       h('div', { class: 'ambient' }, h('span', { class: 'label' }, 'ambiente'), h('strong', {}, `${temp(c.current_temperature)}°C`))),
-    off ? h('p', { class: 'help' }, 'Desligado. Ligue para ajustar modo e temperatura.') : null,
+    off ? h('p', { class: 'help' }, 'Toque no aparelho para ligar e ajustar modo e temperatura.') : null,
     h('div', { class: 'climate-opts' },
       seg,
       h('div', { class: 'field' }, h('label', { for: fanId }, 'ventilador'), fan),
@@ -357,7 +405,9 @@ function renderClimate() {
   const box = $('#climate-list');
   if (state.climates === null) return box.replaceChildren(sectionError('Ar-condicionado indisponível agora.', () => refreshAll('climate')));
   if (!state.climates.length) return box.replaceChildren(empty('Nenhum ar-condicionado configurado.', 'Configure o LG ThinQ no servidor.'));
+  const was = looks(box, '.ac', 'on');
   box.replaceChildren(...state.climates.map(climateBlock));
+  box.querySelectorAll('.ac').forEach((unit) => carry(unit, was.get(unit.dataset.key), 'on'));
 }
 
 // ---------------------------------------------------------------- music
@@ -365,7 +415,12 @@ function renderClimate() {
 function renderMusic() {
   const box = $('#music-now');
   const m = state.music;
+  const deck = $('#deck');
+  deck.hidden = m === null;
   if (m === null) return box.replaceChildren(sectionError('Spotify indisponível agora.', () => refreshAll('music')));
+  // The deck is never rebuilt, so the record keeps its angle between state reads.
+  deck.classList.toggle('playing', m.playing);
+  deck.setAttribute('aria-label', m.playing ? 'Pausar' : 'Tocar');
   const item = m.item;
   const out = h('output', { class: 'row-meta' });
   const vol = h('input', {
@@ -495,9 +550,28 @@ function eventRow(e) {
     }, svg(ICON.trash)));
 }
 
+// The tear-off calendar: going forward the old page tears away, going back the new one drops on.
+function paintCalendar(date) {
+  const cal = $('#agenda-cal');
+  const prev = cal.dataset.date;
+  if (prev === date) return;
+  const d = new Date(`${date}T12:00`);
+  const [day, tear] = cal.querySelectorAll('.cal-day');
+  const oldDay = day.textContent;
+  $('.cal-mon', cal).textContent = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
+  day.textContent = d.getDate();
+  cal.dataset.date = date;
+  if (!prev) return;
+  const forward = date > prev;
+  tear.textContent = forward ? oldDay : day.textContent;
+  const away = [{ transform: 'none', opacity: 1 }, { transform: 'translate(3px, 20px) rotate(16deg)', opacity: 0 }];
+  play($('.cal-tear', cal), forward ? away : away.reverse(), { duration: 600, easing: forward ? 'cubic-bezier(0.5, 0, 0.75, 0)' : 'cubic-bezier(0.2, 0.8, 0.3, 1)' });
+}
+
 async function loadAgenda(quiet = false) {
   const list = $('#agenda-list');
   const date = $('#agenda-date').value;
+  paintCalendar(date);
   if (quiet && inUse(list)) return;
   if (!quiet) list.replaceChildren(h('li', {}, skeleton()));
   try {
@@ -535,6 +609,12 @@ async function loadFinance(quiet = false) {
   if (!quiet) list.replaceChildren(h('li', {}, skeleton()));
   try {
     const { expenses, total_cents: total } = await api.expenses(year, month);
+    if ($('#finance-total').textContent !== brl(total)) {
+      play($('#coins .c-drop'), [
+        { transform: 'translateY(-24px)', opacity: 0 }, { transform: 'translateY(-24px)', opacity: 1, offset: 0.1 },
+        { transform: 'none', offset: 0.6, easing: 'ease-out' }, { transform: 'translateY(-4px)', offset: 0.8, easing: 'ease-in' }, { transform: 'none' },
+      ], { duration: 750, easing: 'ease-in' });
+    }
     $('#finance-total').textContent = brl(total);
     $('#ex-cats').replaceChildren(...[...new Set(expenses.map((e) => e.category))].map((c) => h('option', { value: c })));
     const monthName = new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long' });
@@ -561,7 +641,7 @@ function reminderRow(r) {
   const at = new Date(r.at);
   const alarm = r.kind === 'alarme';
   return h('li', { class: `reminder${alarm ? ' alarm' : ''}`, 'data-id': r.id },
-    h('span', { class: 'kind', title: r.kind }, svg(alarm ? ICON.alarm : ICON.bell)),
+    h('span', { class: 'kind', title: r.kind }, art.reminderArt(r.kind)),
     h('div', { style: 'min-width:0' },
       h('div', { class: 'row-title' }, r.text),
       h('div', { class: 'row-meta' }, `${r.kind} · ${whenText(at)}`)),
@@ -583,8 +663,12 @@ async function loadReminders(quiet = false) {
       // Gone after its time = the device played it and acked; gone before = cancelled elsewhere.
       if (!ids.has(old.id) && new Date(old.at) <= Date.now()) term.log(old.kind, `${old.text}: concluído`, 'alert');
     }
-    state.reminders = reminders.sort((a, b) => new Date(a.at) - new Date(b.at));
-    if (quiet && inUse(list)) return tickAlerts();
+    const sorted = reminders.sort((a, b) => new Date(a.at) - new Date(b.at));
+    // An unchanged list is left alone: re-rendering would restart a bell mid-swing.
+    const same = JSON.stringify(sorted) === JSON.stringify(state.reminders);
+    state.reminders = sorted;
+    if (quiet && (same || inUse(list))) return tickAlerts();
+    list.classList.toggle('settled', Boolean(list.querySelector('.reminder')));
     list.replaceChildren(...(reminders.length ? state.reminders.map(reminderRow)
       : [h('li', {}, empty('Nenhum lembrete ou alarme.', 'Crie um abaixo ou peça ao Byte: “me lembra às 18h de ligar pro João”.'))]));
   } catch (err) {
@@ -621,9 +705,13 @@ function tickAlerts() {
     const ms = new Date(next.at) - now;
     const level = urgency(ms);
     chip.className = `next-alert ${level}`;
-    chip.replaceChildren(svg(next.kind === 'alarme' ? ICON.alarm : ICON.bell),
-      h('span', { class: 'na-text' }, next.text),
-      h('span', { class: 'na-left' }, level === 'due' ? dueWord(next) : countdown(ms)));
+    // Built once per kind and then only retexted, so its bell keeps swinging across ticks.
+    if (chip.dataset.kind !== next.kind) {
+      chip.dataset.kind = next.kind;
+      chip.replaceChildren(art.reminderArt(next.kind), h('span', { class: 'na-text' }), h('span', { class: 'na-left' }));
+    }
+    $('.na-text', chip).textContent = next.text;
+    $('.na-left', chip).textContent = level === 'due' ? dueWord(next) : countdown(ms);
     chip.setAttribute('aria-label', `Próximo ${next.kind}: ${next.text}, ${level === 'due' ? dueWord(next) : `em ${countdown(ms)}`}`);
   }
   const badge = $('#fn-badge');
@@ -669,8 +757,11 @@ function applyState(s, quiet) {
   const map = { lights: s.lights, climate: s.climates, music: s.music };
   for (const [key, value] of Object.entries(map)) {
     const nudging = key === 'climate' && Object.keys(tempDebounce).length > 0;
-    if (quiet && (inUse($(BOX[key])) || nudging)) continue;
-    state[key === 'climate' ? 'climates' : key] = value;
+    const slot = key === 'climate' ? 'climates' : key;
+    // A poll that changed nothing leaves the section alone, so its objects keep their motion.
+    const same = JSON.stringify(value) === JSON.stringify(state[slot]);
+    if (quiet && (same || inUse($(BOX[key])) || nudging)) continue;
+    state[slot] = value;
     RENDER[key]();
   }
   for (const failed of s.errors || []) note(failed === 'climates' ? 'climate' : failed, `${failed}: leitura falhou.`, true);
@@ -853,6 +944,10 @@ function wipePanel() {
   announced.clear();
   term.wipe();
   $('#next-alert').hidden = true;
+  $('#next-alert').replaceChildren();
+  delete $('#next-alert').dataset.kind;
+  $('#deck').hidden = true;
+  $('#deck').classList.remove('playing');
   $('#fn-badge').hidden = true;
   [...Object.values(BOX), '#agenda-list', '#finance-list', '#alerts-list'].forEach((sel) => $(sel).replaceChildren());
   $('#music-results').replaceChildren(h('li', {}, h('div', { class: 'empty-state' }, 'Busque uma faixa ou abra suas playlists.')));
@@ -874,6 +969,7 @@ function showProject(project) {
   $('#term-form').hidden = xterm;
   $('#term-clear').hidden = xterm;
   $('#term-xterm').hidden = !xterm;
+  $('#shell').toggleAttribute('data-project', xterm);
   $('#term-title').textContent = view.title;
   if (xterm) projectTerm?.focus();
 }
@@ -945,6 +1041,12 @@ function enter(initial) {
   startProjectTerm();
   const tick = () => {
     $('#clock').textContent = new Date().toLocaleTimeString('pt-BR');
+    // Hands as angles since local midnight: they only ever turn forward (except once at midnight).
+    const t = (Date.now() / 1000 - new Date().getTimezoneOffset() * 60) % 86_400;
+    const hands = $('#clock-art').style;
+    hands.setProperty('--s', `${Math.floor(t) * 6}deg`);
+    hands.setProperty('--m', `${t / 10}deg`);
+    hands.setProperty('--h', `${t / 120}deg`);
     tickMusic();
     tickAlerts();
     renderAgent();
@@ -1034,11 +1136,22 @@ function wire() {
     if (q) loadResults(() => api.searchMusic(q, $('#music-kind').value), `Nada encontrado para "${q}".`);
   });
   $('#music-playlists').addEventListener('click', () => loadResults(api.playlists, 'Você ainda não tem playlists.'));
+  $('#deck').append(art.turntable());
+  $('#deck').addEventListener('click', () => {
+    const m = state.music;
+    if (!m) return;
+    $('#deck').classList.toggle('playing', !m.playing); // the arm moves now; the state read confirms
+    runAction('music', () => (m.playing ? api.controlMusic({ paused: true }) : api.play({})));
+  });
 
   $('#agenda-date').value = localDate();
   $('#agenda-date').addEventListener('change', () => loadAgenda());
   $('#day-prev').addEventListener('click', () => shiftDay(-1));
   $('#day-next').addEventListener('click', () => shiftDay(1));
+  $('#agenda-cal').addEventListener('click', () => {
+    $('#agenda-date').value = localDate();
+    loadAgenda();
+  });
   $('#event-form').addEventListener('submit', submitEvent);
 
   const now = new Date();

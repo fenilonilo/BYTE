@@ -10,6 +10,33 @@ export const paneView = (project) => (project
 
 export const clampBackoff = (ms) => Math.min(Math.max(ms * 2, 1000), 30_000);
 
+// The panel palette (style.css :root) mapped onto the 16 ANSI colours, so claude's output reads
+// as part of the panel instead of a stock VS Code terminal.
+const THEME = {
+  background: '#0d0c0a',
+  foreground: '#ebe5d9',
+  cursor: '#e3a548',
+  cursorAccent: '#0d0c0a',
+  selectionBackground: 'rgba(227, 165, 72, 0.28)',
+  black: '#23201b',
+  red: '#e2826a',
+  green: '#9cc3a2',
+  yellow: '#e3a548',
+  blue: '#8fa8c8',
+  magenta: '#c49bb8',
+  cyan: '#8cbfb8',
+  white: '#d6cfc2',
+  brightBlack: '#6f685d',
+  brightRed: '#eb9b86',
+  brightGreen: '#b4d4b8',
+  brightYellow: '#ecb460',
+  brightBlue: '#a9bed8',
+  brightMagenta: '#d4b2ca',
+  brightCyan: '#a7d0ca',
+  brightWhite: '#f5f0e6',
+};
+const FONT = '"Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace';
+
 /**
  * Keeps one socket open while the panel is unlocked. `onState(project|null)` fires on every
  * open, close or exit. Returns `{ close() }`. xterm.js and its fit addon are UMD globals.
@@ -33,11 +60,11 @@ export function connectProjectTerm({ getToken, el, onState }) {
     if (term) return;
     term = new globalThis.Terminal({
       cursorBlink: true,
-      fontFamily: '"Geist Mono", ui-monospace, monospace',
-      fontSize: 13,
+      fontFamily: FONT,
+      fontSize: matchMedia('(max-width: 559px)').matches ? 12 : 13,
+      fontWeightBold: 600,
       scrollback: 5000,
-      theme: { background: '#00000000' },
-      allowTransparency: true,
+      theme: THEME,
     });
     fit = new globalThis.FitAddon.FitAddon();
     term.loadAddon(fit);
@@ -77,7 +104,8 @@ export function connectProjectTerm({ getToken, el, onState }) {
     };
   }
 
-  connect();
+  // xterm measures its cell once: open it with the web font in, not the fallback.
+  document.fonts.load(`13px ${FONT}`).finally(connect);
   return {
     focus: () => term?.focus(),
     close() {
