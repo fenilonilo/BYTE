@@ -4,7 +4,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 
-HEADING_SEPARATOR = " 203a "  # a single right-pointing angle quote
+HEADING_SEPARATOR = f" {chr(0x203A)} "  # a right-pointing angle quote, spelled out for linters
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 

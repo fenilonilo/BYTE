@@ -37,7 +37,9 @@ class SearchProjects(Tool):
         name="search_projects",
         description=(
             "Busca nos documentos dos projetos de programação do usuário (CLAUDE.md e outros). "
-            "Use para qualquer pergunta sobre esses projetos."
+            "Use para qualquer pergunta sobre esses projetos. Uma busca costuma bastar, no "
+            "máximo duas: se a resposta não estiver nos trechos, diga que os documentos do "
+            "projeto não falam disso."
         ),
         parameters=object_schema(
             {
