@@ -81,7 +81,28 @@ on the installed `claude` (2.1.310) settles them before anything is built:
    Bracketed paste (`ESC[200~ … ESC[201~` then `\r`) submits multi-line text as one prompt.
 5. `PermissionRequest` fires for `AskUserQuestion`, or doesn't.
 
-The spike's answers go back into this document before planning.
+**Spike results (2026-10-24, `claude` 2.1.310, ConPTY, `--permission-mode default`):**
+
+1. **Yes.** With `--settings`, the owner's user hooks (Orca, caveman, ponytail) still ran in
+   the same session.
+2. **Yes.** `type: "http"` works for `PermissionRequest`, `UserPromptSubmit`, `Stop` and
+   `Notification`. The `$BYTE_BRIDGE_TOKEN` header arrived on every call. Holding the
+   response 20 s and then answering `allow` ran the command. `PermissionRequest` carries
+   `tool_name`, `tool_input`, `permission_suggestions`, `prompt_id` and `session_id`.
+   `Stop` carries `last_assistant_message`. `Notification` `permission_prompt` arrives 6 s
+   into the wait.
+3. **Shown at once.** The terminal dialog appears while the hook is still pending. When the
+   owner answered in the terminal, Claude went on immediately. The held HTTP request stayed
+   open until Byte replied, and that late reply was ignored. **Byte cannot learn about a
+   terminal answer from the connection.** It learns from the next event (below).
+4. **Accepted.** A prompt typed mid-turn is taken at once (`UserPromptSubmit` fires right
+   away, not after `Stop`) and folded into the running turn. Two `Stop`s followed. A
+   bracketed paste with `\n` became **one** prompt, newlines kept.
+5. **Yes.** `PermissionRequest` fires with `tool_name: "AskUserQuestion"`. Replying `{}`
+   left the normal question dialog in the terminal.
+
+The owner's global `defaultMode` is `"auto"`, so the `--permission-mode default` flag below
+is what makes the dialog appear at all.
 
 ### Launch
 
@@ -107,7 +128,16 @@ All hooks are `type: "http"` and POST to `BYTE_CLAUDE_HOOK_URL` (default
 | `PermissionRequest` | the request to answer; the HTTP response carries the decision | `approval_seconds + 10` |
 | `UserPromptSubmit` | session → `working` | 5 s |
 | `Stop` | session → `idle`; keep `last_assistant_message` | 5 s |
+| `PreToolUse`, `PostToolUse` | a request answered in the terminal is cleared quickly | 5 s |
 | `Notification` (`elicitation_dialog`) | "Claude tem uma pergunta" notice | 5 s |
+
+**Answered elsewhere:** any `UserPromptSubmit`, `PreToolUse`, `PostToolUse` or `Stop` that
+arrives while a request is pending means the owner answered it in the terminal. The bridge
+resolves the request `None`, drops it and its notice, and logs `via: terminal`.
+`Notification` does not count, because `permission_prompt` arrives *during* the wait.
+
+**`AskUserQuestion`:** the route replies `{}` at once, so the question stays in the
+terminal. It pushes the "Claude tem uma pergunta" notice and queues nothing.
 
 If Byte is down or slow, the hook errors out. Claude Code treats that as non-blocking and
 shows its normal dialog: the owner answers in the terminal, the same as today. Fail open to
@@ -216,11 +246,9 @@ delay is never spoken. *(my call)*
   `id` is not the head. The banner shows the description before the click, so the click is
   the decision. No second confirmation step on the panel. *(my call; this differs from
   `DELETE /agenda`'s two-step, because here the summary is on screen before the owner acts)*
-- If the spike shows the terminal dialog is **not** displayed while the hook waits, the
-  banner is the only way to answer at the panel, and must be visible. If it **is**
-  displayed, the owner may answer either place. A terminal answer makes Claude Code drop the
-  hook. Byte sees the next event (`UserPromptSubmit`/`Stop`, or the HTTP request closing),
-  dequeues the request and clears the banner.
+- The terminal dialog is displayed while the hook waits (spike), so the owner may answer
+  in either place. A terminal answer clears the banner on the next event (see **Answered
+  elsewhere**).
 - Contract added to `docs/web-api-contract.md`.
 
 ### Configuration
@@ -261,7 +289,7 @@ terminal is on. No new extras, no new dependencies, no compose change.
 
 ## Order
 
-1. Spike (above), answers written back here.
+1. ~~Spike~~ done.
 2. Domain + `ClaudeBridge` + hook route + launch flags (testable with the fake terminal).
 3. Tools, `allow_claude` binding, prompt line.
 4. Spoken notices (`kind: "claude"`).
