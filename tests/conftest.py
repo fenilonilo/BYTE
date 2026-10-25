@@ -26,6 +26,8 @@ _CACHED = (
     deps.get_knowledge,
     deps.get_indexer,
     deps.get_project_session,
+    deps.get_claude_bridge,
+    deps.get_lynus,
     deps.get_terminal_slot,
     deps.get_runner,
     deps.get_openai,

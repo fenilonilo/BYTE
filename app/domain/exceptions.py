@@ -97,6 +97,14 @@ class UnknownProjectError(ProjectError):
     """Raised when a project name is not in the configured list."""
 
 
+class ProjectNotTrustedError(ProjectError):
+    """Raised when Claude Code has not trusted the project folder yet (its dialog would block)."""
+
+
+class LynusBusyError(ProjectError):
+    """Raised when Lynus is asked for something its current phase does not allow."""
+
+
 class WeatherError(DomainError):
     """Raised when a weather lookup fails."""
 

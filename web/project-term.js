@@ -35,6 +35,11 @@ const THEME = {
   brightCyan: '#a7d0ca',
   brightWhite: '#f5f0e6',
 };
+// Cursor and selection take the agent's colour; the 16 ANSI colours stay the program's.
+const themed = (rgb) => (rgb
+  ? { ...THEME, cursor: `rgb(${rgb})`, selectionBackground: `rgba(${rgb}, 0.28)` }
+  : THEME);
+
 const FONT = '"Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace';
 
 /**
@@ -49,6 +54,7 @@ export function connectProjectTerm({ getToken, el, onState }) {
   let backoff = 0;
   let timer = null;
   let closed = false;
+  let accent = null; // the agent colour on screen: cursor and selection follow it
 
   const sendSize = () => {
     if (!term || ws?.readyState !== WebSocket.OPEN || el.hidden) return;
@@ -64,7 +70,7 @@ export function connectProjectTerm({ getToken, el, onState }) {
       fontSize: matchMedia('(max-width: 559px)').matches ? 12 : 13,
       fontWeightBold: 600,
       scrollback: 5000,
-      theme: THEME,
+      theme: themed(accent),
     });
     fit = new globalThis.FitAddon.FitAddon();
     term.loadAddon(fit);
@@ -108,6 +114,11 @@ export function connectProjectTerm({ getToken, el, onState }) {
   document.fonts.load(`13px ${FONT}`).finally(connect);
   return {
     focus: () => term?.focus(),
+    /** `rgb` is "r, g, b" (the --accent-rgb token) or null for the default palette. */
+    setAccent(rgb) {
+      accent = rgb;
+      if (term) term.options.theme = themed(rgb);
+    },
     close() {
       closed = true;
       clearTimeout(timer);

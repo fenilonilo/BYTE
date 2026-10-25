@@ -3,6 +3,8 @@ import * as art from './art.js';
 import { IDLE_WARN_SECONDS, createVoice } from './live.js';
 import { createSphere } from './sphere.js';
 import { connectProjectTerm, paneView } from './project-term.js';
+import { HANDOFF, coreState, isActive, noteLook, phaseText, placeholder, route } from './lynus.js';
+import { createLynusCore } from './lynus-core.js';
 import { panelSocket } from './panel-socket.js';
 import { createTerminal } from './terminal.js';
 import { countdown, elapsed, urgency } from './time.js';
@@ -882,7 +884,8 @@ function startPanelLink() {
   panelLink = panelSocket({
     open: () => new WebSocket(`${scheme}://${location.host}/api/v1/ws/panel`, ['bearer', token.get() || '']),
     onWeather: () => loadWeather(true),
-    onOpen: () => loadWeather(true),
+    onLynus: loadLynus,
+    onOpen: () => { loadWeather(true); loadLynus(); },
   });
 }
 
@@ -944,6 +947,132 @@ async function sendChat(text) {
     }
     addMsg('error', err.status === 502 ? 'O modelo não respondeu. Tente de novo.' : err.message);
   }
+}
+
+// ---------------------------------------------------------------- lynus
+// Lynus drives Claude Code on its own (Spec 5). Byte takes the project and the task, then the
+// chat belongs to Lynus while it is active. The server pushes "changed"; GET /lynus is the truth.
+
+let lynusCore = null;
+const lynus = { target: 'byte', handoff: false, view: null, thinking: false, drawn: 0, first: '' };
+
+const lynusRoute = () => route({ target: lynus.target, phase: lynus.view?.phase ?? 'off', handoff: lynus.handoff });
+
+function renderLynus() {
+  const r = lynusRoute();
+  const phase = lynus.view?.phase;
+  $('#to-byte').setAttribute('aria-pressed', String(lynus.target === 'byte'));
+  $('#to-lynus').setAttribute('aria-pressed', String(lynus.target === 'lynus'));
+  $('#to-lynus').toggleAttribute('data-waiting', lynus.handoff);
+  const chip = phaseText(lynus.view);
+  $('#lynus-phase').textContent = chip && lynus.thinking && isActive(phase) ? `${chip} · pensando…` : chip;
+  $('#lynus-stop').hidden = !isActive(phase);
+  $('#lynus-log').hidden = r.shown !== 'lynus';
+  // The panel wears the name and colour of the agent on screen (style.css :root[data-persona]).
+  const name = r.shown === 'lynus' ? 'Lynus' : 'Byte';
+  for (const el of [$('#brand-name'), $('#nav-core')]) el.textContent = name;
+  document.title = name;
+  if (r.shown === 'lynus') document.documentElement.dataset.persona = 'lynus';
+  else delete document.documentElement.dataset.persona;
+  projectTerm?.setAccent(r.shown === 'lynus' ? getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() : null);
+  // Lynus has its own core: the bit sphere stays Byte's.
+  $('#orb').hidden = r.shown === 'lynus';
+  $('#lynus-orb').hidden = r.shown !== 'lynus';
+  if (r.shown === 'lynus') {
+    lynusCore ??= createLynusCore($('#lynus-orb'));
+    lynusCore.setState(coreState(phase, lynus.thinking));
+  }
+  $('#transcript').hidden = r.shown === 'lynus' || !$('#transcript').childElementCount;
+  $('#chat-input').placeholder = placeholder(r, lynus.handoff);
+  $('#chat-label').textContent = r.sendTo === 'lynus' ? 'Mensagem para o Lynus' : 'Mensagem para o Byte';
+}
+
+// Appends only new notes, so earlier ones do not replay their entrance; a new task redraws.
+function renderLynusNotes() {
+  const notes = lynus.view?.notes ?? [];
+  const log = $('#lynus-log');
+  const first = notes.length ? `${notes[0].at}|${notes[0].text}` : '';
+  if (first !== lynus.first || notes.length < lynus.drawn) {
+    log.replaceChildren();
+    lynus.drawn = 0;
+    lynus.first = first;
+  }
+  const fresh = notes.slice(lynus.drawn);
+  if (!fresh.length) return;
+  if (fresh.some((n) => n.role !== 'owner')) lynus.thinking = false;
+  log.append(...fresh.map((n) => {
+    const look = noteLook(n.role);
+    return h('p', { class: `msg ${look.kind}` }, h('span', { class: 'who' }, look.who), h('span', { class: 'body' }, n.text));
+  }));
+  lynus.drawn = notes.length;
+  log.scrollTop = log.scrollHeight;
+}
+
+async function loadLynus() {
+  if (MOCK) return;
+  try {
+    const view = await api.lynus();
+    const before = lynus.view?.phase;
+    lynus.view = view;
+    if (lynus.handoff && isActive(view.phase)) Object.assign(lynus, { handoff: false, target: 'lynus' });
+    if (before !== undefined && before !== view.phase) term.log('lynus', phaseText(view) || 'livre');
+    if (!isActive(view.phase)) lynus.thinking = false;
+    renderLynusNotes();
+    renderLynus();
+  } catch (err) {
+    if (err.status === 503) {
+      $('#to-lynus').disabled = true;
+      $('#to-lynus').title = err.message;
+      return;
+    }
+    if (err.status === 401) return handleError('lynus', err);
+    term.log('lynus', err.message, 'error');
+  }
+}
+
+function chooseLynus() {
+  lynus.target = 'lynus';
+  lynus.handoff = !isActive(lynus.view?.phase);
+  renderLynus();
+  if (lynus.handoff) sendChat(HANDOFF); // Byte asks for the project and the task
+}
+
+function chooseByte() {
+  Object.assign(lynus, { target: 'byte', handoff: false });
+  renderLynus();
+}
+
+async function sendLynus(text) {
+  lynus.thinking = true;
+  renderLynus();
+  try {
+    await api.lynusSay(text);
+  } catch (err) {
+    lynus.thinking = false;
+    if (err.status === 401) return handleError('lynus', err);
+    term.log('lynus', err.status === 409 ? 'O Lynus não está com uma tarefa ativa.' : err.message, 'error');
+    loadLynus();
+  }
+}
+
+async function stopLynus() {
+  $('#lynus-stop').disabled = true;
+  try {
+    await api.lynusStop();
+  } catch (err) {
+    if (err.status === 401) return handleError('lynus', err);
+    term.log('lynus', err.message, 'error');
+  } finally {
+    $('#lynus-stop').disabled = false;
+    loadLynus();
+  }
+}
+
+function sendTyped(text) {
+  const r = lynusRoute();
+  if (r.sendTo === 'lynus') return sendLynus(text);
+  if (r.shown === 'lynus') chooseByte(); // Lynus finished: the owner is talking to Byte again
+  return sendChat(text);
 }
 
 // ---------------------------------------------------------------- voice
@@ -1059,6 +1188,9 @@ function wipePanel() {
   $('#music-devices').replaceChildren();
   $('#transcript').replaceChildren();
   $('#transcript').hidden = true;
+  Object.assign(lynus, { target: 'byte', handoff: false, view: null, thinking: false, drawn: 0, first: '' });
+  $('#lynus-log').replaceChildren();
+  renderLynus();
   state.reminders = null;
   announced.clear();
   term.wipe();
@@ -1253,9 +1385,12 @@ function wire() {
     const text = chatInput.value.trim();
     if (!text) return;
     chatInput.value = '';
-    sendChat(text);
+    sendTyped(text);
   });
   $('#talk').addEventListener('click', () => voice.toggle());
+  $('#to-byte').addEventListener('click', chooseByte);
+  $('#to-lynus').addEventListener('click', chooseLynus);
+  $('#lynus-stop').addEventListener('click', stopLynus);
   $('#wake-toggle').addEventListener('click', toggleWake);
   chatInput.addEventListener('input', idleOrListening);
   chatInput.addEventListener('blur', idleOrListening);

@@ -284,3 +284,36 @@ class WeatherSchema(BaseModel):
     forecast: WeatherForecastSchema | None
     home_now: CurrentWeatherSchema | None
     errors: list[str]  # "forecast" and/or "home"
+
+
+class ClaudeHookSchema(BaseModel):
+    """Claude Code's hook JSON: only the fields Byte reads, the rest is ignored."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    hook_event_name: str
+    tool_name: str | None = None
+    tool_input: dict[str, object] | None = None
+    last_assistant_message: str | None = None
+
+
+class LynusMessageSchema(_Body):
+    content: str = Field(min_length=1, max_length=MAX_CONTENT_CHARS)
+
+
+class LynusNoteSchema(_View):
+    role: Literal["owner", "lynus", "claude", "system"]
+    text: str
+    at: dt.datetime
+
+
+class LynusViewSchema(_View):
+    phase: Literal["off", "briefing", "working", "done", "stopped", "failed"]
+    project: str | None
+    task: str
+    turns: int
+    notes: list[LynusNoteSchema]
+
+
+class LynusPhaseSchema(BaseModel):
+    phase: Literal["off", "briefing", "working", "done", "stopped", "failed"]

@@ -7,6 +7,7 @@ from app.application.tools.agenda import CreateEvent, DeleteEvent, ListEvents
 from app.application.tools.climate import ListClimates, SetClimate
 from app.application.tools.finance import AddExpense, MonthTotal
 from app.application.tools.lights import ListLights, SetLight
+from app.application.tools.lynus import LynusStatus, StartLynus
 from app.application.tools.music import (
     ControlMusic,
     KnownUris,
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from datetime import datetime
 
+    from app.application.lynus import Lynus
     from app.application.project_session import ProjectSession
     from app.application.tool import Tool
     from app.application.weather_display import WeatherDisplay
@@ -52,12 +54,14 @@ def build_tool_registry(
     knowledge: tuple[KnowledgeStorePort, EmbedderPort, Sequence[str]] | None = None,
     session: ProjectSession | None = None,
     weather: tuple[WeatherPort, WeatherDisplay] | None = None,
+    lynus: Lynus | None = None,
 ) -> Registry[Tool]:
     """`reminders` is the store plus the owner's wall clock; without it there are no reminders.
 
     `knowledge` is the index, the embedder and the project names; without it, no projects.
     `session` is the project terminal; without it, nothing opens a project.
-    `weather` is the forecast source plus what the panel shows; without it, no weather."""
+    `weather` is the forecast source plus what the panel shows; without it, no weather.
+    `lynus` is the agent that drives Claude Code; without it, nothing hands it a task."""
     known = known or KnownUris()
     registry: Registry[Tool] = Registry()
     tools: tuple[Tool, ...] = (
@@ -87,6 +91,8 @@ def build_tool_registry(
         tools += (OpenProject(session), CloseProject(session))
     if weather is not None:
         tools += (GetWeather(*weather), ShowWeather(*weather))
+    if lynus is not None:
+        tools += (StartLynus(lynus), LynusStatus(lynus))
     for tool in tools:
         registry.register(tool.spec.name, tool)
     return registry

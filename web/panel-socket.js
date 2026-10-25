@@ -6,7 +6,9 @@ const MAX_DELAY = 30_000;
 const NO_RETRY = new Set([4000, 1008]); // replaced by another panel, or the token was refused
 
 /** `open()` returns a WebSocket-like object. Returns `{close()}`. */
-export function panelSocket({ open, onWeather, onOpen, setTimer = setTimeout, clearTimer = clearTimeout }) {
+export function panelSocket({
+  open, onWeather, onLynus = () => {}, onOpen, setTimer = setTimeout, clearTimer = clearTimeout,
+}) {
   let socket = null;
   let timer = null;
   let delay = FIRST_DELAY;
@@ -26,6 +28,7 @@ export function panelSocket({ open, onWeather, onOpen, setTimer = setTimeout, cl
       let message;
       try { message = JSON.parse(e.data); } catch { return; }
       if (message?.type === 'weather') onWeather();
+      else if (message?.type === 'lynus') onLynus();
     };
     socket.onclose = (e) => {
       if (stopped || NO_RETRY.has(e.code)) return;

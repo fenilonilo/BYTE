@@ -146,10 +146,32 @@ is 422 / `bad_start`). Routing, not security: every client holds the same token.
   It starts in the project folder without any `BYTE_*` variable or provider key in its
   environment. Nothing typed or printed is logged.
 
+## Lynus (Spec 5)
+
+Lynus is a second agent (Google's coding model) that drives the open project's `claude` on its
+own: it writes the prompts, **approves every permission request by itself**, reviews each reply
+against the project's specs and plans, and stops when the task is done.
+
+- Hand-over: the panel sends Byte `Quero passar uma tarefa para o Lynus.` (`POST /messages`,
+  `client: "panel"`). Byte asks for the project and a short task, then calls `start_lynus`
+  (panel only), which opens a **fresh** `claude` in that project (`--permission-mode default`).
+- `GET /lynus` → `{phase, project, task, turns, notes: [{role, text, at}]}`. `phase`:
+  `off | briefing | working | done | stopped | failed`; `briefing` is Lynus talking with the
+  owner, `working` is Lynus on its own. `role`: `owner | lynus | system | claude` (`claude` =
+  a prompt Lynus sent to Claude). Last 200 notes.
+- `POST /lynus/messages {content}` (1–4,000 chars) → `202`. Lynus answers through a push.
+  `409` outside `briefing`/`working`.
+- `POST /lynus/stop` → `{phase}`. Drops autopilot and sends `Esc` to Claude. The terminal stays.
+- `503` on every Lynus route when the server has no project terminal or no `BYTE_GEMINI_API_KEY`.
+- `POST /claude/hooks` is **not** for the panel: only the `claude` process calls it, with its
+  own per-session token. The owner token is refused there.
+
 ## Panel pushes (`WS /api/v1/ws/panel`, Spec 6)
 
 - Auth like `/ws/terminal` (header or `["bearer", token]` subprotocol). One panel at a time: a
   new connection closes the old one with 4000 (do not reconnect after 4000 or 1008).
+- Server → panel: text `{"type":"lynus"}` whenever Lynus's phase or notes change; reload
+  `GET /lynus`.
 - Server → panel: text `{"type":"weather"}` whenever the shown city changes — by `show_weather`
   from any client (panel chat, panel voice, the ESP32) or by `DELETE /weather/display`. No data:
   the panel reloads `GET /weather`. Reload it on every (re)connect too, so a change made while

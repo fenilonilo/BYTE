@@ -1,296 +1,261 @@
-# Spec 5 — Byte drives Claude Code (prompts and permission answers)
+# Spec 5 — Lynus: an autonomous agent that drives Claude Code
 
-Status: draft, written on 2026-10-24 without a brainstorm (the owner asked for the spec
-directly). Every decision not taken from Spec 4 or `CLAUDE.md` is marked *(my call)*.
+Status: approved by the owner on 2026-10-24. The first draft had Byte relay prompts and the
+owner approve every permission by voice. The owner replaced it with Lynus. Their rule: **Lynus
+approves anything on its own and works on its own.** Decisions not stated by the owner are
+marked *(my call)*.
 
 ## Intent
 
-Spec 4 put one `claude` process, owned by the server, in the panel's terminal. The owner still
-has to sit at the panel to use it. Spec 5 lets the owner work with that session **from
-anywhere Byte hears them**: by voice through the ESP32 or the laptop voice client, or by
-chat.
+The owner hands a programming task to an agent and walks away. That agent drives Claude Code
+in the project until the task is done.
 
-- "Ei Byte, manda o Claude rodar os testes" → Byte types the prompt into the open session.
-- Claude Code asks for permission ("rodar `pytest`?") → Byte says it out loud on the device
-  and the owner answers "libera" or "nega". The panel shows the same request with buttons.
-- Claude finishes a turn that Byte started → Byte says "Claude terminou no FinFlow". "O que
-  ele disse?" → Byte reads back a short version of Claude's last message.
+1. In the panel, the owner switches the chat to **Lynus**.
+2. **Byte** asks which project and for a short description of the task, then hands over.
+3. **Lynus** opens the project (a fresh `claude` in the panel terminal). It reads what it
+   needs (`CLAUDE.md`, specs, plans) and talks with the owner in the chat to deepen the task.
+4. When the task is clear, Lynus **takes over**. It writes the prompts for Claude, approves
+   every permission request on its own, reads each of Claude's replies, and checks them
+   against the project's specs and plans. It answers Claude's questions and steers until the
+   task is done. Then it reports back.
 
-**Owner's standing constraint: spend the fewest model tokens possible.** Claude's output
-reaches Byte's model only when the owner asks for it, through one tool, capped. Spoken
-notices are templates rendered by Piper. They never call the model, the same rule as
-reminders.
+The owner can still type in the chat (Lynus reads it at its next step) or stop Lynus at any
+time. The terminal stays visible in the panel throughout.
+
+Lynus runs on **Google's strongest coding model** that the owner's key reaches
+(`gemini-3.1-pro-preview`, configurable), separate from Byte's cheap chat model.
 
 ## Goals
 
-1. `send_to_claude(text)` types a prompt into the open project's `claude` session.
-2. Claude Code's permission requests reach Byte through Claude Code's **documented hooks**
-   (`PermissionRequest`), not by scraping the terminal. Byte answers allow or deny for one
-   request at a time.
-3. Byte speaks a pending request on the notification device. The owner answers by voice,
-   chat or panel buttons. Allowing goes through the existing confirmation rules.
-4. `claude_status()` reports what the session is doing: idle, working, or waiting on a
-   request (with the request's description). It also returns Claude's last message, capped.
-5. A turn Byte started ends with a spoken "Claude terminou no <projeto>".
+1. A second agent, Lynus, with its own model, prompt, tools and transcript. It is not a
+   sub-agent of Byte: Byte only hands it a project and a task.
+2. Claude Code's hooks report every permission request and every turn end to the server.
+   While Lynus is working, every request is **allowed by code at once** (owner's rule).
+3. Lynus reads Claude's last message at every turn end, can read any file in the project to
+   check the work, and replies with the next prompt or with "done".
+4. Panel: a Byte | Lynus switch on the chat, Lynus's conversation and progress pushed live,
+   and a stop button.
+5. Byte gets `start_lynus(project, task)` (panel only) and `lynus_status()`.
 
 ## Non-goals
 
-- Opening or closing a project from anywhere but the panel. Spec 4's `panel_only` rule
-  stays: the owner opens the project at the panel, then can walk away. *(my call; lifting
-  it later is a one-flag change on two tools)*
-- Answering "always allow" (`updatedPermissions`). Byte allows **once**. Standing rules are
-  set by the owner in the terminal or in Claude Code's settings.
-- Answering Claude's multiple-choice questions (`AskUserQuestion`) and MCP elicitation
-  dialogs. Byte only says "Claude tem uma pergunta no <projeto>, responda no painel".
-- Byte working on its own: picking tasks, chaining prompts, or deciding anything without
-  the owner's words. Every prompt and every allow starts from an owner utterance or click.
-- Several sessions or several projects at once.
-- The POSIX PTY / home-server move: this still runs where Spec 4's terminal runs (Windows,
-  uvicorn).
-- Streaming Claude's output to the device, or reading whole transcripts aloud.
+- Byte relaying prompts or permission answers by voice (the first draft). Lynus replaces it.
+- Several Lynus tasks or several projects at once. A new task replaces the current one.
+- Starting Lynus anywhere but the panel. Lynus's conversation lives in the panel's chat.
+  Byte can report on it by voice (`lynus_status`). *(my call)*
+- Spoken notices when Lynus finishes. *(my call: the panel shows it; add one later through
+  `ReminderHub` if wanted)*
+- Lynus editing files itself, running commands itself, or reaching outside the project.
+  Claude Code does the work; Lynus reads and steers.
+- Persisting Lynus's transcript across restarts.
 
 ## Anti-goals
 
-- **Byte approving anything by itself.** No auto-allow lists in Byte, no default allow on
-  timeout, no allow decided by the model alone.
-- An allow that came from the prompt instead of code. The model asks; `ToolRunner` decides.
-- Answering the wrong request: an allow that was confirmed for request A must never reach
-  request B.
-- Scraping the TUI to find dialogs, or typing "1⏎" into a dialog to answer it.
+- Lynus stopping to ask the owner before each Claude action. That breaks the owner's rule.
 - Byte's owner token or provider keys reaching the `claude` process (Spec 4's env filter
-  stays; the new hook token is separate and scoped, below).
-- Prompt text, commands, file paths or Claude's output in logs.
-- Touching `~/.claude/settings.json` or the project's `.claude/` files. The hooks exist
-  only in the process Byte launches.
-- A prompt sent by Byte running with no permission gate (see **Launch**).
+  stays). The new bridge token can only post hook events for the current session.
+- Lynus reading files outside the project folder (absolute paths and `..` are refused).
+- Prompts, file contents, Claude's output or Lynus's messages in logs.
+- Scraping the TUI to find dialogs, or typing into a dialog to answer it.
+- Touching `~/.claude/settings.json` or the project's `.claude/`. Hooks are injected only
+  into the process Byte launches.
+
+## Safety, as the owner set it
+
+By the owner's rule, Lynus approves anything Claude Code asks: shell commands, edits,
+network access, as the owner's Windows user, in that project's folder and wherever a command
+reaches. What bounds it:
+
+- It only runs after the owner explicitly starts it in the panel, for one named project.
+- Stop button and `POST /lynus/stop`. Stopping drops autopilot at once and interrupts
+  Claude's turn (`Esc`).
+- A turn budget (`BYTE_LYNUS_MAX_TURNS`, default 40 prompts) and a per-turn timeout
+  (`BYTE_LYNUS_TURN_MINUTES`, default 30). Hitting either stops Lynus and says so.
+- Approvals are logged (`claude.allowed`, Claude Code's tool name only).
+- Byte's secrets are not in the child's environment.
+
+## Spike results (2026-10-24, `claude` 2.1.310, ConPTY)
+
+1. Hooks passed with `--settings <file>` run **alongside** the owner's user hooks (Orca,
+   caveman, ponytail).
+2. `type: "http"` hooks work for `PermissionRequest` and `Stop`. The
+   `$BYTE_BRIDGE_TOKEN` header, interpolated from the child's environment, arrived on every
+   call. Holding a `PermissionRequest` response and then answering `allow` ran the command.
+   `Stop` carries `last_assistant_message`.
+3. The terminal dialog is shown **while** the hook is pending. A terminal answer wins at
+   once, and the late hook reply is ignored.
+4. A prompt typed mid-turn is accepted immediately. A bracketed paste
+   (`ESC[200~ … ESC[201~`, then `\r` a moment later) becomes **one** prompt, newlines kept.
+5. `PermissionRequest` fires for `AskUserQuestion` too. Replying `{}` leaves the question
+   in the terminal.
+6. The owner's global `defaultMode` is `"auto"`. Lynus's sessions start with
+   `--permission-mode default`, so every request goes through the hook. Otherwise the auto
+   classifier could block an action that Lynus is supposed to approve.
 
 ## Design
 
-### Verify first (spike, throwaway)
+### Claude bridge (`app/application/claude_bridge.py`)
 
-The Claude Code docs leave five behaviours unclear. A throwaway spike with a logging hook
-on the installed `claude` (2.1.310) settles them before anything is built:
+A singleton (`deps.py`). It knows the current `claude` session's hook token and turns hook
+events into something Lynus can wait on.
 
-1. `--settings <file>` hooks run **alongside** the owner's user hooks (caveman and
-   ponytail SessionStart hooks must keep working).
-2. `PermissionRequest` accepts a `type: "http"` handler. If it doesn't, use a `command`
-   handler running a ~20-line stdlib Python script that POSTs stdin to the same URL.
-3. Is the terminal dialog shown **while** the hook is still pending, or only after it
-   returns? This changes the panel UX (below), not the bridge.
-4. Text typed into the TUI mid-turn is queued and submitted when the turn ends.
-   Bracketed paste (`ESC[200~ … ESC[201~` then `\r`) submits multi-line text as one prompt.
-5. `PermissionRequest` fires for `AskUserQuestion`, or doesn't.
+- `begin() -> str`: a fresh token (`secrets.token_urlsafe(32)`). `end()` revokes it and
+  wakes anyone waiting on a turn (the session is gone).
+- `authorized(token) -> bool`: `hmac.compare_digest` against the current token.
+- `pilot: Callable[[str], Awaitable[str]] | None`. Set while Lynus works; it is Lynus's
+  answer to an `AskUserQuestion`.
+- `hook(event) -> dict`:
+  - `PermissionRequest` with no pilot → `{}`. The owner answers in the terminal, as in
+    Spec 4.
+  - `PermissionRequest` with a pilot, any tool but `AskUserQuestion` → `allow`. Logged as
+    `claude.allowed`.
+  - `PermissionRequest` with a pilot, `AskUserQuestion` → `deny` with the message
+    `Resposta do dono (via Lynus): <answer>`, where the answer comes from `pilot(question
+    JSON)`. *(my call: it answers through the denial message, because the `updatedInput`
+    shape for answers is undocumented; Claude reads the message and goes on)*
+  - `Stop` → `last_assistant_message` goes into a queue that `next_turn()` reads.
+  - Anything else → `{}`.
+- `next_turn(timeout) -> str | None`: the next turn's final message. `None` on timeout or
+  when the session ended. `clear()` drops stale turn ends before a new prompt.
+- `settings() -> dict`: the hooks JSON for `--settings`. `PermissionRequest` (matcher `*`,
+  timeout 120 s, long enough for a pilot answer) and `Stop` (5 s). Both are `type: "http"`
+  to `BYTE_CLAUDE_HOOK_URL`, with `Authorization: Bearer $BYTE_BRIDGE_TOKEN` in
+  `allowedEnvVars`. The file is written to `data/claude-hooks.json` at boot.
 
-**Spike results (2026-10-24, `claude` 2.1.310, ConPTY, `--permission-mode default`):**
+### Project session changes (Spec 4)
 
-1. **Yes.** With `--settings`, the owner's user hooks (Orca, caveman, ponytail) still ran in
-   the same session.
-2. **Yes.** `type: "http"` works for `PermissionRequest`, `UserPromptSubmit`, `Stop` and
-   `Notification`. The `$BYTE_BRIDGE_TOKEN` header arrived on every call. Holding the
-   response 20 s and then answering `allow` ran the command. `PermissionRequest` carries
-   `tool_name`, `tool_input`, `permission_suggestions`, `prompt_id` and `session_id`.
-   `Stop` carries `last_assistant_message`. `Notification` `permission_prompt` arrives 6 s
-   into the wait.
-3. **Shown at once.** The terminal dialog appears while the hook is still pending. When the
-   owner answered in the terminal, Claude went on immediately. The held HTTP request stayed
-   open until Byte replied, and that late reply was ignored. **Byte cannot learn about a
-   terminal answer from the connection.** It learns from the next event (below).
-4. **Accepted.** A prompt typed mid-turn is taken at once (`UserPromptSubmit` fires right
-   away, not after `Stop`) and folded into the running turn. Two `Stop`s followed. A
-   bracketed paste with `\n` became **one** prompt, newlines kept.
-5. **Yes.** `PermissionRequest` fires with `tool_name: "AskUserQuestion"`. Replying `{}`
-   left the normal question dialog in the terminal.
+`ProjectSession` takes an optional bridge.
 
-The owner's global `defaultMode` is `"auto"`, so the `--permission-mode default` flag below
-is what makes the dialog appear at all.
-
-### Launch
-
-`ProjectSession.open` starts `claude` with two extra flags:
-
-- `--settings <data/claude-hooks.json>`: Byte's hooks, regenerated at every open.
-- `--permission-mode default`: a session Byte can prompt must ask before acting, even if
-  the owner's global settings default to `bypassPermissions` or `acceptEdits`. The owner's
-  own allow rules still apply; that is their choice. *(my call)*
-
-The child also gets `BYTE_BRIDGE_TOKEN`, added **after** Spec 4's env filter: 32 random
-bytes, new at every open, valid only for the current session. Its only power is posting
-hook events for that session. The owner's token never reaches the child.
-
-### Hooks (`data/claude-hooks.json`, generated)
-
-All hooks are `type: "http"` and POST to `BYTE_CLAUDE_HOOK_URL` (default
-`http://127.0.0.1:8000/api/v1/claude/hooks`) with
-`Authorization: Bearer $BYTE_BRIDGE_TOKEN` (listed in `allowedEnvVars`).
-
-| Event | Why | Timeout |
-|---|---|---|
-| `PermissionRequest` | the request to answer; the HTTP response carries the decision | `approval_seconds + 10` |
-| `UserPromptSubmit` | session → `working` | 5 s |
-| `Stop` | session → `idle`; keep `last_assistant_message` | 5 s |
-| `PreToolUse`, `PostToolUse` | a request answered in the terminal is cleared quickly | 5 s |
-| `Notification` (`elicitation_dialog`) | "Claude tem uma pergunta" notice | 5 s |
-
-**Answered elsewhere:** any `UserPromptSubmit`, `PreToolUse`, `PostToolUse` or `Stop` that
-arrives while a request is pending means the owner answered it in the terminal. The bridge
-resolves the request `None`, drops it and its notice, and logs `via: terminal`.
-`Notification` does not count, because `permission_prompt` arrives *during* the wait.
-
-**`AskUserQuestion`:** the route replies `{}` at once, so the question stays in the
-terminal. It pushes the "Claude tem uma pergunta" notice and queues nothing.
-
-If Byte is down or slow, the hook errors out. Claude Code treats that as non-blocking and
-shows its normal dialog: the owner answers in the terminal, the same as today. Fail open to
-the owner, never to "allow".
+- `open(name, extra_args=())`: argv = command + `--settings <hooks file>` + `extra_args`.
+  The env gets `BYTE_BRIDGE_TOKEN = bridge.begin()`, added **after** the secret filter.
+- Stop or exit → `bridge.end()`.
+- `open_project` (the owner at the panel) passes nothing extra, so the owner's own
+  permission mode applies. Lynus passes `--permission-mode default`.
 
 ### Route `POST /api/v1/claude/hooks`
 
-- Auth: bearer equals the current session's bridge token (`hmac.compare_digest`). The
-  owner token is **not** accepted here, and the bridge token is accepted nowhere else. No
-  open session → 401. This is the one route that does not take the owner token. It still
-  requires a bearer, and the bridge token never leaves the machine. *(my call)*
-- Body: Claude Code's hook JSON; the router dispatches on `hook_event_name`. A Pydantic
-  schema keeps only the fields Byte uses: `tool_name`, `tool_input`,
-  `last_assistant_message`, `notification_type`.
-- `PermissionRequest` is a long request. It returns either
-  `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`
-  or `...{"behavior":"deny","message":"Negado pelo dono via Byte."}`, or `{}` (no
-  decision → normal dialog) after `approval_seconds` (default 300).
-- Other events return `{}` at once.
+The bearer must be the bridge token, never the owner token. The owner token is refused here
+and the bridge token is refused everywhere else. Body: Claude Code's hook JSON. Response:
+whatever `bridge.hook` returns. Not under the owner's auth because the `claude` process must
+never hold the owner token. It is still bearer-protected, loopback, and scoped to one session.
 
-### Domain (`app/domain/claude.py`)
+### Lynus (`app/application/lynus.py`)
 
-- `ClaudeRequest(id, tool_name, description, created_at)`, frozen dataclass. `id` is
-  generated by Byte (Claude Code sends no request id).
-- `describe_request(tool_name, tool_input) -> str`: a short pt-BR line, pure, TDD. Shapes:
-  - `Bash`: `rodar: <description>`, from `tool_input.description` when present, otherwise
-    the first 80 characters of the command.
-  - `Edit` / `Write` / `MultiEdit`: `editar <basename>` / `criar <basename>`.
-  - `WebFetch`: `abrir <host>`.
-  - MCP and anything else: `usar <tool_name>`.
-  - Capped at 120 characters. Built to be spoken: no newlines, no markdown.
-- `ClaudeState`: `closed | idle | working | waiting`.
+A singleton. Owns the phase, the transcript sent to the model, the notes the panel shows, and
+the worker task.
 
-### `ClaudeBridge` (`app/application/claude_bridge.py`)
+Phases (`app/domain/lynus.py`): `off → briefing → working → done | stopped | failed`.
 
-Singleton through `deps.py`, next to `ProjectSession`. Owns the session's coordination
-state, not the process:
+- **Folder trust (found in the end-to-end run):** a folder Claude Code has not trusted opens
+  on its trust dialog, whose default answer is "No, exit". Lynus's first `Enter` picked it and
+  `claude` quit. Before opening, `start` reads `~/.claude.json` (read only) and refuses an
+  untrusted folder with an instruction: open it in the panel and pick "Yes, I trust this
+  folder". If the file cannot be read or is in another format, it goes ahead. Lynus never
+  types into dialogs.
+- `start(project, task)`: stops any current task, opens the project (fresh `claude` with
+  `--permission-mode default`), sets `briefing`, and schedules Lynus's first message. That
+  is one model call with the project's `CLAUDE.md` excerpt (capped at 6,000 chars), the
+  owner's task, and the tools `read_file` and `begin_work`. Lynus asks the owner what is
+  still unclear, briefly.
+- `say(text)`: an owner message.
+  - In `briefing`: one model turn (`read_file`, `begin_work`). A text reply becomes a note
+    for the owner.
+  - In `working`: it goes into the transcript as `Mensagem do dono: …`. Lynus answers at
+    once and may call `send_to_claude` (a prompt mid-turn is accepted, spike 4).
+  - In any other phase it is refused (409).
+- `begin_work(brief)` (a model tool): `working`, `bridge.pilot = answer_question`, and the
+  worker starts.
+- Worker loop:
+  1. `bridge.clear()`, type the prompt (bracketed paste, then `\r` after
+     `BYTE_LYNUS_PASTE_DELAY` = 0.3 s), turns += 1.
+  2. `last = await bridge.next_turn(turn_timeout)`. `None` → `failed` ("o Claude não
+     terminou o turno" or "sessão do Claude encerrada").
+  3. Model turn with `Claude terminou o turno. Última mensagem: <last, capped 8,000>` and
+     the tools `read_file`, `send_to_claude`, `finish`. `send_to_claude(text)` → back to 1.
+     `finish(summary)` → `done`. Neither → one nudge, then `failed`.
+  4. turns > max → `stopped` ("limite de turnos").
+- `stop()`: cancel the worker, clear the pilot, `stopped`, write `ESC` to the terminal.
+- Model calls are serialized (one lock). Text the model writes in any phase becomes a note.
+- Transcript compaction *(my call)*: the system prompt and the brief always stay. When the
+  transcript passes 40 messages, it is cut back to the last 30, starting at a plain user
+  message so call/response pairs stay intact.
+- Tools (Lynus's own, no `ToolRunner`: nothing in Lynus's world asks for confirmation, by
+  rule):
+  - `read_file(path)`: relative to the project folder, `..`/absolute refused, ≤ 20,000
+    chars, `DocumentSourcePort.read`.
+  - `begin_work(brief)` (briefing only), `send_to_claude(text)` and `finish(summary)`
+    (working only).
+- Gemini's Google Search stays on (it comes with the adapter), so Lynus can look things up.
+- The prompt is in pt-BR: Lynus is a senior engineer and Claude's tech lead. It checks
+  claims against files (specs in `docs/superpowers/specs`, plans in
+  `docs/superpowers/plans`) and asks Claude for evidence (tests run, output). It never
+  accepts "done" without tests, and it approves the designs and plans Claude presents when
+  they match the task.
+- Panel listener: `attach/detach` like `WeatherDisplay`. Every note or phase change calls
+  `changed()`.
 
-- The bridge token for the current session. `ProjectSession` asks for a fresh one on open
-  and revokes it on close or exit (a small seam between the two; builder's choice).
-- A FIFO of pending `ClaudeRequest`s, each paired with an `asyncio.Future[bool | None]`.
-  The **head** is "the" request; answers always go to the head. *(my call: Claude asks one
-  at a time in practice; the queue only keeps a second one from overwriting the first)*
-- `state`, `last_message` (capped at 4,000 characters when stored), and
-  `byte_started_turn: bool`.
-- `submit(request) -> bool | None`: called by the route; enqueue, announce, await with the
-  timeout, dequeue. Timeout or session close → `None`.
-- `answer(request_id, allow)`: resolves that future only if `request_id` is still the head.
-  Otherwise it raises `StaleClaudeRequestError(DomainError)` → "o pedido mudou".
-- `prompt(text)`: no open session → `NoOpenProjectError`. Otherwise
-  `ProjectSession.write(ESC[200~ + text + ESC[201~ + \r)`, and set
-  `byte_started_turn = True`.
-- On `Stop`: `state = idle`, store `last_message`. If `byte_started_turn`, push the "Claude
-  terminou no <projeto>" notice and reset the flag.
-- On close or exit: every pending future resolves `None`, the queue empties, `state =
-  closed`.
+### Byte's tools (segment `projects`)
 
-### Spoken notices
+- `start_lynus(project, task)`, `panel_only`. Its description tells Byte to ask for the
+  project and a short task description first, if the owner has not given them. It returns
+  `Lynus assumiu <projeto>; a conversa continua com ele no chat.`
+- `lynus_status()`: `<fase> em <projeto>: <última nota do Lynus, ≤ 400 chars>`.
 
-The notices go through the existing `/ws/notifications` push (Piper audio + ack), with a
-new `kind: "claude"`. They are **transient**: they are not written to `ReminderStorePort`.
-A notice that was never delivered is dropped when its request is answered or expires. A
-stale "Claude pede permissão" spoken after the fact would be wrong. *(my call; how the push
-reuses `ReminderHub` / `ReminderListener` is the builder's choice)*
+### API
 
-| When | Text |
-|---|---|
-| request at head, unanswered after `speak_delay_seconds` (default 10) | `Claude pede permissão no <projeto>: <description>. Libero?` |
-| `Stop` after a turn Byte started | `Claude terminou no <projeto>.` |
-| `elicitation_dialog`, or an `AskUserQuestion` request | `Claude tem uma pergunta no <projeto>. Responda no painel.` |
-
-The 10 s delay lets the owner answer at the panel first. A request answered within the
-delay is never spoken. *(my call)*
-
-### Tools (segment `projects`, **not** panel-only)
-
-| Tool | Confirmation | Returns |
-|---|---|---|
-| `send_to_claude(text)` | none | `enviado ao Claude no <projeto>` / `nenhum projeto aberto` |
-| `claude_status()` | none (read) | `<projeto>: <estado>[; pedido: <description>][; última resposta: <≤1,500 chars>]` |
-| `allow_claude()` | **`requires_confirmation`** | `liberado` / `nenhum pedido pendente` / `o pedido mudou` |
-| `deny_claude()` | none | `negado` / `nenhum pedido pendente` |
-
-- `send_to_claude` takes no confirmation: Claude Code's own permission gate (forced to
-  `default` at launch) is the guard on what the prompt can do. `text` is 1–2,000
-  characters. The model passes the owner's instruction; it does not write a task of its
-  own. The tool description says so. *(my call)*
-- `allow_claude` takes no arguments. When `ToolRunner` stores the pending action, it binds
-  the head request's `id`, and the confirmation summary is the request's description
-  (`Liberar o Claude: rodar testes do backend?`). On confirm, `answer(id, True)`. If the
-  head changed in between → `o pedido mudou`, nothing allowed. Voice flow: "libera" →
-  Byte: "Liberar o Claude: rodar testes do backend?" → "sim" → allowed. The owner hears
-  exactly what they allow, even if the notice was minutes ago. *(my call: one extra word
-  per allow, in exchange for reusing the confirmation matrix as is)*
-- `deny_claude` runs at once: denying is never the dangerous direction.
-- Prompt line: when a request is pending at prompt-build time, add one line, `Claude
-  aguarda permissão no <projeto>: <description>.`, so a cold live session started by "Ei
-  Byte, libera" knows what "libera" refers to. Nothing otherwise. *(my call)*
+- `GET /api/v1/lynus` → `{phase, project, task, notes: [{role: "owner"|"lynus"|"claude"|"system", text, at}]}`.
+  `claude` notes are the prompts Lynus sent. Last 200 notes.
+- `POST /api/v1/lynus/messages {content}` (1–4,000 chars) → 202. 409 outside
+  briefing/working.
+- `POST /api/v1/lynus/stop` → `{phase}`.
+- `WS /ws/panel` also pushes `{"type":"lynus"}`. The panel reads the truth from
+  `GET /lynus`, the same pattern as the weather.
+- All under the owner token. Lynus is absent (503) when there is no project terminal or no
+  Gemini key.
 
 ### Panel
 
-- `/ws/terminal` `state` message gains `"claude": {"state": "...", "request":
-  {"id","description"} | null}`. It is pushed on every bridge change. The panel shows a
-  banner over the terminal with **Permitir** / **Negar**.
-- `POST /api/v1/claude/answer` `{"id": str, "allow": bool}` → `answer(id, allow)`. 409 when
-  `id` is not the head. The banner shows the description before the click, so the click is
-  the decision. No second confirmation step on the panel. *(my call; this differs from
-  `DELETE /agenda`'s two-step, because here the summary is on screen before the owner acts)*
-- The terminal dialog is displayed while the hook waits (spike), so the owner may answer
-  in either place. A terminal answer clears the banner on the next event (see **Answered
-  elsewhere**).
-- Contract added to `docs/web-api-contract.md`.
+- A `Byte | Lynus` switch over the chat.
+  - **Lynus**, when Lynus is off: the panel sends Byte `Quero passar uma tarefa para o
+    Lynus.` Byte asks for the project and the task, then calls `start_lynus`. The push
+    arrives and the chat becomes Lynus's.
+  - **Lynus**, when Lynus is active: shows Lynus's conversation; the input posts to
+    `/lynus/messages`.
+  - **Byte**: back to Byte's conversation. Lynus keeps working.
+- Lynus's view: the phase chip (`conversando`, `trabalhando · turno n`, `concluído`,
+  `parado`, `falhou`), notes (owner / Lynus / prompts sent to Claude, the last in mono), and
+  `Parar` while active.
+- Contract in `docs/web-api-contract.md`.
 
 ### Configuration
 
-`BYTE_CLAUDE_HOOK_URL`, `BYTE_CLAUDE_APPROVAL_SECONDS` (default 300, 30–1,800),
-`BYTE_CLAUDE_SPEAK_DELAY_SECONDS` (default 10, 0–120). The feature is on whenever Spec 4's
-terminal is on. No new extras, no new dependencies, no compose change.
+`BYTE_LYNUS_MODEL` (`gemini-3.1-pro-preview`), `BYTE_LYNUS_THINKING` (`low|medium|high`,
+default `medium`), `BYTE_LYNUS_MAX_TURNS` (40), `BYTE_LYNUS_TURN_MINUTES` (30),
+`BYTE_CLAUDE_HOOK_URL` (`http://127.0.0.1:8000/api/v1/claude/hooks`). Lynus needs
+`BYTE_GEMINI_API_KEY`, whatever Byte's provider is. Without it, Lynus is off and logged.
 
 ### Logging
 
-`claude.prompt_sent`, `claude.request` (`request_id`, `tool_name`, `project`),
-`claude.answered` (`request_id`, `decision`, `via`: voice | chat | panel | timeout | terminal,
-`waited_ms`), `claude.turn_done`. `tool_name` here is Claude Code's tool name (`Bash`,
-`Edit`), not its input. Never `text`, `tool_input`, `description` or `last_assistant_message`.
+`lynus.started` (project), `lynus.phase` (phase, turns), `lynus.prompt_sent` (turn),
+`claude.allowed` (tool_name), `claude.turn_done`. Never prompt text, notes, file contents or
+Claude's messages.
 
 ## Testing
 
-- TDD: `describe_request` (each shape, cap, missing fields), `ClaudeBridge` (FIFO head,
-  answer to the head only, stale id, timeout → `None`, close resolves all, `Stop` notice
-  only when Byte started the turn, speak delay cancelled by an early answer, bracketed-paste
-  bytes), the four tools, `allow_claude` bound to the request id across confirmation (the
-  request changes → refused), the hook route (bridge token only, owner token rejected, no
-  session → 401, each event, long-poll returns the decision, `{}` on timeout),
-  `/claude/answer` 409, the prompt line, settings validation. All with the injected clock
-  and a fake `ProjectTerminalPort`. No sleeps.
-- One `integration` + `slow` test: real `claude` in a PTY with the generated settings file,
-  a harmless prompt that makes Claude ask for a `Bash` permission, answered by the bridge.
-  It needs a logged-in `claude`, so it never runs by default.
-
-## Left to the builder
-
-- How `ClaudeBridge` and `ProjectSession` share the session lifecycle (token, exit).
-- How the transient notice reuses `ReminderHub`'s listener.
-- How the bound request id is carried in the pending action (`ToolRunner` already stores
-  arguments; an internal field filled by the tool at request time is fine).
-- Whether `settings.json` goes inline in `--settings` or in a file (file is safer with
-  Windows quoting).
+- TDD: `is_inside` path check; `ClaudeBridge` (token rotate/refuse, no pilot → `{}`, pilot
+  → allow, `AskUserQuestion` → deny with the pilot's answer, `Stop` → `next_turn`,
+  timeout and `end()` → `None`, `clear()`); `ProjectSession` passes `--settings`, extra
+  args and token env, and ends the bridge on stop and exit; Lynus with `ScriptedChatModel`
+  and `FakeTerminal` (start → briefing note; `begin_work` → working + pilot + bracketed
+  prompt; turn end → `send_to_claude` → second prompt; `finish` → done; no tool twice →
+  failed; budget → stopped; timeout → failed; `stop()` → `Esc` + pilot cleared; owner
+  message while working; `read_file` refuses `..`; compaction keeps pairs); the hook route
+  (bridge token only, owner token refused); the Lynus routes (409, 202, stop); Byte's two
+  tools.
+- Manual check: the panel switch, a real task end to end on a scratch project.
 
 ## Order
 
-1. ~~Spike~~ done.
-2. Domain + `ClaudeBridge` + hook route + launch flags (testable with the fake terminal).
-3. Tools, `allow_claude` binding, prompt line.
-4. Spoken notices (`kind: "claude"`).
-5. Panel banner, `/claude/answer`, contract doc.
+1. Domain + bridge + session changes + hook route.
+2. Lynus + its tools + Byte's tools + routes + deps/lifespan.
+3. Panel.

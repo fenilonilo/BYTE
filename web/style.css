@@ -10,16 +10,27 @@
   --line: rgba(235, 229, 217, 0.09);
   --line-2: rgba(235, 229, 217, 0.18);
   --accent: #e3a548;
+  --accent-rgb: 227, 165, 72; /* the accent as numbers, for rgba(var(--accent-rgb), a) */
+  --accent-hover: #ecb460;
   --accent-ink: #1a140a;
-  --accent-wash: rgba(227, 165, 72, 0.1);
+  --accent-wash: rgba(var(--accent-rgb), 0.1);
   --danger: #e2826a;
   --rain: #7fb3d5;
+  --lynus: #3fd8ff; /* Lynus's own colour: cool and electric next to Byte's amber */
+  --lynus-done: #9cc3a2;
   --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --bar-h: 56px;
   --gutter: clamp(16px, 2.4vw, 32px);
   color-scheme: dark;
+}
+
+:root[data-persona="lynus"] {
+  --accent: #3fd8ff;
+  --accent-rgb: 63, 216, 255;
+  --accent-hover: #74e4ff;
+  --accent-ink: #03161c;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -79,7 +90,7 @@ code { font-size: 0.92em; color: var(--fg); }
 .btn:hover { border-color: var(--fg-2); background: var(--bg-3); }
 .btn:active { transform: translateY(1px); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn.primary:hover { background: #ecb460; border-color: #ecb460; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn.ghost { border-color: transparent; color: var(--fg-2); }
 .btn.ghost:hover { color: var(--fg); background: var(--bg-3); }
 .btn.small { height: 30px; padding: 0 12px; font-size: 13px; }
@@ -102,7 +113,7 @@ select:disabled, .icon-btn.big:disabled { opacity: 1; color: var(--fg-3); border
 .icon-btn.solid svg { fill: currentColor; stroke: none; }
 .icon-btn.big { width: 44px; height: 44px; border-color: var(--line-2); color: var(--fg); }
 .icon-btn.big svg { width: 18px; height: 18px; }
-.icon-btn[aria-pressed="true"] { color: var(--accent); border-color: rgba(227, 165, 72, 0.4); }
+.icon-btn[aria-pressed="true"] { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.4); }
 
 .link {
   background: none; border: 0; padding: 0;
@@ -144,7 +155,7 @@ input[type="date"], input[type="month"], input[type="time"] { font-family: var(-
 }
 .toggle:hover { border-color: var(--fg-2); color: var(--fg); }
 .toggle:active { transform: translateY(1px); }
-.toggle[aria-pressed="true"] { color: var(--fg); border-color: rgba(227, 165, 72, 0.45); }
+.toggle[aria-pressed="true"] { color: var(--fg); border-color: rgba(var(--accent-rgb), 0.45); }
 .toggle[aria-pressed="true"]::before { background: var(--accent); border-color: var(--accent); }
 
 input[type="range"] {
@@ -200,9 +211,9 @@ input[type="range"]:disabled { opacity: 0.35; cursor: not-allowed; }
 }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand strong { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
-.mark {
-  font: 500 10px/1 var(--mono); color: var(--accent-ink); background: var(--accent);
-  padding: 4px 4px 3px; border-radius: 2px; letter-spacing: 0.04em;
+.version {
+  font: 500 10px/1 var(--mono); color: var(--accent); letter-spacing: 0.04em;
+  padding: 3px 5px; border: 1px solid rgba(var(--accent-rgb), 0.45); border-radius: 2px;
 }
 .agent-state { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--fg-2); min-width: 9ch; }
 .led { width: 6px; height: 6px; background: var(--fg-3); transition: background-color 0.4s var(--ease); }
@@ -212,7 +223,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 @keyframes blink { 50% { opacity: 0.25; } }
 .bar-end { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 #clock { color: var(--fg); font-size: 14px; letter-spacing: 0.02em; }
-.tag { color: var(--accent); border: 1px solid rgba(227, 165, 72, 0.45); padding: 2px 6px; border-radius: 2px; }
+.tag { color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.45); padding: 2px 6px; border-radius: 2px; }
 
 /* Next reminder chip: always on screen, warms up as the time comes. */
 .next-alert {
@@ -227,7 +238,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .next-alert .art { width: 20px; height: 20px; flex: none; }
 .na-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
 .na-left { font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums; flex: none; }
-.next-alert.soon { border-color: rgba(227, 165, 72, 0.6); color: var(--accent); }
+.next-alert.soon { border-color: rgba(var(--accent-rgb), 0.6); color: var(--accent); }
 .next-alert.due { border-color: var(--danger); color: var(--danger); background: rgba(226, 130, 106, 0.1); animation: alarm 1s steps(2, jump-none) infinite; }
 @keyframes alarm { 50% { border-color: transparent; } }
 
@@ -291,19 +302,19 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
   font-size: 13px; caret-color: var(--accent); color: var(--fg);
 }
 .term-in input:focus-visible { outline: none; }
-.term-in:focus-within { box-shadow: inset 0 1px 0 rgba(227, 165, 72, 0.35); }
+.term-in:focus-within { box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.35); }
 
 /* ---------- Core ---------- */
 .core {
   display: grid;
-  grid-template-rows: minmax(160px, 1fr) auto auto auto;
+  grid-template-rows: minmax(160px, 1fr) auto auto auto auto;
   gap: 16px;
   padding: 16px var(--gutter) var(--gutter);
   border-right: 1px solid var(--line);
 }
 .orb-wrap { position: relative; min-height: 0; container-type: size; }
-/* Square canvas pinned to the bottom so the orb sits on the transcript, not mid-air. */
-.orb-wrap canvas { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: min(100cqh, 100cqw); display: block; align-self: end; }
+/* Square canvas centred both ways: the agent sits in the middle of its column. */
+.orb-wrap canvas { position: absolute; inset: 0; margin: auto; width: min(100cqh, 100cqw); height: min(100cqh, 100cqw); display: block; }
 .transcript {
   max-height: 38dvh; overflow-y: auto;
   -webkit-mask-image: linear-gradient(transparent, #000 24px);
@@ -322,6 +333,21 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .msg.system .body { color: var(--fg-2); font: 400 12.5px/1.6 var(--mono); }
 .caret { display: inline-block; width: 0.55ch; height: 1em; margin-left: 2px; vertical-align: -0.12em; background: var(--accent); animation: blink 1s steps(2, jump-none) infinite; }
 
+/* Lynus: the agent that drives Claude Code. Its notes reuse the transcript, plus the prompts. */
+.lynus-log .msg { grid-template-columns: 8ch minmax(0, 1fr); }
+.msg.claude .body { font: 400 12.5px/1.6 var(--mono); color: var(--fg-2); border-left: 2px solid var(--accent); padding-left: 10px; }
+.msg.claude .who { color: var(--accent); }
+.agent-switch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.agent-switch .seg {
+  height: 30px; padding: 0 12px; font: 500 12px/1 var(--mono); letter-spacing: 0.06em;
+  color: var(--fg-2); background: transparent; border: 1px solid var(--line-2); border-radius: 3px; cursor: pointer;
+}
+.agent-switch .seg:hover { color: var(--fg); border-color: var(--fg-2); }
+.agent-switch .seg[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.agent-switch .seg[data-waiting] { animation: blink 1s steps(2, jump-none) infinite; }
+.lynus-phase { flex: 1 1 12ch; min-width: 0; font: 400 12px/1.4 var(--mono); color: var(--fg-2); }
+.lynus-phase:empty { display: none; }
+
 .chat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .chat input { height: 44px; padding: 0 14px; font-size: 15px; }
 .chat .btn { height: 44px; }
@@ -331,7 +357,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .talk { min-width: 15ch; justify-content: flex-start; font-family: var(--mono); font-size: 13px; letter-spacing: 0.02em; }
 .talk-led { width: 6px; height: 6px; background: var(--fg-3); transition: background-color 0.3s var(--ease); }
 .talk-stop { display: none; margin-left: auto; padding-left: 12px; color: var(--fg-3); font-size: 11px; }
-.voice:not([data-voice="off"], [data-voice="wake"]) .talk { border-color: rgba(227, 165, 72, 0.45); }
+.voice:not([data-voice="off"], [data-voice="wake"]) .talk { border-color: rgba(var(--accent-rgb), 0.45); }
 .voice:not([data-voice="off"], [data-voice="wake"]) .talk-stop { display: inline; }
 .voice:not([data-voice="off"]) .talk-led { background: var(--accent); }
 .voice[data-voice="wake"] .talk-led { animation: breathe 2.4s ease-in-out infinite; }
@@ -402,7 +428,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .reminder .row-title { white-space: normal; }
 .reminder .left { font: 400 17px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--fg); min-width: 7ch; text-align: right; }
 .reminder.soon .left { color: var(--accent); }
-.reminder.due { margin: 0 calc(-1 * var(--gutter)); padding-left: var(--gutter); padding-right: var(--gutter); background: rgba(227, 165, 72, 0.08); box-shadow: inset 2px 0 0 var(--accent); }
+.reminder.due { margin: 0 calc(-1 * var(--gutter)); padding-left: var(--gutter); padding-right: var(--gutter); background: rgba(var(--accent-rgb), 0.08); box-shadow: inset 2px 0 0 var(--accent); }
 .reminder.due .left { color: var(--accent); }
 .reminder.alarm.due { background: rgba(226, 130, 106, 0.1); box-shadow: inset 2px 0 0 var(--danger); }
 .reminder.alarm.due .left { color: var(--danger); animation: blink 1s steps(2, jump-none) infinite; }
@@ -745,7 +771,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 /* Touch: every control at least 40px tall. */
 @media (pointer: coarse), (max-width: 560px) {
   .index a { min-height: 40px; display: inline-flex; align-items: center; }
-  .toggle, .btn.small, .segmented button { min-height: 40px; }
+  .toggle, .btn.small, .segmented button, .agent-switch .seg { min-height: 40px; }
   .icon-btn { width: 40px; height: 40px; }
   input[type="range"] { height: 40px; }
   .day-nav input { height: 40px; }
@@ -806,7 +832,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 }
 .wx-peak::after {
   content: ""; position: absolute; left: 50%; top: calc(150% - 3px); width: 6px; height: 6px; margin-left: -3px;
-  border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(227, 165, 72, 0.7);
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.7);
 }
 .wx-ticks { display: flex; justify-content: space-between; margin-top: 6px; font: 400 11px/1 var(--mono); color: var(--fg-3); }
 .wx-legend { display: flex; gap: 14px; margin-top: 8px; font: 400 11px/1 var(--mono); color: var(--fg-3); }
@@ -841,7 +867,7 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .wx-fog path { stroke: #a8a091; stroke-width: 2.4; stroke-linecap: round; animation: wx-mist 4s ease-in-out infinite alternate; }
 .wx-fog path:nth-child(2) { animation-delay: -1.3s; }
 .wx-fog path:nth-child(3) { animation-delay: -2.6s; }
-.wx-bolt { fill: var(--accent); filter: drop-shadow(0 0 4px rgba(227, 165, 72, 0.8)); animation: wx-flash 3.4s steps(1, end) infinite; }
+.wx-bolt { fill: var(--accent); filter: drop-shadow(0 0 4px rgba(var(--accent-rgb), 0.8)); animation: wx-flash 3.4s steps(1, end) infinite; }
 @keyframes wx-drift { to { transform: translateX(2.5px); } }
 @keyframes wx-fall { from { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } to { transform: translateY(8px); opacity: 0; } }
 @keyframes wx-mist { to { transform: translateX(4px); opacity: 0.5; } }
