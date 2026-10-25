@@ -114,6 +114,44 @@ async def test_audio_is_relayed_in_both_directions_untouched() -> None:
 
 
 @pytest.mark.unit
+async def test_the_end_log_counts_the_traffic_and_names_who_ended_it() -> None:
+    world = LiveWorld()
+    task = await start_and_wait_ready(world)
+
+    world.transport.feed(b"\x01\x02")
+    world.transport.feed(b"\x03\x04")
+    await eventually(lambda: len(world.session.audio_in) == 2)
+    user_says(world, "oi")
+    world.session.push(AssistantAudio(data=b"\x09", item_id="a1"), ResponseDone())
+    await eventually(lambda: bool(world.transport.sent("turn_done")))
+    await finish(world, task)
+
+    end = next(f for _, name, f in world.log.events if name == "live.end")
+    assert end == {
+        "conversation_id": "c1",
+        "ended_by": "client",
+        "audio_in": 2,
+        "audio_out": 1,
+        "user_turns": 1,
+        "responses": 1,
+    }
+
+
+@pytest.mark.unit
+async def test_the_end_log_names_idle_and_the_provider() -> None:
+    idle = LiveWorld(limits=LiveLimits(idle_seconds=0.05))
+    await asyncio.wait_for(idle.start(), timeout=1)
+    provider = LiveWorld()
+    task = await start_and_wait_ready(provider)
+    provider.session.end()
+    await asyncio.wait_for(task, timeout=1)
+
+    for world, who in ((idle, "idle"), (provider, "provider")):
+        end = next(f for _, name, f in world.log.events if name == "live.end")
+        assert end["ended_by"] == who
+
+
+@pytest.mark.unit
 async def test_transcripts_are_forwarded_and_saved_under_the_conversation() -> None:
     world = LiveWorld()
     task = await start_and_wait_ready(world)
