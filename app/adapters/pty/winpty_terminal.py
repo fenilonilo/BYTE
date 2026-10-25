@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -78,7 +79,10 @@ def _kill_tree(proc: PtyProcess) -> None:
             capture_output=True,
             check=False,
         )
-    proc.close(True)
+    # taskkill already doomed the tree, but the dying process can still read as alive: close()
+    # then signals it and Windows answers access denied. Its handles are closed by then.
+    with contextlib.suppress(PermissionError):
+        proc.close(True)
 
 
 def _read(proc: PtyProcess) -> bytes:

@@ -54,3 +54,21 @@ def test_stop_works_on_a_selector_loop() -> None:
         return terminal.alive
 
     assert asyncio.run(main(), loop_factory=asyncio.SelectorEventLoop) is False
+
+
+def test_kill_tolerates_a_process_still_dying_after_taskkill() -> None:
+    """pywinpty's close() signals a process taskkill already doomed; Windows says access denied."""
+    from app.adapters.pty.winpty_terminal import (  # noqa: PLC0415 - win32 only
+        _kill_tree,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    class Dying:
+        pid = 0
+
+        def isalive(self) -> bool:
+            return False
+
+        def close(self, force: bool = False) -> None:
+            raise PermissionError(13, "Acesso negado")
+
+    _kill_tree(Dying())  # type: ignore[arg-type]
