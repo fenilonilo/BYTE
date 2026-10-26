@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt  # noqa: TC003 - FastAPI reads the query annotation at runtime
 import json
 from typing import TYPE_CHECKING, Annotated
@@ -27,6 +28,7 @@ from app.api.schemas import (
     ClimatePatchSchema,
     ClimateSchema,
     ClimatesSchema,
+    ColorSchema,
     ConfirmSchema,
     EventCreateSchema,
     EventsSchema,
@@ -57,12 +59,14 @@ from app.application.tool_runner import CONFIRM_ACTION, UNKNOWN_STATE, ToolRunne
 from app.application.tools.music import KnownUris  # noqa: TC001
 from app.application.weather_display import WeatherDisplay
 from app.config import Settings  # noqa: TC001
+from app.domain.climate import ClimateMode, FanSpeed
 from app.domain.exceptions import (
     DomainError,
     EventNotFoundError,
     MusicOfflineError,
     UnknownMusicDeviceError,
 )
+from app.domain.light import LightMode
 from app.domain.music import MediaKind
 from app.domain.tools import ToolCall
 from app.ports.calendar import CalendarPort  # noqa: TC001
@@ -129,18 +133,53 @@ def _args(body: BaseModel, **extra: object) -> dict[str, object]:
     return {**body.model_dump(mode="json", exclude_none=True), **extra}
 
 
+async def _light(light: LightPort, name: str) -> LightSchema:
+    try:
+        return LightSchema.model_validate(await light.get_state(name)).model_copy(
+            update={"name": name}
+        )
+    except DomainError:
+        # An unreachable lamp (owner away, unplugged) still shows, greyed out.
+        return LightSchema(
+            name=name,
+            available=False,
+            power=False,
+            mode=LightMode.WHITE,
+            brightness=0,
+            color_temperature=0,
+            color=ColorSchema(hue=0, saturation=0, brightness=0),
+            timer_seconds=0,
+            do_not_disturb=False,
+        )
+
+
+async def _climate(climate: ClimatePort, name: str) -> ClimateSchema:
+    try:
+        return ClimateSchema.model_validate(await climate.get_state(name)).model_copy(
+            update={"name": name}
+        )
+    except DomainError:
+        return ClimateSchema(
+            name=name,
+            available=False,
+            power=False,
+            mode=ClimateMode.COOL,
+            target_temperature=0,
+            current_temperature=0,
+            fan_speed=FanSpeed.AUTO,
+            swing=False,
+            power_save=False,
+            display_light=False,
+            has_error=False,
+        )
+
+
 async def _lights(light: LightPort) -> list[LightSchema]:
-    return [
-        LightSchema.model_validate(await light.get_state(n)).model_copy(update={"name": n})
-        for n in await light.devices()
-    ]
+    return list(await asyncio.gather(*(_light(light, n) for n in await light.devices())))
 
 
 async def _climates(climate: ClimatePort) -> list[ClimateSchema]:
-    return [
-        ClimateSchema.model_validate(await climate.get_state(n)).model_copy(update={"name": n})
-        for n in await climate.devices()
-    ]
+    return list(await asyncio.gather(*(_climate(climate, n) for n in await climate.devices())))
 
 
 async def _music_state(music: MusicPort) -> MusicSchema:
@@ -154,23 +193,19 @@ async def state(
     music: Annotated[MusicPort, Depends(get_music)],
     pending: Pending,
 ) -> StateSchema:
-    errors: list[str] = []
-    lights: list[LightSchema] | None = None
-    climates: list[ClimateSchema] | None = None
-    playback: MusicSchema | None = None
-    # A dead vendor must not blank the whole panel: each section fails on its own.
-    try:
-        lights = await _lights(light)
-    except DomainError:
-        errors.append("lights")
-    try:
-        climates = await _climates(climate)
-    except DomainError:
-        errors.append("climates")
-    try:
-        playback = await _music_state(music)
-    except DomainError:
-        errors.append("music")
+    # A dead vendor must not blank the whole panel: each section fails on its own, and they
+    # run together so an offline lamp's timeout is not added to the others'.
+    got_lights, got_climates, got_music = await asyncio.gather(
+        _lights(light), _climates(climate), _music_state(music), return_exceptions=True
+    )
+    results = {"lights": got_lights, "climates": got_climates, "music": got_music}
+    for result in results.values():
+        if isinstance(result, BaseException) and not isinstance(result, DomainError):
+            raise result
+    errors = [name for name, result in results.items() if isinstance(result, DomainError)]
+    lights = None if isinstance(got_lights, BaseException) else got_lights
+    climates = None if isinstance(got_climates, BaseException) else got_climates
+    playback = None if isinstance(got_music, BaseException) else got_music
     waiting = pending.peek(PANEL)
     return StateSchema(
         lights=lights,

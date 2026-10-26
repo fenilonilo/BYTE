@@ -487,6 +487,10 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .art-btn:hover { transform: translateY(-2px); }
 .art-btn:active { transform: translateY(1px) scale(0.97); transition-duration: 0.08s; }
 .art-btn:focus-visible { outline-offset: 4px; }
+/* Unreachable device (owner away, unplugged): still drawn, greyed, not clickable. */
+.art-btn:disabled { cursor: not-allowed; transform: none; }
+.unavailable .art-btn .art { filter: grayscale(1); opacity: 0.4; }
+.unavailable .row-meta { color: var(--fg-3); }
 
 /* Lamp: click it like a bedside lamp. --glow is the bulb colour, --lvl the brightness (0..1). */
 .lamp { width: 76px; height: 95px; --glow: #ffc27a; --lvl: 0.7; }

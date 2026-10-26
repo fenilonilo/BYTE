@@ -264,6 +264,7 @@ function glowColor(l) {
   return `color-mix(in oklab, #dfe7ff ${l.color_temperature}%, #ffc27a)`;
 }
 function lightMeta(l) {
+  if (l.available === false) return 'indisponível agora';
   if (!l.power) return 'desligada';
   if (l.mode === 'colour') return `cor, matiz ${l.color.hue}°, brilho ${l.color.brightness}%`;
   if (l.mode === 'scene') return 'cena';
@@ -305,9 +306,14 @@ function lightRow(l) {
   lamp.style.setProperty('--lvl', level / 100);
   lamp.setAttribute('aria-pressed', String(l.power));
   lamp.setAttribute('aria-label', `${l.name}: ${l.power ? 'ligada' : 'desligada'}. Alternar`);
+  const away = l.available === false;
+  if (away) {
+    lamp.disabled = true;
+    lamp.setAttribute('aria-label', `${l.name}: indisponível agora`);
+  }
   const out = h('output', { class: 'row-meta' });
   const range = h('input', {
-    type: 'range', min: 1, max: 100, value: level, 'aria-label': `Brilho de ${l.name}`,
+    type: 'range', min: 1, max: 100, value: level, 'aria-label': `Brilho de ${l.name}`, disabled: away,
     oninput: () => { rangeFill(range, out); lamp.style.setProperty('--lvl', range.value / 100); },
     onchange: () => {
       const b = Number(range.value);
@@ -318,7 +324,7 @@ function lightRow(l) {
     },
   });
   rangeFill(range, out);
-  return h('li', { class: 'light' },
+  return h('li', { class: `light${away ? ' unavailable' : ''}` },
     lamp,
     h('div', { class: 'light-info' }, h('div', { class: 'row-title' }, l.name), h('div', { class: 'row-meta' }, lightMeta(l))),
     h('div', { class: 'dim' }, h('span', { class: 'label' }, 'brilho'), range, out),
@@ -348,16 +354,18 @@ const tempParts = (t) => {
   return dec ? [int, h('span', { class: 'dec' }, ','), dec] : [int];
 };
 function climateBlock(c) {
-  const off = !c.power;
-  const tempEl = h('span', {}, tempParts(c.target_temperature));
+  const away = c.available === false;
+  const off = !c.power || away;
+  const tempEl = h('span', {}, away ? '–' : tempParts(c.target_temperature));
   let target = c.target_temperature;
   const unit = h('button', {
     class: `art-btn ac${off ? '' : ' on'}${c.swing ? ' swing' : ''}`, type: 'button', 'data-key': c.name,
     'data-mode': c.mode, 'data-fan': c.fan_speed, 'aria-pressed': String(c.power),
-    'aria-label': `${c.name}: ${c.power ? 'ligado' : 'desligado'}. Alternar`,
+    'aria-label': away ? `${c.name}: indisponível agora` : `${c.name}: ${c.power ? 'ligado' : 'desligado'}. Alternar`,
+    disabled: away,
     onclick: () => runAction('climate', () => api.setClimate(c.name, { power: !c.power })),
   }, art.aircon());
-  const showTarget = () => { $('.ac-temp', unit).textContent = `${temp(target)}°`; };
+  const showTarget = () => { $('.ac-temp', unit).textContent = away ? '–' : `${temp(target)}°`; };
   showTarget();
   const nudge = (delta) => {
     target = Math.min(30, Math.max(18, Math.round(target + delta)));
@@ -384,20 +392,23 @@ function climateBlock(c) {
     onclick: () => runAction('climate', () => api.setClimate(c.name, { [key]: !c[key] })),
   }, label);
 
-  return h('div', { class: `climate${off ? ' off' : ''}` },
+  const meta = away ? 'indisponível agora'
+    : off ? 'desligado' : `ligado · ${MODES[c.mode] ?? c.mode} · ventilador ${FANS[c.fan_speed] ?? c.fan_speed}`;
+  return h('div', { class: `climate${off ? ' off' : ''}${away ? ' unavailable' : ''}` },
     h('div', { class: 'climate-top' },
       unit,
       h('div', {},
         h('div', { class: 'row-title' }, c.name),
-        h('div', { class: 'row-meta' }, off ? 'desligado' :`ligado · ${MODES[c.mode] ?? c.mode} · ventilador ${FANS[c.fan_speed] ?? c.fan_speed}`))),
+        h('div', { class: 'row-meta' }, meta))),
     c.has_error ? h('p', { class: 'warn', role: 'alert' }, 'O aparelho está reportando erro.') : null,
     h('div', { class: 'climate-dial' },
       h('div', { class: 'temp', 'aria-live': 'polite' }, h('span', { class: 'sr-only' }, 'alvo '), tempEl, h('small', {}, '°C')),
       h('div', { class: 'stepper' },
         h('button', { class: 'icon-btn big', type: 'button', disabled: off, 'aria-label': 'Diminuir um grau', onclick: () => nudge(-1) }, svg(ICON.minus)),
         h('button', { class: 'icon-btn big', type: 'button', disabled: off, 'aria-label': 'Aumentar um grau', onclick: () => nudge(1) }, svg(ICON.plus))),
-      h('div', { class: 'ambient' }, h('span', { class: 'label' }, 'ambiente'), h('strong', {}, `${temp(c.current_temperature)}°C`))),
-    off ? h('p', { class: 'help' }, 'Toque no aparelho para ligar e ajustar modo e temperatura.') : null,
+      h('div', { class: 'ambient' }, h('span', { class: 'label' }, 'ambiente'), h('strong', {}, away ? '–' : `${temp(c.current_temperature)}°C`))),
+    away ? h('p', { class: 'help' }, 'Sem contato com o aparelho agora. Ele volta sozinho quando responder.')
+      : off ? h('p', { class: 'help' }, 'Toque no aparelho para ligar e ajustar modo e temperatura.') : null,
     h('div', { class: 'climate-opts' },
       seg,
       h('div', { class: 'field' }, h('label', { for: fanId }, 'ventilador'), fan),

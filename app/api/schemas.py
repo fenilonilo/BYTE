@@ -68,6 +68,7 @@ class ColorSchema(_View):
 
 class LightSchema(_View):
     name: str = ""  # filled by the router: the port state does not carry it
+    available: bool = True  # False: unreachable now, the other fields are placeholders
     power: bool
     mode: LightMode
     brightness: int
@@ -83,6 +84,7 @@ class LightsSchema(BaseModel):
 
 class ClimateSchema(_View):
     name: str = ""  # filled by the router
+    available: bool = True  # False: unreachable now, the other fields are placeholders
     power: bool
     mode: ClimateMode
     target_temperature: float
