@@ -11,7 +11,7 @@ routes. Never send raw device or spreadsheet ids; an unknown name is `422`.
 
 | Route | Response |
 |---|---|
-| `GET /state` | `{lights: Light[]\|null, climates: Climate[]\|null, music: Music\|null, pending_confirmation: {summary}\|null, errors: string[]}`. A section whose adapter failed is `null` and its name is listed in `errors`. |
+| `GET /state` | `{lights: Light[]\|null, climates: Climate[]\|null, music: Music\|null, pending_confirmation: {summary}\|null, errors: string[]}`. A section whose adapter failed is `null` and its name is listed in `errors`. A single device that does not answer (unplugged, owner away) is still listed, with `available: false` and placeholder fields; that is not an error. |
 | `GET /lights` | `{lights: Light[]}` |
 | `GET /climate` | `{climates: Climate[]}` |
 | `GET /music/state` | `Music` |
@@ -24,10 +24,10 @@ routes. Never send raw device or spreadsheet ids; an unknown name is `422`.
 | `GET /reminders` | `{reminders: Reminder[]}`, soonest first. Calendar warnings are left out (the agenda shows the events). A reminder stays listed after its time until the device has played it and acked. |
 
 ```
-Light    {name, power, mode: "white"|"colour"|"scene"|"music", brightness 1-100,
+Light    {name, available, power, mode: "white"|"colour"|"scene"|"music", brightness 1-100,
           color_temperature 0-100, color: {hue 0-360, saturation, brightness},
           timer_seconds, do_not_disturb}
-Climate  {name, power, mode: "cool"|"dry"|"fan"|"auto", target_temperature, current_temperature,
+Climate  {name, available, power, mode: "cool"|"dry"|"fan"|"auto", target_temperature, current_temperature,
           fan_speed: "auto"|"low"|"mid"|"high"|"nature", swing, power_save, display_light,
           has_error}
 Music    {playing, item: MusicItem|null, progress_ms, duration_ms, volume 0-100, shuffle,
