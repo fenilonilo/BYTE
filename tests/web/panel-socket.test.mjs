@@ -12,10 +12,11 @@ class FakeSocket {
 function harness() {
   const sockets = [];
   const timers = [];
-  const seen = { weather: 0, open: 0 };
+  const seen = { weather: 0, lynus: 0, open: 0 };
   const handle = panelSocket({
     open: () => { const s = new FakeSocket(); sockets.push(s); return s; },
     onWeather: () => seen.weather++,
+    onLynus: () => seen.lynus++,
     onOpen: () => seen.open++,
     setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimer: () => {},
@@ -31,6 +32,9 @@ test('open and weather messages reach the callbacks; junk is ignored', () => {
   h.last().onmessage({ data: 'not json' });
   h.last().onmessage({ data: '{"type":"other"}' });
   h.last().onmessage({ data: new ArrayBuffer(2) });
+  assert.equal(h.seen.weather, 1);
+  h.last().onmessage({ data: '{"type":"lynus"}' });
+  assert.equal(h.seen.lynus, 1);
   assert.equal(h.seen.weather, 1);
 });
 

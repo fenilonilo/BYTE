@@ -71,6 +71,9 @@ export const api = {
   createReminder: (reminder) => request('POST', '/reminders', reminder),
   cancelReminder: (id) => request('DELETE', `/reminders/${seg(id)}`),
   confirm: (approve) => request('POST', '/confirm', { approve }),
+  lynus: () => request('GET', '/lynus'),
+  lynusSay: (content) => request('POST', '/lynus/messages', { content }),
+  lynusStop: () => request('POST', '/lynus/stop'),
   chat: (content, conversationId) => request('POST', '/messages', {
     content, client: 'panel', ...(conversationId ? { conversation_id: conversationId } : {}),
   }),

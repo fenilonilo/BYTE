@@ -115,10 +115,13 @@ class RunLiveSession:
                 async with asyncio.timeout(self._limits.max_seconds):
                     await run.pump()
         except TimeoutError:
+            run.ended_by = "limit"
             await transport.send_event({"type": "error", "code": "session_limit"})
         finally:
             await run.close()
-            self._log.info("live.end", conversation_id=conversation_id)
+            self._log.info(
+                "live.end", conversation_id=conversation_id, ended_by=run.ended_by, **run.counts
+            )
 
 
 class LiveRun:
@@ -159,17 +162,21 @@ class LiveRun:
         self._transcript_ready = asyncio.Event()
         self._tool_lock = asyncio.Lock()
         self._tool_tasks: set[asyncio.Task[None]] = set()
+        # content-free traffic counts for live.end: a silent session shows where audio stopped
+        self.counts = {"audio_in": 0, "audio_out": 0, "user_turns": 0, "responses": 0}
+        self.ended_by = "error"
 
     async def pump(self) -> None:
         tasks = {
-            asyncio.create_task(self._from_client()),
-            asyncio.create_task(self._from_provider()),
-            asyncio.create_task(self._watch_idle()),
+            asyncio.create_task(self._from_client(), name="client"),
+            asyncio.create_task(self._from_provider(), name="provider"),
+            asyncio.create_task(self._watch_idle(), name="idle"),
         }
         try:
             done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 task.result()
+                self.ended_by = task.get_name()
         finally:
             for task in tasks:
                 task.cancel()
@@ -184,6 +191,7 @@ class LiveRun:
     async def _from_client(self) -> None:
         async for frame in self._transport.incoming():
             if isinstance(frame, bytes):
+                self.counts["audio_in"] += 1
                 await self._session.send_audio(frame)
             elif frame.get("type") == "played":
                 await self._truncate(frame.get("audio_end_ms"))
@@ -216,6 +224,7 @@ class LiveRun:
         match event:
             case AssistantAudio(data=data, item_id=item_id):
                 self._touch()
+                self.counts["audio_out"] += 1
                 self._item = item_id
                 self._speaking = True
                 await self._transport.send_audio(data)
@@ -230,6 +239,7 @@ class LiveRun:
                     self._transcript_ready.clear()
             case UserTranscript(item_id=item_id, text=text):
                 self._touch()
+                self.counts["user_turns"] += 1
                 await self._transport.send_event(
                     {"type": "transcript", "role": "user", "text": text, "final": True}
                 )
@@ -245,6 +255,7 @@ class LiveRun:
             case ResponseStarted():
                 self._response_active = True
             case ResponseDone(calls=calls):
+                self.counts["responses"] += 1
                 await self._finish_response(calls)
             case LiveError(code=code):
                 await self._transport.send_event({"type": "error", "code": code})

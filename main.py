@@ -23,6 +23,7 @@ from app.api.deps import (
     get_light,
     get_live_port,
     get_logger,
+    get_lynus,
     get_music,
     get_project_session,
     get_reminder_hub,
@@ -33,6 +34,7 @@ from app.api.deps import (
 )
 from app.api.errors import install_error_handlers
 from app.api.live import router as live_router
+from app.api.lynus import router as lynus_router
 from app.api.notifications import router as notifications_router, run_reminders
 from app.api.panel import router as panel_router
 from app.api.router import router
@@ -80,6 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         speech=type(get_speech()).__name__,
         knowledge=type(get_knowledge()).__name__,
         terminal=(session := get_project_session()) is not None,
+        lynus=(lynus := get_lynus()) is not None,
         web=settings.web,
     )
     reminders = asyncio.create_task(
@@ -103,6 +106,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         with contextlib.suppress(asyncio.CancelledError):
             await task
     await runner.drain()
+    if lynus is not None:
+        await lynus.aclose()
     if session is not None:
         await session.aclose()  # never leave a claude process behind the server
     if (close := getattr(get_knowledge(), "aclose", None)) is not None:
@@ -118,6 +123,7 @@ app.include_router(control_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(terminal_router, prefix="/api/v1")
 app.include_router(panel_router, prefix="/api/v1")
+app.include_router(lynus_router, prefix="/api/v1")
 install_error_handlers(app)
 
 

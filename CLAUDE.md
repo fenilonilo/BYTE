@@ -45,6 +45,8 @@ confirmation rules as chat — no logic or credentials in the browser. Contract:
 ## Tools and segments
 
 There is **one agent with all tools**. No sub-agents, no Team, no routing hop.
+The one exception, by the owner's rule, is **Lynus** (Spec 5, below): a separate agent on
+Google's coding model that drives Claude Code on its own. Byte only hands it a project and a task.
 
 A **segment** is a named group of tools, used only as an optional per-request
 filter (`segment` omitted or `auto` = all tools; unknown segment = `404`).
@@ -56,7 +58,7 @@ filter (`segment` omitted or `auto` = all tools; unknown segment = `404`).
 | `agenda` | Events (Google Calendar), reminders and alarms | `CalendarPort`, `ReminderStorePort` |
 | `finance` | Monthly expenses, bills (Google Sheets) | `ExpensesPort` |
 | `weather` | Current weather and forecast for the home city or any city (Open-Meteo) | `WeatherPort` |
-| `projects` | Owner's programming projects: RAG over their `CLAUDE.md`; open/close `claude` in the panel terminal | `KnowledgeStorePort`, `EmbedderPort`, `DocumentSourcePort`, `ProjectTerminalPort` |
+| `projects` | Owner's programming projects: RAG over their `CLAUDE.md`; open/close `claude` in the panel terminal; hand a task to Lynus (`start_lynus`, `lynus_status`) | `KnowledgeStorePort`, `EmbedderPort`, `DocumentSourcePort`, `ProjectTerminalPort` |
 
 **Adding a tool:**
 
@@ -128,6 +130,19 @@ Google every 5 min and expired at the event's start. An alarm rings on the devic
 local wake word stops it — no live session, no tokens. The model gets the current time as
 one `Agora:` line in its prompt. WebSocket, not MQTT, until a real limit is hit.
 
+## Lynus (Spec 5)
+
+`docs/superpowers/specs/2026-10-24-claude-code-remote-design.md`. In the panel the owner
+switches the chat to Lynus; Byte asks for the project and a short task and calls `start_lynus`;
+Lynus (`application/lynus.py`, `BYTE_LYNUS_MODEL`) opens a fresh `claude` with
+`--permission-mode default`, deepens the task with the owner, then works alone: it types
+prompts into the PTY, reads each turn's last message (`Stop` hook), reads project files to
+check specs and plans, and calls `finish`. Claude Code's `PermissionRequest`/`Stop` hooks reach
+`POST /claude/hooks` (`ClaudeBridge`) with a per-session token that is not the owner's. **While
+Lynus works, every permission request is allowed in code — owner's rule, not a bug.** Bounds:
+explicit start for one project, stop button, turn budget and turn timeout, Byte's secrets kept
+out of the child's environment.
+
 ## Safety and security
 
 This service controls physical devices in a home and reads personal financial
@@ -152,7 +167,9 @@ data. Hard requirements, not polish:
   `confirm_action()`, and only if the **very next user utterance** after the
   request is affirmative (`is_affirmative`, whole-word pt-BR matcher, deny list
   wins). Any other utterance drops the pending action. 60 s expiry. An agent
-  must not learn that it can act first and apologise later. Today only `delete_event`
+  must not learn that it can act first and apologise later. (This rule governs Byte's tools.
+  Inside a Lynus task, Claude Code's own permission requests are approved by Lynus, by the
+  owner's rule — see **Lynus**.) Today only `delete_event`
   and `add_expense` ask; switching lights or the air conditioner on or off runs at once
   (owner's call). With a single configured lamp, `set_light` targets it whatever name the
   model says. The model only plays a `uri` that a search or the playlists returned.
@@ -221,6 +238,8 @@ Prefix `/api/v1`. FastAPI. Everything async.
 | `WS /live` | Spoken conversation. One session at a time; a new connection replaces the old (close code 4000). |
 | `WS /ws/terminal` | Panel only: the open project's `claude` PTY (state JSON + binary I/O). One panel; a new one replaces the old (4000). 1008 where no terminal exists. |
 | `WS /ws/panel` | Panel only: server pushes `{"type":"weather"}` when the shown city changes. One panel; a new one replaces the old (4000). |
+| `GET /lynus`, `POST /lynus/messages`, `POST /lynus/stop` | Panel: Lynus's state and conversation; `{"type":"lynus"}` pushed on `/ws/panel`. 503 without terminal or Gemini key. |
+| `POST /claude/hooks` | Only the `claude` process Byte runs: Claude Code hooks, per-session bridge token (owner token refused). |
 | `WS /ws/notifications` | Proactive pushes: `{"type":"reminder","id","kind"}` + one binary PCM frame; the device replies `{"type":"ack","id"}`. One listener; a new one replaces the old (4000). |
 
 Rules:
@@ -337,7 +356,7 @@ expense adapters. What is left is replacing those adapters with real ones.
 | Project knowledge (pgvector + local embeddings) and panel project terminal (Spec 4) | done (opening by voice in the panel not checked by hand) |
 | Weather: tools, panel section, `/ws/panel` push (Spec 6) | done |
 | Postgres for conversations, OAuth tokens, reminders | not started (later spec) |
-| Byte driving Claude Code on its own (Spec 5) | not started |
+| Lynus driving Claude Code on its own (Spec 5) | done (hooks spiked on `claude` 2.1.310) |
 
 ## Before you finish
 
@@ -350,7 +369,8 @@ Run `ruff check`, `pyright`, `pytest`. Three green = ship. Read
 - Anything from **Explicitly out of scope** above.
 - Pydantic in `domain/` — boundary leak.
 - OpenAI, Tuya or Google SDK types outside their adapter package.
-- Agno, a Team, or per-segment sub-agents — superseded by the single agent.
+- Agno, a Team, or per-segment sub-agents — superseded by the single agent (Lynus is the
+  owner's one sanctioned second agent, for Claude Code only).
 - A use case importing an adapter directly — go through the port.
 - Intent classification written by hand, or a `match` on segment names.
 - A fallback tool set when a named segment is unknown — fail loudly (`404`).

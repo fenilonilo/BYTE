@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -9,7 +8,7 @@ from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validat
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.exceptions import ConfigError
-from app.domain.projects import PROJECT_NAME_PATTERN, Project
+from app.domain.projects import PROJECT_NAME_PATTERN, Project, is_inside
 
 MIN_TOKEN_LENGTH = 32
 
@@ -28,10 +27,8 @@ class ProjectSettings(BaseModel):
     @field_validator("docs")
     @classmethod
     def _docs_stay_inside(cls, value: list[str]) -> list[str]:
-        for doc in value:
-            win, posix = PureWindowsPath(doc), PurePosixPath(doc)
-            if win.is_absolute() or win.anchor or posix.is_absolute() or ".." in win.parts:
-                raise ValueError("docs must be relative paths inside the project")
+        if not all(is_inside(doc) for doc in value):
+            raise ValueError("docs must be relative paths inside the project")
         return value
 
 
@@ -89,6 +86,13 @@ class Settings(BaseSettings):
     embedding_cache: str = "data/models"
     knowledge_scan_seconds: float = Field(default=300.0, gt=0)
     claude_command: str = "claude"
+    # Lynus (Spec 5): drives Claude Code on its own. Needs the Gemini key and the terminal.
+    claude_hook_url: str = "http://127.0.0.1:8000/api/v1/claude/hooks"
+    claude_hooks_path: str = "data/claude-hooks.json"
+    lynus_model: str = "gemini-3.1-pro-preview"
+    lynus_thinking: Literal["low", "medium", "high"] = "medium"  # Pro rejects "minimal"
+    lynus_max_turns: int = Field(default=40, ge=1, le=500)
+    lynus_turn_minutes: float = Field(default=30.0, gt=0, le=240)
 
     model_config = SettingsConfigDict(
         env_prefix="BYTE_",

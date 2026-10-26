@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
@@ -26,7 +27,9 @@ from app.adapters.memory.silent_speech import SilentSpeech
 from app.adapters.openai.chat_model import OpenAIChatModel
 from app.adapters.openai.live_session import OpenAILiveSessionAdapter
 from app.api.live_slot import LiveSlot
+from app.application.claude_bridge import ClaudeBridge
 from app.application.knowledge_indexer import KnowledgeIndexer
+from app.application.lynus import Lynus, LynusLimits
 from app.application.music_ducker import MusicDucker
 from app.application.pending_actions import PendingActionStore
 from app.application.project_session import ProjectSession
@@ -255,7 +258,47 @@ def get_project_session() -> ProjectSession | None:
     except ImportError:
         get_logger().warning("projects.terminal_unavailable", reason="no_pty")
         return None
-    return ProjectSession(WinPtyTerminal(), projects, [command], dict(os.environ), get_logger())
+    hooks = Path(s.claude_hooks_path).resolve()
+    hooks.parent.mkdir(parents=True, exist_ok=True)
+    hooks.write_text(json.dumps(get_claude_bridge().settings()), encoding="utf-8")
+    return ProjectSession(
+        WinPtyTerminal(),
+        projects,
+        [command],
+        dict(os.environ),
+        get_logger(),
+        bridge=(get_claude_bridge(), str(hooks)),
+    )
+
+
+@lru_cache
+def get_claude_bridge() -> ClaudeBridge:
+    return ClaudeBridge(get_settings().claude_hook_url, get_logger())
+
+
+@lru_cache
+def get_lynus() -> Lynus | None:
+    """Lynus needs the project terminal and Google's coding model, whatever Byte's provider is."""
+    s = get_settings()
+    session = get_project_session()
+    if session is None:
+        return None
+    if s.gemini_api_key is None:
+        get_logger().warning("lynus.unavailable", reason="no_gemini_key")
+        return None
+    from app.adapters.gemini.chat_model import GeminiChatModel  # noqa: PLC0415 - optional extra
+
+    return Lynus(
+        GeminiChatModel(get_gemini(), s.lynus_model, thinking=s.lynus_thinking),
+        session,
+        get_claude_bridge(),
+        LocalDocuments(),
+        s.project_list(),
+        log=get_logger(),
+        clock=get_wall_clock(),
+        limits=LynusLimits(max_turns=s.lynus_max_turns, turn_seconds=s.lynus_turn_minutes * 60),
+        trust_file=str(Path.home() / ".claude.json"),
+    )
 
 
 @lru_cache
@@ -300,6 +343,7 @@ def get_tools() -> Registry[Tool]:
         else None,
         session=get_project_session(),
         weather=(get_weather(), get_weather_display()),
+        lynus=get_lynus(),
     )
 
 

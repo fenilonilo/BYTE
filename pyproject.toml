@@ -1,6 +1,6 @@
 [project]
 name = "byte"
-version = "0.1.0"
+version = "1.0.0"
 description = "Byte — personal assistant backend. Hexagonal architecture, one agent, chat + live voice, tools as adapters, Docker."
 requires-python = ">=3.12"
 authors = [{ name = "Felipe" }]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.application.claude_bridge import ClaudeBridge
 from app.application.project_session import ProjectSession, child_env
 from app.domain.exceptions import ProjectError, UnknownProjectError
 from app.domain.projects import Project
@@ -265,3 +266,68 @@ async def test_failed_stop_still_resets_the_session() -> None:
         await session.close()
     assert session.current is None
     assert listener.states[-1] is None
+
+
+def make_bridged() -> tuple[ProjectSession, FakeTerminal, ClaudeBridge]:
+    terminal = FakeTerminal()
+    log = RecordingLogger()
+    bridge = ClaudeBridge("http://127.0.0.1:8000/api/v1/claude/hooks", log)
+    session = ProjectSession(
+        terminal,
+        [BYTE, FIN],
+        ["C:/bin/claude.exe"],
+        ENV,
+        log,
+        bridge=(bridge, "D:/data/claude-hooks.json"),
+    )
+    return session, terminal, bridge
+
+
+@pytest.mark.unit
+async def test_bridged_open_passes_hooks_extra_args_and_a_session_token() -> None:
+    session, terminal, bridge = make_bridged()
+    await session.open("Byte", ("--permission-mode", "default"))
+    _, argv, env = terminal.started[0]
+    assert argv == (
+        "C:/bin/claude.exe",
+        "--settings",
+        "D:/data/claude-hooks.json",
+        "--permission-mode",
+        "default",
+    )
+    assert bridge.authorized(env["BYTE_BRIDGE_TOKEN"])
+    assert "BYTE_API_TOKEN" not in env
+    await session.aclose()
+    assert not bridge.authorized(env["BYTE_BRIDGE_TOKEN"])
+
+
+@pytest.mark.unit
+async def test_reopening_rotates_the_bridge_token() -> None:
+    session, terminal, bridge = make_bridged()
+    await session.open("Byte")
+    await session.open("FinFlow")
+    old, new = (started[2]["BYTE_BRIDGE_TOKEN"] for started in terminal.started)
+    assert not bridge.authorized(old)
+    assert bridge.authorized(new)
+    await session.aclose()
+
+
+@pytest.mark.unit
+async def test_process_exit_ends_the_bridge_session() -> None:
+    session, terminal, bridge = make_bridged()
+    await session.open("Byte")
+    token = terminal.started[0][2]["BYTE_BRIDGE_TOKEN"]
+    terminal.exit()
+    await settle()
+    assert not bridge.authorized(token)
+    assert await bridge.next_turn(0.01) is None
+
+
+@pytest.mark.unit
+async def test_unbridged_open_ignores_extra_args_only_for_the_hooks() -> None:
+    session, terminal, _ = make()
+    await session.open("Byte", ("--permission-mode", "default"))
+    _, argv, env = terminal.started[0]
+    assert argv == ("C:/bin/claude.exe", "--permission-mode", "default")
+    assert "BYTE_BRIDGE_TOKEN" not in env
+    await session.aclose()

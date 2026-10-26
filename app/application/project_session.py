@@ -5,11 +5,13 @@ import contextlib
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from app.application.claude_bridge import TOKEN_ENV
 from app.domain.exceptions import UnknownProjectError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from app.application.claude_bridge import ClaudeBridge
     from app.domain.projects import Project
     from app.ports.logger import LoggerPort
     from app.ports.terminal import ProjectTerminalPort
@@ -72,7 +74,9 @@ class ProjectSession:
         log: LoggerPort,
         *,
         scrollback: int = 262144,
+        bridge: tuple[ClaudeBridge, str] | None = None,
     ) -> None:
+        """`bridge`: Claude Code's hooks and the `--settings` file that points them here."""
         self._terminal = terminal
         self._projects = {p.name: p for p in projects}
         self._command = tuple(command)
@@ -85,12 +89,13 @@ class ProjectSession:
         self._reader: asyncio.Task[None] | None = None
         self._size = DEFAULT_SIZE
         self._lock = asyncio.Lock()
+        self._bridge = bridge
 
     @property
     def current(self) -> str | None:
         return self._current
 
-    async def open(self, name: str) -> None:
+    async def open(self, name: str, extra_args: Sequence[str] = ()) -> None:
         """Always a fresh `claude`: whatever was open is stopped first."""
         project = self._projects.get(name)
         if project is None:
@@ -98,7 +103,8 @@ class ProjectSession:
         try:
             async with self._lock:
                 await self._stop()
-                await self._terminal.start(project.path, self._command, self._env, *self._size)
+                argv, env = self._launch(extra_args)
+                await self._terminal.start(project.path, argv, env, *self._size)
                 self._current = name
                 self._reader = asyncio.create_task(self._pump(name))
             self._log.info("project.opened", project=name)
@@ -140,6 +146,18 @@ class ProjectSession:
         async with self._lock:
             await self._stop()
 
+    def _launch(self, extra_args: Sequence[str]) -> tuple[tuple[str, ...], dict[str, str]]:
+        if self._bridge is None:
+            return (*self._command, *extra_args), self._env
+        bridge, settings_path = self._bridge
+        # added after the secret filter: this token can only post this session's hook events
+        env = {**self._env, TOKEN_ENV: bridge.begin()}
+        return (*self._command, "--settings", settings_path, *extra_args), env
+
+    def _end_bridge(self) -> None:
+        if self._bridge is not None:
+            self._bridge[0].end()
+
     async def _stop(self) -> None:
         """Stop the process without telling anyone; callers broadcast the new state."""
         reader, self._reader = self._reader, None
@@ -153,6 +171,7 @@ class ProjectSession:
         finally:  # whatever the kill did, this session is over
             self._current = None
             self._buffer.clear()
+            self._end_bridge()
 
     async def _pump(self, name: str) -> None:
         # read even with nobody attached: a full pipe would block the process
@@ -165,6 +184,7 @@ class ProjectSession:
         self._reader = None
         self._current = None
         self._buffer.clear()
+        self._end_bridge()
         self._log.info("project.exited", project=name)
         await self._broadcast_state()
 
