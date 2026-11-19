@@ -1,6 +1,11 @@
 # The panel and the API behind one HTTPS origin. `tls internal` signs with Caddy's own CA:
 # install its root (see README) on each phone once. A real domain in BYTE_SITE without
 # `tls internal` switches to a public certificate.
+{
+	# clients reaching an IP send no SNI; without this the handshake finds no certificate
+	default_sni {$BYTE_SITE:byte.local}
+}
+
 {$BYTE_SITE:byte.local} {
 	tls internal
 	encode gzip
