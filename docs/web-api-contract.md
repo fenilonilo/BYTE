@@ -1,7 +1,7 @@
 # Web control panel API contract
 
 Base: `/api/v1`. JSON in, JSON out. Every route needs `Authorization: Bearer <BYTE_API_TOKEN>`
-(missing/wrong = `401 {"detail": ...}`). The static UI (`web/`, served at `/`) is public and
+(missing/wrong = `401 {"detail": ...}`). The static UI (`frontend/`, served at `/` by Caddy, or by uvicorn with `--web`) is public and
 holds no data. Chat stays `POST /messages` (unchanged).
 
 Names (`lights`, `climate`, music `device`) are the configured device names returned by the GET
@@ -117,10 +117,10 @@ new WebSocket('wss://<host>/api/v1/live', ['bearer', token]);  // Sec-WebSocket-
   `ready`, `transcript {role, text}` (shown in the chat box), `interrupt` (flush playback, reply
   `{"type":"played","audio_end_ms"}`), `turn_done`, `error {code}`, `closed`. Close 4000 means
   another client took over: the panel says so and does not reconnect.
-- Half-duplex by default like `voice/` (mic ignored while Byte talks; `BARGE_IN` in `web/live.js`).
+- Half-duplex by default like `voice/` (mic ignored while Byte talks; `BARGE_IN` in `frontend/live.js`).
   The panel closes the session 12 s (counted after Byte finishes speaking) after `ready` or `turn_done` with no speech; the server's own
   60 s idle and 10 min cap still apply.
-- Wake word "Ei Byte" runs in the browser: `web/models/{melspectrogram,embedding_model}.onnx`
+- Wake word "Ei Byte" runs in the browser: `frontend/models/{melspectrogram,embedding_model}.onnx`
   (from the openwakeword package) + `ei_byte.onnx` (copy of `models/ei_byte.onnx`, retrain means
   re-copy), threshold 0.5, onnxruntime-web loaded from jsDelivr when "escuta ativa" is turned on.
   No audio leaves the browser until the wake word fires.
@@ -200,5 +200,5 @@ event) or `upstream` (anything else, including vendor failures). No content is l
 
 ## Static UI
 
-`web/` is mounted at `/` (public, `index.html` fallback) only when the directory exists.
+On the server Caddy serves `frontend/` at `/` with `Cache-Control: no-cache`. With `python main.py --web`, uvicorn mounts `../frontend` at `/` (public, `index.html` fallback) only when the directory exists.
 Everything the UI shows must come from `/api/v1/*` with the token.

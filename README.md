@@ -11,24 +11,66 @@ One agent holds every tool. Every outside resource (the model provider, the smar
 home, the calendar, the expense sheet, storage) is an adapter behind a port. The
 live client is a custom ESP32-S3, but the protocol is plain WebSocket: any client works.
 
-No GUI beyond the optional `web/` control panel, no computer vision, no chat-channel adapters, no multi-user support.
+No GUI beyond the `frontend/` control panel, no computer vision, no chat-channel adapters, no multi-user support.
 
-## Run
+## Layout
+
+```
+frontend/   the web panel: static HTML/CSS/JS, no build step (tests: node --test frontend/tests/*.test.mjs)
+backend/    the API (FastAPI), voice/ client, tests, migrations, scripts, Dockerfile
+deploy/     Caddyfile, systemd unit for the voice client
+docker-compose.yml, .env   at the root
+```
+
+Python commands below (`python scripts/...`, `pytest`) run from `backend/`.
+
+## Run (home server)
 
 ```bash
-cp .env.example .env        # fill BYTE_API_TOKEN (32+ chars) and BYTE_OPENAI_API_KEY
+cp .env.example .env        # fill BYTE_API_TOKEN (32+ chars), BYTE_OPENAI_API_KEY, BYTE_DB_PASSWORD
 docker compose up --build
 ```
 
-API on `http://127.0.0.1:8000/api/v1`, interactive docs at `/docs`. Compose binds to
-loopback only.
+Three services: `caddy` (HTTPS, serves the panel, proxies `/api/*` with WebSockets), `api`
+(plain HTTP, host loopback `127.0.0.1:8000` for the voice client on the same machine) and `db`.
+Open `https://byte.local/` (or `https://localhost/` with `BYTE_SITE=localhost`) and enter
+`BYTE_API_TOKEN`. Caddy proxies only `/api/*`; FastAPI's interactive docs stay at
+`http://127.0.0.1:8000/docs` on the server.
 
-### Web panel (optional, off by default)
+### Open it to the house (phones, ESP32)
 
-Set `BYTE_WEB=true` in `.env` (works with docker compose), or run locally with
-`python main.py --web [--host H --port P]`. Open `http://127.0.0.1:8000/` and enter
-`BYTE_API_TOKEN`. It drives the same adapters as chat: real devices when configured, in-memory
-fakes otherwise (the boot log says which).
+Give the server a fixed DHCP reservation, then in `.env`:
+
+```
+BYTE_PUBLISH_HOST=192.168.0.10   # the server's LAN IP; Caddy listens there on 443 and 80
+BYTE_SITE=byte.local             # the name devices use (mDNS via Avahi, or a router DNS entry)
+```
+
+Caddy signs `BYTE_SITE` with its own CA (`tls internal`). Export the root once and install
+it on each phone (Android: Settings → Security → Install certificate → CA; a native app must
+bundle or pin it), and pin it in the ESP32 firmware:
+
+```bash
+docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./byte-root.crt
+```
+
+The `caddy-data` volume holds that CA: deleting it means every device trusts a new root.
+Wider exposure later is a `BYTE_SITE` with a real domain and `tls internal` removed from
+`deploy/Caddyfile` (public certificate). The API port itself stays on loopback.
+
+### Web panel on the Windows PC (dev, Lynus)
+
+```bash
+cd backend
+python main.py --web [--host H --port P]   # serves ../frontend at /
+```
+
+Open `http://127.0.0.1:8000/`. Lynus and the project terminal live only here: they need
+`claude` and the `pty` extra, which the Linux image does not have. `BYTE_TLS_CERT` /
+`BYTE_TLS_KEY` give this uvicorn its own TLS if you need it.
+
+Moving from the old layout: `.env` stays at the root; move local `data/` and
+`models/pt_BR-*` into `backend/`.
 
 ### Real devices
 
@@ -40,26 +82,6 @@ boot log says which adapter is active (`adapters.selected`).
 | Lights | Tuya, over the LAN (`tinytuya`) | `BYTE_TUYA_LIGHTS`: JSON of name → `device_id`, `address`, `local_key`, `version` |
 | Air conditioner | LG ThinQ | `BYTE_THINQ_ACCESS_SECRET` (personal access token), `BYTE_THINQ_COUNTRY` |
 | Music | Spotify (Premium) | `BYTE_SPOTIFY_CLIENT_ID`, `BYTE_SPOTIFY_REFRESH_TOKEN` (get it with `python scripts/spotify_login.py`), `BYTE_SPOTIFY_DEVICE` |
-
-### Expose it on the LAN (for the ESP32)
-
-Only together with TLS, because the bearer token would otherwise travel in cleartext.
-
-```bash
-mkdir -p certs
-openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=byte" \
-  -keyout certs/byte.key -out certs/byte.crt \
-  -addext "subjectAltName=IP:192.168.0.10"          # the server's LAN IP
-```
-
-Give the server a fixed DHCP reservation for that IP, pin `certs/byte.crt` in the
-firmware, then set in `.env`:
-
-```
-BYTE_PUBLISH_HOST=192.168.0.10
-BYTE_TLS_CERT=/certs/byte.crt
-BYTE_TLS_KEY=/certs/byte.key
-```
 
 ## Chat
 
@@ -114,6 +136,7 @@ python scripts/live_probe.py question.wav reply.wav --token "$BYTE_API_TOKEN"
 ## Develop
 
 ```bash
+cd backend
 pip install -e ".[api,openai,thinq,tuya,spotify,voice,dev]"
 # openWakeWord: --no-deps because its tflite-runtime dependency has no Python 3.12+ wheel
 # and is not needed with onnx
@@ -121,6 +144,7 @@ pip install --no-deps openwakeword
 pip install onnxruntime tqdm scikit-learn requests
 python -c "import openwakeword; openwakeword.utils.download_models()"
 ruff check . && pyright && pytest
+node --test ../frontend/tests/*.test.mjs
 pytest -m integration        # hits the real OpenAI API (needs BYTE_OPENAI_API_KEY)
 ```
 
@@ -152,7 +176,7 @@ BYTE_PROJECTS={"Byte":{"path":"D:/Projetos/Byte/BYTE"},"FinFlow":{"path":"D:/Pro
 BYTE_DB_PASSWORD=<long random>
 BYTE_DATABASE_URL=postgresql+asyncpg://byte:<same password>@127.0.0.1:5432/byte
 docker compose up -d db      # pgvector, loopback only; Byte runs the migrations at boot
-python main.py --web
+cd backend && python main.py --web
 ```
 
 - Each project's `docs` defaults to `["CLAUDE.md"]`; add more relative `.md` paths to index
@@ -173,7 +197,7 @@ repeats until you say the wake word. Google Calendar events are announced 10 min
 
 ```bash
 # voice (~60 MB), read by the server through BYTE_PIPER_MODEL
-python -m piper.download_voices pt_BR-faber-medium --download-dir models
+python -m piper.download_voices pt_BR-faber-medium --download-dir backend/models
 # Google Calendar: create a "Desktop app" OAuth client, enable the Calendar API, set the
 # consent screen to "In production" (in "Testing" the token dies after 7 days), then:
 python scripts/google_login.py   # prints BYTE_GOOGLE_REFRESH_TOKEN

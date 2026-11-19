@@ -13,7 +13,8 @@ limit applies). A new wake word opens a new session. Design:
 
 Settings (env, `BYTE_` prefix): `BYTE_API_TOKEN` (same token as the server, at least 32 chars),
 `BYTE_VOICE_WAKE_MODEL` (openWakeWord model name such as `hey_jarvis`, or a path to an `.onnx`),
-`BYTE_VOICE_URL` (default `ws://127.0.0.1:8000/api/v1/live`), `BYTE_VOICE_THRESHOLD` (0.5),
+`BYTE_VOICE_URL` (default `ws://127.0.0.1:8000/api/v1/live`: the compose API on host loopback, plain
+ws:// because the audio never leaves the machine), `BYTE_VOICE_THRESHOLD` (0.5),
 `BYTE_VOICE_IDLE_SECONDS` (8), `BYTE_VOICE_SEGMENT` (`auto`), `BYTE_VOICE_INPUT_DEVICE`,
 `BYTE_VOICE_OUTPUT_DEVICE`, `BYTE_VOICE_LOG_LEVEL`.
 
@@ -32,7 +33,7 @@ sudo useradd --system --create-home --shell /usr/sbin/nologin byte
 sudo usermod -aG audio byte
 sudo git clone <your repository URL> /opt/byte
 sudo chown -R byte:byte /opt/byte
-cd /opt/byte
+cd /opt/byte/backend
 sudo -u byte python3.12 -m venv .venv
 sudo -u byte .venv/bin/pip install -e ".[voice]"
 sudo -u byte .venv/bin/pip install --no-deps openwakeword
@@ -45,13 +46,14 @@ for Python 3.12/3.13 and is not needed with the onnx framework.
 
 Put the settings in `/opt/byte/.env` (copy `.env.example`; at minimum `BYTE_API_TOKEN` and
 `BYTE_VOICE_WAKE_MODEL`). The daemon reads this file itself from its working directory; the unit
-does not inject it into the environment. Lock it down (it holds the API token; only its owner
+does not inject it into the environment. It runs from `/opt/byte/backend` and reads the
+root `.env` (`../.env`), the same file docker compose uses. Lock it down (it holds the API token; only its owner
 should read it, and the `byte` user must own it), then install the service:
 
 ```bash
 sudo chown byte:byte /opt/byte/.env
 sudo chmod 600 /opt/byte/.env   # holds the API token: readable only by its owner
-sudo cp deploy/byte-voice.service /etc/systemd/system/
+sudo cp ../deploy/byte-voice.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now byte-voice
 journalctl -u byte-voice -f
@@ -136,7 +138,7 @@ Python 3.12 and torch 2.5 are what openWakeWord's training code was written agai
 ### 3. Prepare and train
 
 ```bash
-cd <repo>
+cd <repo>/backend
 $T/venv/Scripts/python.exe scripts/wakeword_train.py prepare $T
 $T/venv/Scripts/python.exe scripts/wakeword_train.py train $T      # about 25 minutes
 cp $T/ei_byte.onnx models/ei_byte.onnx
@@ -150,7 +152,7 @@ alone does nothing. `train` runs a patched copy of openWakeWord's `train.py` (wr
 lambdas under `spawn`), a `trim_mmap` that does not rewrite a file still memory-mapped, and no
 tflite export (it needs tensorflow). The script stops if upstream `train.py` changed.
 
-Set `BYTE_VOICE_WAKE_MODEL=models/ei_byte.onnx` (on the laptop: `/opt/byte/models/ei_byte.onnx`).
+Set `BYTE_VOICE_WAKE_MODEL=models/ei_byte.onnx` (relative to `backend/`; on the laptop: `/opt/byte/backend/models/ei_byte.onnx`).
 
 ### 4. Check the model
 

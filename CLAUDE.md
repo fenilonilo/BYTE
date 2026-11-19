@@ -28,14 +28,14 @@ expenses, proactive reminders and alarms.
 
 **Explicitly out of scope — reject on sight:**
 
-- Any TUI or desktop client. The only GUI in scope is the single static control panel in `web/` (below).
+- Any TUI or desktop client. The only GUI in scope is the single static control panel in `frontend/` (below).
 - Computer vision, cameras, screen capture, OCR, image pipelines.
 - Chat-channel adapters (WhatsApp, Telegram, Email).
 - Multi-tenancy, user accounts, roles. One owner.
 
 Voice is not a GUI. Audio endpoints belong here.
 
-**Web control panel (`web/`)** — one static page (HTML/CSS/vanilla JS, no build step,
+**Web control panel (`frontend/`)** — one static page (HTML/CSS/vanilla JS, no build step,
 no framework) served by FastAPI. It is a *client* of `/api/v1`: bearer token typed by the
 owner, kept in `sessionStorage`, never in a URL. It shows the 0/1 sphere agent and gives direct
 control of lights, climate, music, agenda and expenses through the same `ToolRunner` +
@@ -152,10 +152,11 @@ data. Hard requirements, not polish:
   `Authorization: Bearer <token>`. `BYTE_API_TOKEN` is at least 32 characters;
   the app refuses to boot otherwise. Compare with `hmac.compare_digest`. Never
   put the token in a query string.
-- **Network**: `docker-compose.yml` binds to `127.0.0.1` by default. LAN
-  exposure for the ESP32 is opt-in through `BYTE_PUBLISH_HOST=<LAN IP>` and
-  **requires TLS (`wss://`)** with a pinned certificate. Never `0.0.0.0` on a
-  host with a public interface, never a tunnel or public port.
+- **Network**: `docker-compose.yml` binds to `127.0.0.1` by default. Only Caddy is ever
+  published: LAN exposure is opt-in through `BYTE_PUBLISH_HOST=<LAN IP>`, over HTTPS
+  (`tls internal`, devices trust or pin Caddy's root). The API port stays on host loopback
+  for the voice client on the same machine. Exposure beyond the LAN (a real domain in
+  `BYTE_SITE`) is the owner's call, never a code default.
 - **Never commit credentials.** Keys and OAuth tokens come from the environment
   or encrypted storage. `.env` is gitignored; `.env.example` holds names with
   empty values only.
@@ -184,7 +185,7 @@ data. Hard requirements, not polish:
 Google, and the datastore are all swappable behind ports.
 
 ```
-app/
+backend/app/          # frontend/ = the panel, deploy/ = Caddyfile + systemd unit
 ├── domain/          # Pure Python. Zero external deps. dataclasses + pure functions.
 ├── ports/           # ABCs. Contracts to the outside world.
 ├── application/     # Use cases, ToolRunner, PendingActionStore, Registry, tools/.
@@ -258,6 +259,9 @@ Rules:
 docker compose up --build
 ```
 
+- Spec 7 (`docs/superpowers/specs/2026-11-18-self-hosted-split-design.md`): `caddy` serves
+  `frontend/` and proxies `/api/*` (WebSockets too) to `api`, owns TLS; `api` is plain HTTP on
+  host loopback; `db` loopback. Compose and `.env` live at the repo root.
 - Loopback by default; LAN exposure only as described in **Safety and security**.
 - Config from env (`BYTE_` prefix, **including provider keys**). Settings are
   validated at boot in the FastAPI lifespan; a bad config fails fast.
@@ -309,6 +313,9 @@ docker compose up --build
   reach OpenAI, Tuya or Google.
 
 ## Tooling
+
+Python tools run from `backend/` (it holds `pyproject.toml`); the panel's tests run with
+`node --test frontend/tests/*.test.mjs` from the root.
 
 | Tool | Role | Command |
 |---|---|---|
@@ -362,6 +369,7 @@ expense adapters. What is left is replacing those adapters with real ones.
 | Gemini Live adapter, A/B against OpenAI | not started (later spec) |
 | Project knowledge (pgvector + local embeddings) and panel project terminal (Spec 4) | done (opening by voice in the panel not checked by hand) |
 | Weather: tools, panel section, `/ws/panel` push (Spec 6) | done |
+| `frontend/` + `backend/` split, Caddy in front, LAN self-hosting (Spec 7) | done (on the server laptop not yet checked by hand) |
 | Postgres for conversations, OAuth tokens, reminders | not started (later spec) |
 | Lynus driving Claude Code on its own (Spec 5) | done (hooks spiked on `claude` 2.1.310) |
 
