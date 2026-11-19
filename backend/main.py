@@ -114,7 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await close()
 
 
-WEB_DIR = Path(__file__).parent / "web"
+WEB_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(title="byte", lifespan=lifespan)
 app.include_router(router, prefix="/api/v1")

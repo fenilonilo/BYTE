@@ -1,4 +1,4 @@
-// Pure helpers for the weather section. Run: node --test tests/web/weather.test.mjs
+// Pure helpers for the weather section. Run: node --test frontend/tests/weather.test.mjs
 
 export const CONDITION_WORD = {
   clear: 'céu limpo', partly_cloudy: 'parcialmente nublado', cloudy: 'nublado', fog: 'neblina',

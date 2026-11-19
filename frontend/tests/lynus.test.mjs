@@ -1,8 +1,8 @@
-// Run: node --test tests/web/lynus.test.mjs
+// Run: node --test frontend/tests/lynus.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { coreState, isActive, noteLook, phaseText, placeholder, route } from '../../web/lynus.js';
+import { coreState, isActive, noteLook, phaseText, placeholder, route } from '../lynus.js';
 
 test('only briefing and working are active', () => {
   assert.equal(isActive('briefing'), true);

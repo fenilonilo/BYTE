@@ -96,7 +96,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="BYTE_",
-        env_file=".env",
+        env_file=("../.env", ".env"),  # compose keeps .env at the repo root; later wins
         env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",

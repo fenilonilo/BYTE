@@ -1,8 +1,8 @@
-// Run: node --test tests/web/panel-socket.test.mjs
+// Run: node --test frontend/tests/panel-socket.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { panelSocket } from '../../web/panel-socket.js';
+import { panelSocket } from '../panel-socket.js';
 
 class FakeSocket {
   constructor() { this.closed = false; }

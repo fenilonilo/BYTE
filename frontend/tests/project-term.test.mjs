@@ -1,8 +1,8 @@
-// Run: node --test tests/web/project-term.test.mjs
+// Run: node --test frontend/tests/project-term.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { clampBackoff, paneView } from '../../web/project-term.js';
+import { clampBackoff, paneView } from '../project-term.js';
 
 test('no open project shows the activity log', () => {
   assert.deepEqual(paneView(null), { mode: 'log', title: 'byte@casa: ~' });

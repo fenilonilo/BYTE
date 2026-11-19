@@ -1,11 +1,11 @@
-// Pure pieces of the browser voice client. Run: node --test tests/web/live.test.mjs
+// Pure pieces of the browser voice client. Run: node --test frontend/tests/live.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Resampler, floatToPcm16 } from '../../web/mic-worklet.js';
+import { Resampler, floatToPcm16 } from '../mic-worklet.js';
 import {
   IDLE_SECONDS, IDLE_WARN_SECONDS, closeText, createDwell, createSpeechGate, idlePhase, pcm16ToFloat, rms,
-} from '../../web/live.js';
+} from '../live.js';
 
 const sine = (rate, hz, seconds) => Float32Array.from({ length: rate * seconds }, (_, i) => 0.5 * Math.sin((2 * Math.PI * hz * i) / rate));
 

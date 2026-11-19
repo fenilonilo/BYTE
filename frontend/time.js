@@ -1,4 +1,4 @@
-// Pure time helpers for the panel. Run: node --test tests/web/time.test.mjs
+// Pure time helpers for the panel. Run: node --test frontend/tests/time.test.mjs
 
 const pad = (n) => String(n).padStart(2, '0');
 

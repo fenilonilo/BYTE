@@ -117,3 +117,12 @@ def test_weather_home_defaults_to_goiania_and_reads_env(monkeypatch: pytest.Monk
     assert load_settings().weather_home == "Goiânia, GO"
     monkeypatch.setenv("BYTE_WEATHER_HOME", "Florianópolis, SC")
     assert load_settings().weather_home == "Florianópolis, SC"
+
+
+@pytest.mark.unit
+def test_settings_read_root_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # compose keeps .env at the repo root; the backend runs from backend/
+    (tmp_path / ".env").write_text(f"BYTE_API_TOKEN={GOOD_TOKEN}\nBYTE_OPENAI_API_KEY=sk-test\n")
+    (tmp_path / "backend").mkdir()
+    monkeypatch.chdir(tmp_path / "backend")
+    assert load_settings().api_token.get_secret_value() == GOOD_TOKEN

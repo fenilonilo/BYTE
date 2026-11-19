@@ -1,4 +1,4 @@
-// Pure helpers for the Lynus chat. Run: node --test tests/web/lynus.test.mjs
+// Pure helpers for the Lynus chat. Run: node --test frontend/tests/lynus.test.mjs
 // Lynus drives Claude Code on its own; the panel only shows it and talks to it.
 
 /** What the panel sends Byte so Byte asks for the project and the task (Spec 5). */

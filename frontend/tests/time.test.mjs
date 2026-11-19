@@ -1,8 +1,8 @@
-// Run: node --test tests/web/time.test.mjs
+// Run: node --test frontend/tests/time.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { countdown, elapsed, urgency } from '../../web/time.js';
+import { countdown, elapsed, urgency } from '../time.js';
 
 test('countdown picks the coarsest useful unit', () => {
   assert.equal(countdown(0), 'agora');

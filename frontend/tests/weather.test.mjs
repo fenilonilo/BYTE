@@ -1,8 +1,8 @@
-// Run: node --test tests/web/weather.test.mjs
+// Run: node --test frontend/tests/weather.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { CONDITION_WORD, chart, dayLabel, hourLabel, rangeBar } from '../../web/weather.js';
+import { CONDITION_WORD, chart, dayLabel, hourLabel, rangeBar } from '../weather.js';
 
 test('hourLabel reads the hour from the string, never the browser zone', () => {
   assert.equal(hourLabel('2026-10-23T23:00:00-03:00'), '23h');

@@ -1,4 +1,4 @@
-// The panel's push link (WS /api/v1/ws/panel). Run: node --test tests/web/panel-socket.test.mjs
+// The panel's push link (WS /api/v1/ws/panel). Run: node --test frontend/tests/panel-socket.test.mjs
 // The server only says "something changed"; the panel reads the truth over HTTP.
 
 const FIRST_DELAY = 1000;

@@ -83,3 +83,12 @@ def test_cleartext_remote_or_non_ws_urls_are_rejected(
     monkeypatch.setenv("BYTE_VOICE_URL", url)
     with pytest.raises(ConfigError, match="url"):
         load_voice_settings()
+
+
+@pytest.mark.unit
+def test_voice_settings_read_root_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("BYTE_VOICE_WAKE_MODEL")
+    (tmp_path / ".env").write_text("BYTE_VOICE_WAKE_MODEL=alexa\n")
+    (tmp_path / "backend").mkdir()
+    monkeypatch.chdir(tmp_path / "backend")
+    assert load_voice_settings().wake_model == "alexa"

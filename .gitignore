@@ -81,7 +81,7 @@ wakeword_data/
 .playwright-mcp/
 
 # Piper voices (download: python -m piper.download_voices pt_BR-faber-medium --download-dir models)
-models/pt_BR-*
+backend/models/pt_BR-*
 # Runtime data (reminders)
 data/
 
