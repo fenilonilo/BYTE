@@ -1,7 +1,11 @@
 # Web control panel API contract
 
-Base: `/api/v1`. JSON in, JSON out. Every route needs `Authorization: Bearer <BYTE_API_TOKEN>`
-(missing/wrong = `401 {"detail": ...}`). The static UI (`web/`, served at `/`) is public and
+Base: `/api/v1`. JSON in, JSON out. Every route needs `Authorization: Bearer <token>`, where the
+token is `BYTE_API_TOKEN` (devices, scripts) or a live access token from a device session
+(missing/wrong = `401 {"detail": ...}`). Device sessions (Spec 8,
+`docs/superpowers/specs/2026-11-19-device-sessions-design.md`): `POST /auth/login` with the master
+token → `{access_token, refresh_token, expires_in}`; `POST /auth/refresh {refresh_token}` → a new
+access token, same refresh (401 = sign in again); `POST /auth/logout {refresh_token}` → 204. The static UI (`frontend/`, served at `/` by Caddy, or by uvicorn with `--web`) is public and
 holds no data. Chat stays `POST /messages` (unchanged).
 
 Names (`lights`, `climate`, music `device`) are the configured device names returned by the GET
@@ -11,7 +15,7 @@ routes. Never send raw device or spreadsheet ids; an unknown name is `422`.
 
 | Route | Response |
 |---|---|
-| `GET /state` | `{lights: Light[]\|null, climates: Climate[]\|null, music: Music\|null, pending_confirmation: {summary}\|null, errors: string[]}`. A section whose adapter failed is `null` and its name is listed in `errors`. |
+| `GET /state` | `{lights: Light[]\|null, climates: Climate[]\|null, music: Music\|null, pending_confirmation: {summary}\|null, errors: string[]}`. A section whose adapter failed is `null` and its name is listed in `errors`. A single device that does not answer (unplugged, owner away) is still listed, with `available: false` and placeholder fields; that is not an error. |
 | `GET /lights` | `{lights: Light[]}` |
 | `GET /climate` | `{climates: Climate[]}` |
 | `GET /music/state` | `Music` |
@@ -24,10 +28,10 @@ routes. Never send raw device or spreadsheet ids; an unknown name is `422`.
 | `GET /reminders` | `{reminders: Reminder[]}`, soonest first. Calendar warnings are left out (the agenda shows the events). A reminder stays listed after its time until the device has played it and acked. |
 
 ```
-Light    {name, power, mode: "white"|"colour"|"scene"|"music", brightness 1-100,
+Light    {name, available, power, mode: "white"|"colour"|"scene"|"music", brightness 1-100,
           color_temperature 0-100, color: {hue 0-360, saturation, brightness},
           timer_seconds, do_not_disturb}
-Climate  {name, power, mode: "cool"|"dry"|"fan"|"auto", target_temperature, current_temperature,
+Climate  {name, available, power, mode: "cool"|"dry"|"fan"|"auto", target_temperature, current_temperature,
           fan_speed: "auto"|"low"|"mid"|"high"|"nature", swing, power_save, display_light,
           has_error}
 Music    {playing, item: MusicItem|null, progress_ms, duration_ms, volume 0-100, shuffle,
@@ -117,10 +121,10 @@ new WebSocket('wss://<host>/api/v1/live', ['bearer', token]);  // Sec-WebSocket-
   `ready`, `transcript {role, text}` (shown in the chat box), `interrupt` (flush playback, reply
   `{"type":"played","audio_end_ms"}`), `turn_done`, `error {code}`, `closed`. Close 4000 means
   another client took over: the panel says so and does not reconnect.
-- Half-duplex by default like `voice/` (mic ignored while Byte talks; `BARGE_IN` in `web/live.js`).
+- Half-duplex by default like `voice/` (mic ignored while Byte talks; `BARGE_IN` in `frontend/live.js`).
   The panel closes the session 12 s (counted after Byte finishes speaking) after `ready` or `turn_done` with no speech; the server's own
   60 s idle and 10 min cap still apply.
-- Wake word "Ei Byte" runs in the browser: `web/models/{melspectrogram,embedding_model}.onnx`
+- Wake word "Ei Byte" runs in the browser: `frontend/models/{melspectrogram,embedding_model}.onnx`
   (from the openwakeword package) + `ei_byte.onnx` (copy of `models/ei_byte.onnx`, retrain means
   re-copy), threshold 0.5, onnxruntime-web loaded from jsDelivr when "escuta ativa" is turned on.
   No audio leaves the browser until the wake word fires.
@@ -200,5 +204,7 @@ event) or `upstream` (anything else, including vendor failures). No content is l
 
 ## Static UI
 
-`web/` is mounted at `/` (public, `index.html` fallback) only when the directory exists.
+The panel is not served by the home server: it runs on the owner's devices and calls the
+server address typed at sign-in (`frontend/server.js`); the API allows any CORS origin (bearer
+token, no cookies). With `python main.py --web`, uvicorn mounts `../frontend` at `/` (public, `index.html` fallback) only when the directory exists.
 Everything the UI shows must come from `/api/v1/*` with the token.

@@ -1,0 +1,469 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import time
+from datetime import UTC, datetime
+from functools import lru_cache
+from pathlib import Path
+from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
+
+from fastapi import Depends
+from openai import AsyncOpenAI
+
+from app.adapters.files.json_device_grants import JsonDeviceGrantStore
+from app.adapters.files.json_reminder_store import JsonReminderStore
+from app.adapters.files.local_documents import LocalDocuments
+from app.adapters.logging.structlog_logger import StructlogLogger
+from app.adapters.memory.in_memory_calendar import InMemoryCalendar
+from app.adapters.memory.in_memory_climate import InMemoryClimate
+from app.adapters.memory.in_memory_conversation_store import InMemoryConversationStore
+from app.adapters.memory.in_memory_expenses import InMemoryExpenses
+from app.adapters.memory.in_memory_knowledge import InMemoryKnowledge
+from app.adapters.memory.in_memory_light import InMemoryLight
+from app.adapters.memory.in_memory_music import InMemoryMusic
+from app.adapters.memory.silent_speech import SilentSpeech
+from app.adapters.openai.chat_model import OpenAIChatModel
+from app.adapters.openai.live_session import OpenAILiveSessionAdapter
+from app.api.live_slot import LiveSlot
+from app.application.claude_bridge import ClaudeBridge
+from app.application.device_auth import DeviceAuth
+from app.application.knowledge_indexer import KnowledgeIndexer
+from app.application.lynus import Lynus, LynusLimits
+from app.application.music_ducker import MusicDucker
+from app.application.pending_actions import PendingActionStore
+from app.application.project_session import ProjectSession
+from app.application.reminder_hub import ReminderHub
+from app.application.tool_runner import ToolRunner
+from app.application.tools.catalog import build_tool_registry
+from app.application.tools.music import KnownUris
+from app.application.use_cases.process_chat_message import ProcessChatMessage
+from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
+from app.application.weather_display import WeatherDisplay
+from app.config import Settings, load_settings
+from app.domain.exceptions import ConfigError, SpeechError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from google import genai
+
+    from app.application.registry import Registry
+    from app.application.tool import Tool
+    from app.ports.calendar import CalendarPort
+    from app.ports.chat_model import ChatModelPort
+    from app.ports.climate import ClimatePort
+    from app.ports.conversation_store import ConversationStorePort
+    from app.ports.embedder import EmbedderPort
+    from app.ports.expenses import ExpensesPort
+    from app.ports.knowledge import KnowledgeStorePort
+    from app.ports.light import LightPort
+    from app.ports.live_session import LiveSessionPort
+    from app.ports.logger import LoggerPort
+    from app.ports.music import MusicPort
+    from app.ports.reminders import ReminderStorePort
+    from app.ports.speech import SpeechPort
+    from app.ports.weather import WeatherPort
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return load_settings()
+
+
+@lru_cache
+def get_wall_clock() -> Callable[[], datetime]:
+    tz = ZoneInfo(get_settings().timezone)
+    return lambda: datetime.now(tz)
+
+
+@lru_cache
+def get_logger() -> LoggerPort:
+    return StructlogLogger()
+
+
+@lru_cache
+def get_store() -> ConversationStorePort:
+    return InMemoryConversationStore(get_settings().max_conversations)
+
+
+@lru_cache
+def get_pending() -> PendingActionStore:
+    return PendingActionStore(time.monotonic)
+
+
+# The three device groups pick the real adapter when it is configured and the in-memory one
+# otherwise, so the whole service runs without hardware. The lifespan logs which one is active.
+# Real adapters are imported lazily: their packages live in optional extras (tuya, thinq, spotify).
+
+
+@lru_cache
+def get_light() -> LightPort:
+    lights = get_settings().tuya_lights
+    if not lights:
+        return InMemoryLight()
+    from app.adapters.tuya.tuya_light import (  # noqa: PLC0415 - optional extra
+        TuyaLight,
+        TuyaLightDevice,
+    )
+
+    return TuyaLight(
+        {
+            name: TuyaLightDevice(s.device_id, s.address, s.local_key.get_secret_value(), s.version)
+            for name, s in lights.items()
+        }
+    )
+
+
+@lru_cache
+def get_climate() -> ClimatePort:
+    settings = get_settings()
+    if settings.thinq_access_secret is None:
+        return InMemoryClimate()
+    from app.adapters.thinq.thinq_climate import ThinQClimate  # noqa: PLC0415 - optional extra
+
+    return ThinQClimate(
+        settings.thinq_access_secret.get_secret_value(),
+        settings.thinq_country,
+        settings.thinq_client_id,
+    )
+
+
+@lru_cache
+def get_music() -> MusicPort:
+    settings = get_settings()
+    if settings.spotify_client_id is None or settings.spotify_refresh_token is None:
+        return InMemoryMusic()
+    from app.adapters.spotify.spotify_music import SpotifyMusic  # noqa: PLC0415 - optional extra
+
+    return SpotifyMusic(
+        settings.spotify_client_id,
+        settings.spotify_refresh_token.get_secret_value(),
+        settings.spotify_device,
+    )
+
+
+@lru_cache
+def get_calendar() -> CalendarPort:
+    s = get_settings()
+    if (
+        s.google_client_id is None
+        or s.google_client_secret is None
+        or s.google_refresh_token is None
+    ):
+        return InMemoryCalendar()
+    from app.adapters.google.google_calendar import GoogleCalendar  # noqa: PLC0415 - optional extra
+
+    return GoogleCalendar(
+        s.google_client_id,
+        s.google_client_secret.get_secret_value(),
+        s.google_refresh_token.get_secret_value(),
+        s.google_calendar_id,
+        ZoneInfo(s.timezone),
+    )
+
+
+@lru_cache
+def get_expenses() -> ExpensesPort:
+    # ponytail: in memory until the Google Sheets adapter exists
+    return InMemoryExpenses()
+
+
+@lru_cache
+def get_reminder_store() -> ReminderStorePort:
+    return JsonReminderStore(Path(get_settings().reminders_path))
+
+
+@lru_cache
+def get_device_auth() -> DeviceAuth:
+    # no settings on purpose: a bad token must get a 401 even before the config is readable
+    return DeviceAuth(JsonDeviceGrantStore(Path("data/devices.json")), lambda: datetime.now(UTC))
+
+
+@lru_cache
+def get_speech() -> SpeechPort:
+    model = get_settings().piper_model
+    if model is None:
+        return SilentSpeech()
+    from app.adapters.piper.piper_speech import PiperSpeech  # noqa: PLC0415 - optional extra
+
+    try:
+        return PiperSpeech(model)
+    except SpeechError:
+        # a voice file left behind must not stop the boot: reminders still arrive as a beep
+        get_logger().warning("speech.unavailable", reason="piper_load_failed")
+        return SilentSpeech()
+
+
+@lru_cache
+def get_reminder_hub() -> ReminderHub:
+    return ReminderHub(get_reminder_store(), get_speech(), get_calendar(), get_logger())
+
+
+@lru_cache
+def get_notify_slot() -> LiveSlot:
+    return LiveSlot()
+
+
+@lru_cache
+def get_known_uris() -> KnownUris:
+    return KnownUris()
+
+
+@lru_cache
+def get_ducker() -> MusicDucker:
+    return MusicDucker(get_music(), get_logger(), get_settings().live_duck_percent)
+
+
+def get_project_names() -> tuple[str, ...]:
+    return tuple(p.name for p in get_settings().project_list())
+
+
+@lru_cache
+def get_embedder() -> EmbedderPort:
+    s = get_settings()
+    try:
+        from app.adapters.fastembed.embedder import FastEmbedder  # noqa: PLC0415 - optional extra
+    except ImportError as exc:
+        raise ConfigError("BYTE_PROJECTS needs the 'embed' extra (fastembed)") from exc
+    return FastEmbedder(s.embedding_model, s.embedding_cache)
+
+
+@lru_cache
+def get_knowledge() -> KnowledgeStorePort:
+    url = get_settings().database_url
+    if url is None:
+        return InMemoryKnowledge()
+    from app.adapters.postgres.knowledge_store import (  # noqa: PLC0415 - optional extra
+        PostgresKnowledge,
+    )
+
+    return PostgresKnowledge(url.get_secret_value())
+
+
+@lru_cache
+def get_indexer() -> KnowledgeIndexer | None:
+    projects = get_settings().project_list()
+    if not projects:
+        return None
+    return KnowledgeIndexer(
+        projects, LocalDocuments(), get_embedder(), get_knowledge(), get_logger()
+    )
+
+
+@lru_cache
+def get_project_session() -> ProjectSession | None:
+    """The terminal exists only where `claude` and a pty do: today, Windows under uvicorn."""
+    s = get_settings()
+    projects = s.project_list()
+    if not projects:
+        return None
+    command = shutil.which(s.claude_command)
+    if command is None:
+        get_logger().warning("projects.terminal_unavailable", reason="claude_not_found")
+        return None
+    try:
+        from app.adapters.pty.winpty_terminal import (  # noqa: PLC0415 - optional extra
+            WinPtyTerminal,
+        )
+    except ImportError:
+        get_logger().warning("projects.terminal_unavailable", reason="no_pty")
+        return None
+    hooks = Path(s.claude_hooks_path).resolve()
+    hooks.parent.mkdir(parents=True, exist_ok=True)
+    hooks.write_text(json.dumps(get_claude_bridge().settings()), encoding="utf-8")
+    return ProjectSession(
+        WinPtyTerminal(),
+        projects,
+        [command],
+        dict(os.environ),
+        get_logger(),
+        bridge=(get_claude_bridge(), str(hooks)),
+    )
+
+
+@lru_cache
+def get_claude_bridge() -> ClaudeBridge:
+    return ClaudeBridge(get_settings().claude_hook_url, get_logger())
+
+
+@lru_cache
+def get_lynus() -> Lynus | None:
+    """Lynus needs the project terminal and Google's coding model, whatever Byte's provider is."""
+    s = get_settings()
+    session = get_project_session()
+    if session is None:
+        return None
+    if s.gemini_api_key is None:
+        get_logger().warning("lynus.unavailable", reason="no_gemini_key")
+        return None
+    from app.adapters.gemini.chat_model import GeminiChatModel  # noqa: PLC0415 - optional extra
+
+    return Lynus(
+        GeminiChatModel(get_gemini(), s.lynus_model, thinking=s.lynus_thinking),
+        session,
+        get_claude_bridge(),
+        LocalDocuments(),
+        s.project_list(),
+        log=get_logger(),
+        clock=get_wall_clock(),
+        limits=LynusLimits(max_turns=s.lynus_max_turns, turn_seconds=s.lynus_turn_minutes * 60),
+        trust_file=str(Path.home() / ".claude.json"),
+    )
+
+
+@lru_cache
+def get_terminal_slot() -> LiveSlot:
+    return LiveSlot()
+
+
+@lru_cache
+def get_panel_slot() -> LiveSlot:
+    return LiveSlot()
+
+
+@lru_cache
+def get_weather() -> WeatherPort:
+    try:
+        from app.adapters.openmeteo.open_meteo_weather import (  # noqa: PLC0415 - optional extra
+            OpenMeteoWeather,
+        )
+    except ImportError as exc:
+        raise ConfigError("weather needs the 'weather' extra (aiohttp)") from exc
+    return OpenMeteoWeather()
+
+
+@lru_cache
+def get_weather_display() -> WeatherDisplay:
+    return WeatherDisplay(get_weather(), get_settings().weather_home)
+
+
+@lru_cache
+def get_tools() -> Registry[Tool]:
+    return build_tool_registry(
+        get_light(),
+        get_climate(),
+        get_music(),
+        get_calendar(),
+        get_expenses(),
+        known=get_known_uris(),
+        on_volume=get_ducker().note_volume,
+        reminders=(get_reminder_store(), get_wall_clock()),
+        knowledge=(get_knowledge(), get_embedder(), names)
+        if (names := get_project_names())
+        else None,
+        session=get_project_session(),
+        weather=(get_weather(), get_weather_display()),
+        lynus=get_lynus(),
+    )
+
+
+@lru_cache
+def get_runner() -> ToolRunner:
+    return ToolRunner(
+        get_tools(),
+        get_pending(),
+        get_logger(),
+        tool_timeout=get_settings().tool_timeout_seconds,
+    )
+
+
+@lru_cache
+def get_openai() -> AsyncOpenAI:
+    settings = get_settings()
+    assert settings.openai_api_key is not None  # Settings refuses to boot without it
+    return AsyncOpenAI(
+        api_key=settings.openai_api_key.get_secret_value(),
+        timeout=settings.chat_timeout_seconds,
+    )
+
+
+@lru_cache
+def get_gemini() -> genai.Client:
+    settings = get_settings()
+    assert settings.gemini_api_key is not None  # Settings refuses to boot without it
+    from google import genai  # noqa: PLC0415 - optional extra
+
+    return genai.Client(api_key=settings.gemini_api_key.get_secret_value())
+
+
+@lru_cache
+def get_chat_model() -> ChatModelPort:
+    settings = get_settings()
+    if settings.chat_provider == "gemini":
+        from app.adapters.gemini.chat_model import GeminiChatModel  # noqa: PLC0415 - optional extra
+
+        return GeminiChatModel(
+            get_gemini(), settings.gemini_chat_model, thinking=settings.gemini_thinking_level
+        )
+    return OpenAIChatModel(get_openai(), settings.chat_model)
+
+
+@lru_cache
+def get_live_port() -> LiveSessionPort:
+    settings = get_settings()
+    if settings.live_provider == "gemini":
+        from app.adapters.gemini.live_session import (  # noqa: PLC0415 - optional extra
+            GeminiLiveSessionAdapter,
+        )
+
+        return GeminiLiveSessionAdapter(
+            get_gemini(), settings.gemini_live_model, voice=settings.gemini_voice
+        )
+    return OpenAILiveSessionAdapter(get_openai(), settings.live_model, vad=settings.live_vad)
+
+
+@lru_cache
+def get_live_slot() -> LiveSlot:
+    return LiveSlot()
+
+
+def get_process_chat(
+    model: ChatModelPort = Depends(get_chat_model),
+    store: ConversationStorePort = Depends(get_store),
+    runner: ToolRunner = Depends(get_runner),
+    pending: PendingActionStore = Depends(get_pending),
+    log: LoggerPort = Depends(get_logger),
+    settings: Settings = Depends(get_settings),
+) -> ProcessChatMessage:
+    return ProcessChatMessage(
+        model,
+        store,
+        runner,
+        pending,
+        log,
+        clock=get_wall_clock(),
+        max_steps=settings.max_steps,
+        history_limit=settings.history_limit,
+        timeout_seconds=settings.chat_timeout_seconds,
+        projects=get_project_names(),
+    )
+
+
+def get_run_live_session(
+    live: LiveSessionPort = Depends(get_live_port),
+    store: ConversationStorePort = Depends(get_store),
+    runner: ToolRunner = Depends(get_runner),
+    pending: PendingActionStore = Depends(get_pending),
+    log: LoggerPort = Depends(get_logger),
+    ducker: MusicDucker = Depends(get_ducker),
+    settings: Settings = Depends(get_settings),
+) -> RunLiveSession:
+    return RunLiveSession(
+        live,
+        store,
+        runner,
+        pending,
+        log,
+        now=time.monotonic,
+        clock=get_wall_clock(),
+        ducker=ducker,
+        projects=get_project_names(),
+        limits=LiveLimits(
+            idle_seconds=settings.live_idle_seconds,
+            max_seconds=settings.live_max_seconds,
+            transcript_wait_seconds=settings.live_transcript_wait_seconds,
+        ),
+    )

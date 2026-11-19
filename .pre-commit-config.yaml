@@ -8,7 +8,7 @@ repos:
       - id: check-toml
       - id: check-added-large-files
         args: [--maxkb=500]
-        exclude: ^web/models/  # stock openWakeWord models the browser wake word loads
+        exclude: ^frontend/models/  # stock openWakeWord models the browser wake word loads
       - id: check-merge-conflict
       - id: detect-private-key
       - id: mixed-line-ending
@@ -19,7 +19,9 @@ repos:
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
+        files: ^backend/
       - id: ruff-format
+        files: ^backend/  # ruff finds backend/pyproject.toml per file
 
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.6.0
@@ -34,13 +36,13 @@ repos:
       # and would report every import as unknown under strict mode.
       - id: pyright
         name: pyright (project environment)
-        entry: pyright
+        entry: bash -c "cd backend && pyright"
         language: system
         types: [python]
         pass_filenames: false
       - id: pytest-fast
         name: pytest (unit only)
-        entry: pytest -q
+        entry: bash -c "cd backend && pytest -q"
         language: system
         pass_filenames: false
         stages: [pre-push]

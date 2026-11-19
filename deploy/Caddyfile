@@ -1,0 +1,14 @@
+# HTTPS in front of the API (WebSockets included). The panel is not served here: it runs on
+# other devices and points at this address. `tls internal` signs with Caddy's own CA: install
+# its root (see README) on each device once. A real domain in BYTE_SITE without
+# `tls internal` switches to a public certificate.
+{
+	# clients reaching an IP send no SNI; without this the handshake finds no certificate
+	default_sni {$BYTE_SITE:byte.local}
+}
+
+{$BYTE_SITE:byte.local} {
+	tls internal
+	encode gzip
+	reverse_proxy api:8000
+}

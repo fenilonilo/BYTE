@@ -28,16 +28,20 @@ expenses, proactive reminders and alarms.
 
 **Explicitly out of scope — reject on sight:**
 
-- Any TUI or desktop client. The only GUI in scope is the single static control panel in `web/` (below).
+- Any TUI or desktop client. The only GUI in scope is the single static control panel in `frontend/` (below).
 - Computer vision, cameras, screen capture, OCR, image pipelines.
 - Chat-channel adapters (WhatsApp, Telegram, Email).
 - Multi-tenancy, user accounts, roles. One owner.
 
 Voice is not a GUI. Audio endpoints belong here.
 
-**Web control panel (`web/`)** — one static page (HTML/CSS/vanilla JS, no build step,
-no framework) served by FastAPI. It is a *client* of `/api/v1`: bearer token typed by the
-owner, kept in `sessionStorage`, never in a URL. It shows the 0/1 sphere agent and gives direct
+**Web control panel (`frontend/`)** — one static page (HTML/CSS/vanilla JS, no build step,
+no framework). It runs on the owner's other devices, never on the server (on the PC
+`python main.py --web` may serve it). The server address is fixed in `frontend/config.js`.
+The owner pastes `BYTE_API_TOKEN` once per device; the panel trades it for a device session
+(Spec 8: refresh token in `localStorage`, 1 h access tokens in memory) and never stores the
+master token or puts any token in a URL. The API allows
+any CORS origin because the token, never a cookie, is the guard. It shows the 0/1 sphere agent and gives direct
 control of lights, climate, music, agenda and expenses through the same `ToolRunner` +
 confirmation rules as chat — no logic or credentials in the browser. Contract:
 `docs/web-api-contract.md`.
@@ -148,14 +152,17 @@ out of the child's environment.
 This service controls physical devices in a home and reads personal financial
 data. Hard requirements, not polish:
 
-- **Authentication**: every route except `GET /health`, and the WebSocket, require
-  `Authorization: Bearer <token>`. `BYTE_API_TOKEN` is at least 32 characters;
+- **Authentication**: every route except `GET /health`, `/auth/refresh` and `/auth/logout`, and
+  the WebSockets, require `Authorization: Bearer <token>`: the master token, or an access token
+  from a device session (`/auth/login` takes the master token only; refresh grants are stored
+  as SHA-256 hashes in `data/devices.json`, access tokens only in memory). `BYTE_API_TOKEN` is at least 32 characters;
   the app refuses to boot otherwise. Compare with `hmac.compare_digest`. Never
   put the token in a query string.
-- **Network**: `docker-compose.yml` binds to `127.0.0.1` by default. LAN
-  exposure for the ESP32 is opt-in through `BYTE_PUBLISH_HOST=<LAN IP>` and
-  **requires TLS (`wss://`)** with a pinned certificate. Never `0.0.0.0` on a
-  host with a public interface, never a tunnel or public port.
+- **Network**: `docker-compose.yml` binds to `127.0.0.1` by default. Only Caddy is ever
+  published: LAN exposure is opt-in through `BYTE_PUBLISH_HOST=<LAN IP>`, over HTTPS
+  (`tls internal`, devices trust or pin Caddy's root). The API port stays on host loopback
+  for the voice client on the same machine. Exposure beyond the LAN (a real domain in
+  `BYTE_SITE`) is the owner's call, never a code default.
 - **Never commit credentials.** Keys and OAuth tokens come from the environment
   or encrypted storage. `.env` is gitignored; `.env.example` holds names with
   empty values only.
@@ -171,8 +178,9 @@ data. Hard requirements, not polish:
   Inside a Lynus task, Claude Code's own permission requests are approved by Lynus, by the
   owner's rule — see **Lynus**.) Today only `delete_event`
   and `add_expense` ask; switching lights or the air conditioner on or off runs at once
-  (owner's call). With a single configured lamp, `set_light` targets it whatever name the
-  model says. The model only plays a `uri` that a search or the playlists returned.
+  (owner's call). With a single configured lamp or air conditioner, `set_light` /
+  `set_climate` target it whatever name the model says; adjusting a stopped air conditioner
+  turns it on. The model only plays a `uri` that a search or the playlists returned.
 - **Bound the blast radius of tools.** A tool addresses a known device list or
   the configured spreadsheet, never an id the model names.
 - **Tools are idempotent**, and execution is shielded from cancellation: a
@@ -184,7 +192,7 @@ data. Hard requirements, not polish:
 Google, and the datastore are all swappable behind ports.
 
 ```
-app/
+backend/app/          # frontend/ = the panel, deploy/ = Caddyfile + systemd unit
 ├── domain/          # Pure Python. Zero external deps. dataclasses + pure functions.
 ├── ports/           # ABCs. Contracts to the outside world.
 ├── application/     # Use cases, ToolRunner, PendingActionStore, Registry, tools/.
@@ -234,6 +242,7 @@ Prefix `/api/v1`. FastAPI. Everything async.
 | Route | Purpose |
 |---|---|
 | `GET /health` | Liveness. Used by the Docker healthcheck. |
+| `POST /auth/login`, `/auth/refresh`, `/auth/logout` | Device sessions (Spec 8): master token once → refresh + 1 h access tokens. |
 | `POST /messages` | Text in, text out. `segment` optional. May return `pending_confirmation.summary`. |
 | `WS /live` | Spoken conversation. One session at a time; a new connection replaces the old (close code 4000). |
 | `WS /ws/terminal` | Panel only: the open project's `claude` PTY (state JSON + binary I/O). One panel; a new one replaces the old (4000). 1008 where no terminal exists. |
@@ -258,6 +267,10 @@ Rules:
 docker compose up --build
 ```
 
+- Spec 7 (`docs/superpowers/specs/2026-11-18-self-hosted-split-design.md`): the server runs
+  the back end only. `caddy` owns TLS and proxies everything to `api` (WebSockets too); `api` is
+  plain HTTP on host loopback for the voice client; `db` loopback. The panel is not served
+  there. Compose and `.env` live at the repo root.
 - Loopback by default; LAN exposure only as described in **Safety and security**.
 - Config from env (`BYTE_` prefix, **including provider keys**). Settings are
   validated at boot in the FastAPI lifespan; a bad config fails fast.
@@ -281,6 +294,13 @@ docker compose up --build
 8. **No singletons** except through `lru_cache` in `api/deps.py`.
 9. **No new abstraction without a second concrete implementation in sight.**
 10. **Audio bytes are opaque** below the API layer: relayed, never interpreted.
+11. **Resilient to every unavailable integration.** A device, vendor, database or model
+    that is off, unreachable or slow (owner away, lamp unplugged, Postgres down, API out)
+    must never stop the app from booting, block a request, or break another feature. Every
+    vendor call has a short bounded timeout (no long retry loops); the failure stays inside
+    its own device or section (the panel shows the device greyed as unavailable, a tool
+    reports it to the model, the background loop logs and retries later); sections and
+    devices are read concurrently so one timeout is not added to the others.
 
 ## Testing
 
@@ -302,6 +322,9 @@ docker compose up --build
   reach OpenAI, Tuya or Google.
 
 ## Tooling
+
+Python tools run from `backend/` (it holds `pyproject.toml`); the panel's tests run with
+`node --test frontend/tests/*.test.mjs` from the root.
 
 | Tool | Role | Command |
 |---|---|---|
@@ -355,8 +378,10 @@ expense adapters. What is left is replacing those adapters with real ones.
 | Gemini Live adapter, A/B against OpenAI | not started (later spec) |
 | Project knowledge (pgvector + local embeddings) and panel project terminal (Spec 4) | done (opening by voice in the panel not checked by hand) |
 | Weather: tools, panel section, `/ws/panel` push (Spec 6) | done |
+| `frontend/` + `backend/` split, Caddy in front, LAN self-hosting (Spec 7) | done (on the server laptop not yet checked by hand) |
 | Postgres for conversations, OAuth tokens, reminders | not started (later spec) |
 | Lynus driving Claude Code on its own (Spec 5) | done (hooks spiked on `claude` 2.1.310) |
+| Device sessions: sign in once per device, refresh tokens (Spec 8) | done |
 
 ## Before you finish
 
@@ -382,5 +407,6 @@ Run `ruff check`, `pyright`, `pytest`. Three green = ship. Read
 - Logging tool arguments, transcripts or content; `print()` or naked `logging`.
 - Exposing the service on a network without the token and TLS.
 - A test that mocks the system under test, or reaches a real vendor by default.
+- One unavailable integration stalling or erroring the boot, the panel, chat or another tool.
 - Function > 50 lines, or a class with > 5 public methods, without
   justification.
