@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from app.ports.logger import LoggerPort
 
 AUDIO_FORMAT: Mapping[str, object] = {"format": "pcm16", "rate": 24000, "channels": 1}
+AUDIO_BYTES_PER_SECOND = 24000 * 2
 LIVE_INSTRUCTIONS = f"{SYSTEM_PROMPT} Você está numa conversa por voz: seja breve."
 
 
@@ -156,6 +157,9 @@ class LiveRun:
         self._last_activity = now()
         self._item: str | None = None
         self._speaking = False
+        # the provider generates faster than real time: the client keeps playing a reply for
+        # seconds after it ended, and speech then must still cut it off
+        self._playing_until = 0.0
         self._response_active = False
         self._deferred = False
         self._echo_items: set[str] = set()
@@ -227,10 +231,14 @@ class LiveRun:
                 self.counts["audio_out"] += 1
                 self._item = item_id
                 self._speaking = True
+                self._playing_until = (
+                    max(self._now(), self._playing_until) + len(data) / AUDIO_BYTES_PER_SECOND
+                )
                 await self._transport.send_audio(data)
             case UserSpeechStarted(item_id=item_id):
                 self._touch()
-                if self._speaking:
+                if self._speaking or self._now() < self._playing_until:
+                    self._playing_until = 0.0
                     # barge-in or echo; either way the client stops playing, but speech that
                     # started over the assistant's voice can never confirm an action
                     self._echo_items.add(item_id)
