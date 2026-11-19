@@ -37,8 +37,10 @@ Voice is not a GUI. Audio endpoints belong here.
 
 **Web control panel (`frontend/`)** — one static page (HTML/CSS/vanilla JS, no build step,
 no framework). It runs on the owner's other devices, never on the server (on the PC
-`python main.py --web` may serve it): the owner types the server address (kept in
-`localStorage`) and the bearer token (kept in `sessionStorage`, never in a URL). The API allows
+`python main.py --web` may serve it). The server address is fixed in `frontend/config.js`.
+The owner pastes `BYTE_API_TOKEN` once per device; the panel trades it for a device session
+(Spec 8: refresh token in `localStorage`, 1 h access tokens in memory) and never stores the
+master token or puts any token in a URL. The API allows
 any CORS origin because the token, never a cookie, is the guard. It shows the 0/1 sphere agent and gives direct
 control of lights, climate, music, agenda and expenses through the same `ToolRunner` +
 confirmation rules as chat — no logic or credentials in the browser. Contract:
@@ -150,8 +152,10 @@ out of the child's environment.
 This service controls physical devices in a home and reads personal financial
 data. Hard requirements, not polish:
 
-- **Authentication**: every route except `GET /health`, and the WebSocket, require
-  `Authorization: Bearer <token>`. `BYTE_API_TOKEN` is at least 32 characters;
+- **Authentication**: every route except `GET /health`, `/auth/refresh` and `/auth/logout`, and
+  the WebSockets, require `Authorization: Bearer <token>`: the master token, or an access token
+  from a device session (`/auth/login` takes the master token only; refresh grants are stored
+  as SHA-256 hashes in `data/devices.json`, access tokens only in memory). `BYTE_API_TOKEN` is at least 32 characters;
   the app refuses to boot otherwise. Compare with `hmac.compare_digest`. Never
   put the token in a query string.
 - **Network**: `docker-compose.yml` binds to `127.0.0.1` by default. Only Caddy is ever
@@ -237,6 +241,7 @@ Prefix `/api/v1`. FastAPI. Everything async.
 | Route | Purpose |
 |---|---|
 | `GET /health` | Liveness. Used by the Docker healthcheck. |
+| `POST /auth/login`, `/auth/refresh`, `/auth/logout` | Device sessions (Spec 8): master token once → refresh + 1 h access tokens. |
 | `POST /messages` | Text in, text out. `segment` optional. May return `pending_confirmation.summary`. |
 | `WS /live` | Spoken conversation. One session at a time; a new connection replaces the old (close code 4000). |
 | `WS /ws/terminal` | Panel only: the open project's `claude` PTY (state JSON + binary I/O). One panel; a new one replaces the old (4000). 1008 where no terminal exists. |
@@ -375,6 +380,7 @@ expense adapters. What is left is replacing those adapters with real ones.
 | `frontend/` + `backend/` split, Caddy in front, LAN self-hosting (Spec 7) | done (on the server laptop not yet checked by hand) |
 | Postgres for conversations, OAuth tokens, reminders | not started (later spec) |
 | Lynus driving Claude Code on its own (Spec 5) | done (hooks spiked on `claude` 2.1.310) |
+| Device sessions: sign in once per device, refresh tokens (Spec 8) | done |
 
 ## Before you finish
 

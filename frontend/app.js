@@ -1,4 +1,4 @@
-import { api, MOCK, token } from './api.js';
+import { api, MOCK, signIn as signInDevice, signedIn, token } from './api.js';
 import * as art from './art.js';
 import { IDLE_WARN_SECONDS, createVoice } from './live.js';
 import { createSphere } from './sphere.js';
@@ -6,7 +6,7 @@ import { connectProjectTerm, paneView } from './project-term.js';
 import { HANDOFF, coreState, isActive, noteLook, phaseText, placeholder, route } from './lynus.js';
 import { createLynusCore } from './lynus-core.js';
 import { panelSocket } from './panel-socket.js';
-import { normalizeServer, server, wsUrl } from './server.js';
+import { wsUrl } from './server.js';
 import { createTerminal } from './terminal.js';
 import { countdown, elapsed, urgency } from './time.js';
 import { CONDITION_WORD, chart, dayLabel, hourLabel, rangeBar } from './weather.js';
@@ -1187,7 +1187,6 @@ function showGate(message = '') {
   $('#app').hidden = true;
   $('#gate').hidden = false;
   gateSphere ??= createSphere($('#gate-orb'));
-  $('#gate-server').value = server.get();
   $('#gate-error').textContent = message;
   $('#gate-token').setAttribute('aria-invalid', String(Boolean(message)));
   $('#gate-token').focus();
@@ -1277,16 +1276,12 @@ async function signIn(e) {
   e.preventDefault();
   const input = $('#gate-token');
   const value = input.value.trim();
-  const typed = $('#gate-server').value.trim();
-  const address = normalizeServer(typed);
-  if (typed && !address) return showGate('Endereço do servidor inválido. Ex.: 192.168.0.44');
   if (value.length < 32) return showGate('O token precisa ter pelo menos 32 caracteres.');
-  server.set(address);
   const btn = $('button[type="submit"]', e.currentTarget);
   btn.setAttribute('aria-busy', 'true');
   btn.disabled = true;
-  token.set(value);
   try {
+    await signInDevice(value);
     const s = await api.state();
     input.value = '';
     enter(s);
@@ -1485,10 +1480,13 @@ function submitExpense(e) {
 
 wire();
 if (MOCK) document.querySelectorAll('.mock-only').forEach((el) => { el.hidden = false; });
-if (token.get()) {
+if (signedIn()) {
   $('#app').hidden = false;
   Object.values(BOX).forEach((sel) => $(sel).replaceChildren(skeleton()));
-  api.state().then(enter).catch((err) => signOut(err.status === 401 ? 'Sessão expirada. Entre de novo.' : err.message));
+  api.state().then(enter).catch((err) => (err.status === 401
+    ? signOut('Sessão expirada. Entre de novo.')
+    // offline is not signed out: keep this device's session and let a reload retry
+    : showGate(err.status ? err.message : 'Servidor fora do ar. Recarregue quando ele voltar.')));
 } else {
   showGate();
 }

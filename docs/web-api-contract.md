@@ -1,7 +1,11 @@
 # Web control panel API contract
 
-Base: `/api/v1`. JSON in, JSON out. Every route needs `Authorization: Bearer <BYTE_API_TOKEN>`
-(missing/wrong = `401 {"detail": ...}`). The static UI (`frontend/`, served at `/` by Caddy, or by uvicorn with `--web`) is public and
+Base: `/api/v1`. JSON in, JSON out. Every route needs `Authorization: Bearer <token>`, where the
+token is `BYTE_API_TOKEN` (devices, scripts) or a live access token from a device session
+(missing/wrong = `401 {"detail": ...}`). Device sessions (Spec 8,
+`docs/superpowers/specs/2026-11-19-device-sessions-design.md`): `POST /auth/login` with the master
+token → `{access_token, refresh_token, expires_in}`; `POST /auth/refresh {refresh_token}` → a new
+access token, same refresh (401 = sign in again); `POST /auth/logout {refresh_token}` → 204. The static UI (`frontend/`, served at `/` by Caddy, or by uvicorn with `--web`) is public and
 holds no data. Chat stays `POST /messages` (unchanged).
 
 Names (`lights`, `climate`, music `device`) are the configured device names returned by the GET

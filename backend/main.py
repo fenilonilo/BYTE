@@ -39,6 +39,7 @@ from app.api.lynus import router as lynus_router
 from app.api.notifications import router as notifications_router, run_reminders
 from app.api.panel import router as panel_router
 from app.api.router import router
+from app.api.session import router as session_router
 from app.api.terminal import router as terminal_router
 from app.api.web import mount_web
 from app.application.knowledge_indexer import run_indexer
@@ -133,6 +134,7 @@ app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(terminal_router, prefix="/api/v1")
 app.include_router(panel_router, prefix="/api/v1")
 app.include_router(lynus_router, prefix="/api/v1")
+app.include_router(session_router, prefix="/api/v1")
 install_error_handlers(app)
 
 

@@ -38,9 +38,11 @@ The server runs only the back end: `caddy` (HTTPS in front of the API, WebSocket
 ### The panel, on any other device
 
 `frontend/` is static. Serve it from the device that opens it (the mic needs `localhost` or
-HTTPS): `cd frontend && python -m http.server 5500`, open `http://localhost:5500/`, type the
-server (`192.168.0.44`) and `BYTE_API_TOKEN`. The address is remembered in the browser; the
-token only for the tab. The API accepts any origin: the guard is the bearer token.
+HTTPS): `cd frontend && python -m http.server 5500` and open `http://localhost:5500/`. The
+server address is fixed in `frontend/config.js`. Paste `BYTE_API_TOKEN` once per device: the
+panel trades it for a device session (refresh token in `localStorage`, renewed on use, valid
+180 days idle; access tokens of 1 h in memory) and never stores the master token. Sign-out
+revokes that device. The API accepts any origin: the guard is the bearer token.
 
 ### Open it to the house (phones, ESP32)
 

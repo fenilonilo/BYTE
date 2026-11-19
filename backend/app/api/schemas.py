@@ -14,6 +14,16 @@ from app.domain.weather import Condition
 MAX_CONTENT_CHARS = 4000
 
 
+class RefreshSchema(BaseModel):
+    refresh_token: str = Field(min_length=1, max_length=200)
+
+
+class TokenPairSchema(BaseModel):
+    access_token: str
+    refresh_token: str
+    expires_in: int
+
+
 class IncomingMessageSchema(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

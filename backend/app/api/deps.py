@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from fastapi import Depends
 from openai import AsyncOpenAI
 
+from app.adapters.files.json_device_grants import JsonDeviceGrantStore
 from app.adapters.files.json_reminder_store import JsonReminderStore
 from app.adapters.files.local_documents import LocalDocuments
 from app.adapters.logging.structlog_logger import StructlogLogger
@@ -28,6 +29,7 @@ from app.adapters.openai.chat_model import OpenAIChatModel
 from app.adapters.openai.live_session import OpenAILiveSessionAdapter
 from app.api.live_slot import LiveSlot
 from app.application.claude_bridge import ClaudeBridge
+from app.application.device_auth import DeviceAuth
 from app.application.knowledge_indexer import KnowledgeIndexer
 from app.application.lynus import Lynus, LynusLimits
 from app.application.music_ducker import MusicDucker
@@ -172,6 +174,12 @@ def get_expenses() -> ExpensesPort:
 @lru_cache
 def get_reminder_store() -> ReminderStorePort:
     return JsonReminderStore(Path(get_settings().reminders_path))
+
+
+@lru_cache
+def get_device_auth() -> DeviceAuth:
+    # no settings on purpose: a bad token must get a 401 even before the config is readable
+    return DeviceAuth(JsonDeviceGrantStore(Path("data/devices.json")), lambda: datetime.now(UTC))
 
 
 @lru_cache

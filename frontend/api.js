@@ -2,6 +2,7 @@
 // `?mock=1` swaps fetch for an in-browser fake that implements the same routes.
 
 import { apiUrl } from './server.js';
+import { createSession } from './session.js';
 
 const TOKEN_KEY = 'byte.token';
 export const MOCK = new URLSearchParams(location.search).get('mock') === '1';
@@ -13,14 +14,31 @@ export class ApiError extends Error {
   }
 }
 
-export const token = {
+// ?mock=1 keeps the old tab-only token: the fake server has no sessions.
+const mockToken = {
   get: () => { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } },
   set: (t) => { try { sessionStorage.setItem(TOKEN_KEY, t); } catch { /* private mode */ } },
   clear: () => { try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ } },
 };
 
+const session = createSession({ storage: localStorage, post: (path, body, bearer) => send('POST', path, body, bearer) });
+
+// The live access token (WebSockets offer it as a subprotocol). Truthy = signed in.
+export const token = MOCK ? mockToken : { get: () => session.access(), clear: () => { session.logout(); } };
+
+export const signedIn = () => (MOCK ? Boolean(mockToken.get()) : session.signedIn());
+
+// Once per device: the master token is used here and never stored.
+export async function signIn(master) {
+  if (MOCK) return mockToken.set(master);
+  const status = await session.login(master);
+  if (status !== 200) throw new ApiError(status, status === 401 ? 'Token recusado pelo servidor.' : `Erro ${status}`);
+}
+
 async function request(method, path, body) {
-  const res = MOCK ? await mockRoute(method, path, body) : await send(method, path, body);
+  if (!MOCK && !session.access() && session.signedIn()) await session.renew();
+  let res = MOCK ? await mockRoute(method, path, body) : await send(method, path, body);
+  if (!MOCK && res.status === 401 && await session.renew()) res = await send(method, path, body);
   if (res.status >= 400) {
     // FastAPI validation errors (422) carry a list of {msg}; domain errors carry a string.
     const d = res.json?.detail;
@@ -30,8 +48,8 @@ async function request(method, path, body) {
   return res.json;
 }
 
-async function send(method, path, body) {
-  const headers = { Authorization: `Bearer ${token.get() || ''}` };
+async function send(method, path, body, bearer = session.access()) {
+  const headers = { Authorization: `Bearer ${bearer || ''}` };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let res;
   try {
