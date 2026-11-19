@@ -116,7 +116,7 @@ def test_every_schema_is_a_strict_object_and_requires_only_known_fields(
         assert set(params["required"]) <= set(properties)  # type: ignore[call-overload]
     # A partial-update tool that required every field would force the model to invent values.
     assert registry.get("set_light").spec.parameters["required"] == []
-    assert registry.get("set_climate").spec.parameters["required"] == ["name"]
+    assert registry.get("set_climate").spec.parameters["required"] == []
 
 
 @pytest.mark.unit
@@ -157,6 +157,43 @@ async def test_a_lamp_switches_back_and_forth_without_waiting(registry: Registry
     assert (await run(registry, "set_light", {"name": "lampada", "power": False})).startswith(
         "lampada: desligada"
     )
+
+
+@pytest.mark.unit
+async def test_with_two_units_an_unknown_climate_name_fails() -> None:
+    registry = build_tool_registry(
+        InMemoryLight(("lampada",)),
+        InMemoryClimate(("sala", "quarto")),
+        InMemoryMusic(),
+        InMemoryCalendar(),
+        InMemoryExpenses(),
+    )
+    with pytest.raises(UnknownClimateDeviceError):
+        await run(registry, "set_climate", {"name": "cozinha", "power": True})
+    with pytest.raises(UnknownClimateDeviceError):
+        await run(registry, "set_climate", {"power": True})
+
+
+@pytest.mark.unit
+async def test_with_a_single_climate_any_name_or_none_means_it(registry: Registry[Tool]) -> None:
+    assert (await run(registry, "set_climate", {"power": True})).startswith(
+        "ar-condicionado: ligado"
+    )
+    off = await run(registry, "set_climate", {"name": "ar do quarto", "power": False})
+    assert off.startswith("ar-condicionado: desligado")
+
+
+@pytest.mark.unit
+async def test_adjusting_a_stopped_climate_turns_it_on(registry: Registry[Tool]) -> None:
+    state = await run(registry, "set_climate", {"target_temperature": 22})
+    assert state.startswith("ar-condicionado: ligado")
+    assert "alvo 22°C" in state
+
+
+@pytest.mark.unit
+async def test_a_stop_timer_does_not_turn_a_stopped_climate_on(registry: Registry[Tool]) -> None:
+    with pytest.raises(ClimateError):
+        await run(registry, "set_climate", {"stop_in_minutes": 30})
 
 
 @pytest.mark.unit
@@ -203,7 +240,6 @@ async def test_a_unit_reporting_an_error_says_so() -> None:
     [
         ({"name": "ar-condicionado", "target_temperature": 40}, ClimateError),
         ({"name": "ar-condicionado"}, ClimateError),
-        ({"name": "sala", "power": True}, UnknownClimateDeviceError),
         ({"name": "ar-condicionado", "mode": "heat"}, ToolArgumentError),
         ({"name": "ar-condicionado", "swing": "sim"}, ToolArgumentError),
     ],

@@ -187,10 +187,11 @@ def test_lamp_toggles_back_and_forth_from_the_panel() -> None:
 
 
 @pytest.mark.unit
-def test_climate_adjustment_while_off_is_422() -> None:
-    res = Panel().send("PATCH", "/climate/ar-condicionado", {"target_temperature": 22})
-    assert res.status_code == 422
-    assert "desligado" in res.json()["detail"]
+def test_climate_adjustment_while_off_turns_it_on() -> None:
+    panel = Panel()
+    res = panel.send("PATCH", "/climate/ar-condicionado", {"target_temperature": 22})
+    assert res.json()["status"] == "done"
+    assert panel.get("/climate").json()["climates"][0]["power"] is True
 
 
 @pytest.mark.unit

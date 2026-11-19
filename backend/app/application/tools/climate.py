@@ -9,9 +9,10 @@ from app.application.tools.args import (
     opt_enum,
     opt_float,
     opt_int,
-    str_arg,
+    opt_str,
 )
 from app.domain.climate import ClimateChange, ClimateMode, FanSpeed
+from app.domain.exceptions import UnknownClimateDeviceError
 from app.domain.tools import ToolSpec
 
 if TYPE_CHECKING:
@@ -51,12 +52,15 @@ class SetClimate(Tool):
     spec = ToolSpec(
         name="set_climate",
         description=(
-            "Muda um ar-condicionado. Só informe o que mudar. "
-            "Um aparelho desligado recusa ajustes: ligue-o antes."
+            "Muda um ar-condicionado. Só informe o que mudar. Ajustar modo, temperatura ou "
+            "ventilador liga o aparelho. Se a casa tem um aparelho só, omita name."
         ),
         parameters=object_schema(
             {
-                "name": ("string", "Nome do aparelho, como em list_climates."),
+                "name": (
+                    "string",
+                    "Nome do aparelho, como em list_climates; opcional se houver um só.",
+                ),
                 "power": ("boolean", "true liga, false desliga."),
                 "mode": ("string", "cool, dry, fan ou auto."),
                 "target_temperature": ("number", "Temperatura alvo de 18 a 30, em graus inteiros."),
@@ -68,7 +72,7 @@ class SetClimate(Tool):
                 "start_in_minutes": ("integer", "Liga em N minutos; 0 cancela."),
                 "sleep_in_minutes": ("integer", "Modo dormir por N minutos; 0 cancela."),
             },
-            required=["name"],
+            required=[],
         ),
         segment="home",
     )
@@ -77,12 +81,19 @@ class SetClimate(Tool):
         self._climate = climate
 
     async def execute(self, args: Mapping[str, object], key: str) -> str:
-        name = str_arg(args, "name")
+        name = await self._resolve(opt_str(args, "name"))
+        mode = opt_enum(args, "mode", ClimateMode)
+        target = opt_float(args, "target_temperature")
+        fan = opt_enum(args, "fan_speed", FanSpeed)
+        power = opt_bool(args, "power")
+        if power is None and (mode, target, fan) != (None, None, None):
+            # "põe em 22" on a stopped unit means turn it on, not ask first
+            power = True if not (await self._climate.get_state(name)).power else None
         change = ClimateChange(
-            power=opt_bool(args, "power"),
-            mode=opt_enum(args, "mode", ClimateMode),
-            target_temperature=opt_float(args, "target_temperature"),
-            fan_speed=opt_enum(args, "fan_speed", FanSpeed),
+            power=power,
+            mode=mode,
+            target_temperature=target,
+            fan_speed=fan,
             swing=opt_bool(args, "swing"),
             power_save=opt_bool(args, "power_save"),
             display_light=opt_bool(args, "display_light"),
@@ -91,3 +102,12 @@ class SetClimate(Tool):
             sleep_in_minutes=opt_int(args, "sleep_in_minutes"),
         )
         return describe_climate(name, await self._climate.apply(name, change))
+
+    async def _resolve(self, name: str | None) -> str:
+        """With a single unit, any name the model says ("o ar", "ar do quarto") means it."""
+        names = await self._climate.devices()
+        if len(names) == 1:
+            return names[0]
+        if name is None:
+            raise UnknownClimateDeviceError("informe qual aparelho: " + ", ".join(names))
+        return name

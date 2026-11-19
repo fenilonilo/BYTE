@@ -178,8 +178,9 @@ data. Hard requirements, not polish:
   Inside a Lynus task, Claude Code's own permission requests are approved by Lynus, by the
   owner's rule — see **Lynus**.) Today only `delete_event`
   and `add_expense` ask; switching lights or the air conditioner on or off runs at once
-  (owner's call). With a single configured lamp, `set_light` targets it whatever name the
-  model says. The model only plays a `uri` that a search or the playlists returned.
+  (owner's call). With a single configured lamp or air conditioner, `set_light` /
+  `set_climate` target it whatever name the model says; adjusting a stopped air conditioner
+  turns it on. The model only plays a `uri` that a search or the playlists returned.
 - **Bound the blast radius of tools.** A tool addresses a known device list or
   the configured spreadsheet, never an id the model names.
 - **Tools are idempotent**, and execution is shielded from cancellation: a
