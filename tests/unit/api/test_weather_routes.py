@@ -87,6 +87,7 @@ class Env:
             deps.get_weather: weather,
             deps.get_weather_display: self.display,
             deps.get_panel_slot: LiveSlot(),
+            deps.get_lynus: None,  # the real one reads the machine's .env
         }
         for dep, value in overrides.items():
             app.dependency_overrides[dep] = _provide(value)
