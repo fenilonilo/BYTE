@@ -138,3 +138,14 @@ def test_session_none_without_claude(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(deps.shutil, "which", which(None))
     assert deps.get_project_session() is None
     assert "open_project" not in {t.spec.name for t in deps.get_tools().values()}
+
+
+@pytest.mark.unit
+def test_a_missing_piper_voice_falls_back_to_silence(monkeypatch: pytest.MonkeyPatch) -> None:
+    # reminders still fire as a beep; the boot must not die on a voice file left behind
+    from app.adapters.memory.silent_speech import SilentSpeech  # noqa: PLC0415
+
+    monkeypatch.setenv("BYTE_PIPER_MODEL", "models/missing.onnx")
+    deps.get_settings.cache_clear()
+    deps.get_speech.cache_clear()
+    assert isinstance(deps.get_speech(), SilentSpeech)

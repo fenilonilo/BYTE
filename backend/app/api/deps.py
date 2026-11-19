@@ -41,7 +41,7 @@ from app.application.use_cases.process_chat_message import ProcessChatMessage
 from app.application.use_cases.run_live_session import LiveLimits, RunLiveSession
 from app.application.weather_display import WeatherDisplay
 from app.config import Settings, load_settings
-from app.domain.exceptions import ConfigError
+from app.domain.exceptions import ConfigError, SpeechError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -181,7 +181,12 @@ def get_speech() -> SpeechPort:
         return SilentSpeech()
     from app.adapters.piper.piper_speech import PiperSpeech  # noqa: PLC0415 - optional extra
 
-    return PiperSpeech(model)
+    try:
+        return PiperSpeech(model)
+    except SpeechError:
+        # a voice file left behind must not stop the boot: reminders still arrive as a beep
+        get_logger().warning("speech.unavailable", reason="piper_load_failed")
+        return SilentSpeech()
 
 
 @lru_cache
