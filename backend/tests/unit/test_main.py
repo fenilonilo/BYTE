@@ -106,3 +106,26 @@ def test_boot_survives_an_unreachable_database(
     monkeypatch.setattr(deps, "get_embedder", FakeEmbedder)
     with TestClient(app) as client:
         assert client.get("/api/v1/health").status_code == 200
+
+
+@pytest.mark.unit
+def test_a_panel_on_another_origin_may_call_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    # the panel lives on other devices; the bearer token, never a cookie, is the guard
+    monkeypatch.setenv("BYTE_API_TOKEN", "k" * 32)
+    monkeypatch.setenv("BYTE_OPENAI_API_KEY", "sk-test")
+    origin = {"Origin": "http://localhost:5500"}
+    with TestClient(app) as client:
+        preflight = client.options(
+            "/api/v1/state",
+            headers={
+                **origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+        assert preflight.status_code == 200
+        assert preflight.headers["access-control-allow-origin"] == "*"
+        refused = client.get("/api/v1/state", headers=origin)
+        assert refused.status_code == 401
+        assert refused.headers["access-control-allow-origin"] == "*"
+        assert "access-control-allow-credentials" not in refused.headers

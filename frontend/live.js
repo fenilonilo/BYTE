@@ -2,6 +2,7 @@
 // Protocol: docs/web-api-contract.md (Voice). Audio is PCM16 mono 24 kHz little-endian both ways.
 
 import { ORT_URL, WAKE_THRESHOLD, createWake } from './wake.js';
+import { wsUrl } from './server.js';
 
 export const LIVE_RATE = 24000;
 const BUFFER_CHUNKS = 125; // 5 s of 40 ms chunks held until `ready` (voice/session.py buffer_seconds)
@@ -365,12 +366,11 @@ export function createVoice({
     pending = [];
     gate = createSpeechGate();
     idleArmed = false;
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     // Browsers cannot set Authorization on a WebSocket; the token rides as a subprotocol and the
     // server answers with the bare name "bearer". Never put it in the URL.
     let socket;
     try {
-      socket = new WebSocket(`${scheme}://${location.host}/api/v1/live`, ['bearer', getToken() || '']);
+      socket = new WebSocket(wsUrl('/live'), ['bearer', getToken() || '']);
     } catch { // SyntaxError: the token holds characters a subprotocol cannot carry
       return finish('O token tem caracteres que o WebSocket não aceita; gere um com secrets.token_urlsafe.');
     }

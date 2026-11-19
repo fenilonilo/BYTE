@@ -200,5 +200,7 @@ event) or `upstream` (anything else, including vendor failures). No content is l
 
 ## Static UI
 
-On the server Caddy serves `frontend/` at `/` with `Cache-Control: no-cache`. With `python main.py --web`, uvicorn mounts `../frontend` at `/` (public, `index.html` fallback) only when the directory exists.
+The panel is not served by the home server: it runs on the owner's devices and calls the
+server address typed at sign-in (`frontend/server.js`); the API allows any CORS origin (bearer
+token, no cookies). With `python main.py --web`, uvicorn mounts `../frontend` at `/` (public, `index.html` fallback) only when the directory exists.
 Everything the UI shows must come from `/api/v1/*` with the token.

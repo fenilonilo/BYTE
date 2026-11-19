@@ -31,24 +31,32 @@ cp .env.example .env        # fill BYTE_API_TOKEN (32+ chars), BYTE_OPENAI_API_K
 docker compose up --build
 ```
 
-Three services: `caddy` (HTTPS, serves the panel, proxies `/api/*` with WebSockets), `api`
-(plain HTTP, host loopback `127.0.0.1:8000` for the voice client on the same machine) and `db`.
-Open `https://byte.local/` (or `https://localhost/` with `BYTE_SITE=localhost`) and enter
-`BYTE_API_TOKEN`. Caddy proxies only `/api/*`; FastAPI's interactive docs stay at
-`http://127.0.0.1:8000/docs` on the server.
+The server runs only the back end: `caddy` (HTTPS in front of the API, WebSockets included),
+`api` (plain HTTP, host loopback `127.0.0.1:8000` for the voice client on the same machine) and
+`db`. The panel is not served there.
+
+### The panel, on any other device
+
+`frontend/` is static. Serve it from the device that opens it (the mic needs `localhost` or
+HTTPS): `cd frontend && python -m http.server 5500`, open `http://localhost:5500/`, type the
+server (`192.168.0.44`) and `BYTE_API_TOKEN`. The address is remembered in the browser; the
+token only for the tab. The API accepts any origin: the guard is the bearer token.
 
 ### Open it to the house (phones, ESP32)
 
 Give the server a fixed DHCP reservation, then in `.env`:
 
 ```
-BYTE_PUBLISH_HOST=192.168.0.10   # the server's LAN IP; Caddy listens there on 443 and 80
+BYTE_PUBLISH_HOST=192.168.0.10   # the server's LAN IP; Caddy listens there on 443
+BYTE_HTTP_PORT=8081              # only if another server already owns port 80
 BYTE_SITE=byte.local             # the name devices use (mDNS via Avahi, or a router DNS entry)
 ```
 
-Caddy signs `BYTE_SITE` with its own CA (`tls internal`). Export the root once and install
-it on each phone (Android: Settings → Security → Install certificate → CA; a native app must
-bundle or pin it), and pin it in the ESP32 firmware:
+Caddy signs `BYTE_SITE` with its own CA (`tls internal`). Until a device trusts that root,
+the panel cannot reach the API ("Servidor fora do ar, ou o certificado…"). Export it once and
+install it on each device (Windows: `certutil -user -addstore Root byte-root.crt`; Android:
+Settings → Security → Install certificate → CA; a native app must bundle or pin it), and pin it
+in the ESP32 firmware:
 
 ```bash
 docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./byte-root.crt

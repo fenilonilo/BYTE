@@ -1,7 +1,8 @@
 // The only module that talks to the network. Contract: docs/web-api-contract.md.
 // `?mock=1` swaps fetch for an in-browser fake that implements the same routes.
 
-const BASE = '/api/v1';
+import { apiUrl } from './server.js';
+
 const TOKEN_KEY = 'byte.token';
 export const MOCK = new URLSearchParams(location.search).get('mock') === '1';
 
@@ -34,7 +35,7 @@ async function send(method, path, body) {
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let res;
   try {
-    res = await fetch(BASE + path, {
+    res = await fetch(apiUrl(path), {
       method, headers, body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {

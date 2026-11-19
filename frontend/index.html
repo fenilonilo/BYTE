@@ -59,6 +59,12 @@
     <h1 id="gate-title">Acesso do dono</h1>
     <p class="lede">Cole o token da API. Ele fica só nesta aba e some quando ela fecha.</p>
     <div class="field">
+      <label for="gate-server">Servidor</label>
+      <input id="gate-server" name="server" type="text" inputmode="url" autocomplete="url"
+             spellcheck="false" placeholder="192.168.0.44" aria-describedby="gate-server-help">
+      <p class="help" id="gate-server-help">Endereço do Byte. Vazio = este mesmo endereço.</p>
+    </div>
+    <div class="field">
       <label for="gate-token">Token</label>
       <input id="gate-token" name="token" type="password" autocomplete="current-password"
              spellcheck="false" aria-describedby="gate-help gate-error" required>

@@ -6,6 +6,7 @@ import { connectProjectTerm, paneView } from './project-term.js';
 import { HANDOFF, coreState, isActive, noteLook, phaseText, placeholder, route } from './lynus.js';
 import { createLynusCore } from './lynus-core.js';
 import { panelSocket } from './panel-socket.js';
+import { normalizeServer, server, wsUrl } from './server.js';
 import { createTerminal } from './terminal.js';
 import { countdown, elapsed, urgency } from './time.js';
 import { CONDITION_WORD, chart, dayLabel, hourLabel, rangeBar } from './weather.js';
@@ -890,10 +891,9 @@ async function weatherHome() {
 let panelLink = null;
 function startPanelLink() {
   if (MOCK || panelLink) return;
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   // Browsers cannot set Authorization on a WebSocket: the token rides as a subprotocol.
   panelLink = panelSocket({
-    open: () => new WebSocket(`${scheme}://${location.host}/api/v1/ws/panel`, ['bearer', token.get() || '']),
+    open: () => new WebSocket(wsUrl('/ws/panel'), ['bearer', token.get() || '']),
     onWeather: () => loadWeather(true),
     onLynus: loadLynus,
     onOpen: () => { loadWeather(true); loadLynus(); },
@@ -1187,6 +1187,7 @@ function showGate(message = '') {
   $('#app').hidden = true;
   $('#gate').hidden = false;
   gateSphere ??= createSphere($('#gate-orb'));
+  $('#gate-server').value = server.get();
   $('#gate-error').textContent = message;
   $('#gate-token').setAttribute('aria-invalid', String(Boolean(message)));
   $('#gate-token').focus();
@@ -1276,7 +1277,11 @@ async function signIn(e) {
   e.preventDefault();
   const input = $('#gate-token');
   const value = input.value.trim();
+  const typed = $('#gate-server').value.trim();
+  const address = normalizeServer(typed);
+  if (typed && !address) return showGate('Endereço do servidor inválido. Ex.: 192.168.0.44');
   if (value.length < 32) return showGate('O token precisa ter pelo menos 32 caracteres.');
+  server.set(address);
   const btn = $('button[type="submit"]', e.currentTarget);
   btn.setAttribute('aria-busy', 'true');
   btn.disabled = true;
@@ -1287,7 +1292,9 @@ async function signIn(e) {
     enter(s);
   } catch (err) {
     token.clear();
-    showGate(err.status === 401 ? 'Token recusado pelo servidor.' : err.message);
+    showGate(err.status === 401 ? 'Token recusado pelo servidor.'
+      : err.status ? err.message
+      : 'Servidor fora do ar, ou o certificado dele ainda não é confiável neste aparelho.');
   } finally {
     btn.removeAttribute('aria-busy');
     btn.disabled = false;

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.logging.structlog_logger import configure_logging
 from app.api.control import router as control_router
@@ -117,6 +118,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 WEB_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(title="byte", lifespan=lifespan)
+# The panel runs on other devices. Any origin may call: the guard is the bearer token in a
+# header the page must already hold, never a cookie the browser would attach on its own.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 app.include_router(router, prefix="/api/v1")
 app.include_router(live_router, prefix="/api/v1")
 app.include_router(control_router, prefix="/api/v1")

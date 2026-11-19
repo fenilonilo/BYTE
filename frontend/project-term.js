@@ -1,6 +1,8 @@
 // The project terminal: a real `claude` running on the server, shown with xterm.js.
 // The process belongs to the server; this view only attaches to it (WS /api/v1/ws/terminal).
 
+import { wsUrl } from './server.js';
+
 const REPLACED = 4000; // another panel took the terminal: do not fight it
 const UNAVAILABLE = 1008; // no claude / pty on this server
 
@@ -81,10 +83,9 @@ export function connectProjectTerm({ getToken, el, onState }) {
 
   function connect() {
     if (closed) return;
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     let socket;
     try {
-      socket = new WebSocket(`${scheme}://${location.host}/api/v1/ws/terminal`, ['bearer', getToken() || '']);
+      socket = new WebSocket(wsUrl('/ws/terminal'), ['bearer', getToken() || '']);
     } catch { return; } // a token a subprotocol cannot carry: the voice path reports it already
     socket.binaryType = 'arraybuffer';
     ws = socket;

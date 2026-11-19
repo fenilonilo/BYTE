@@ -1,5 +1,5 @@
 services:
-  # HTTPS front door: serves the panel and proxies /api/* (WebSockets included) to the API.
+  # HTTPS front door for the API (WebSockets included). The panel runs on other devices.
   # Loopback by default; set BYTE_PUBLISH_HOST=<LAN IP> to open it to the house.
   caddy:
     image: caddy:2.8-alpine
@@ -10,7 +10,6 @@ services:
       BYTE_SITE: ${BYTE_SITE:-byte.local}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./frontend:/srv/frontend:ro
       - caddy-data:/data  # holds the local CA: keep it, or every phone must trust a new root
       - caddy-config:/config
     depends_on:
@@ -32,7 +31,7 @@ services:
     environment:
       # inside compose the API reaches the database by service name
       BYTE_DATABASE_URL: postgresql+asyncpg://byte:${BYTE_DB_PASSWORD}@db:5432/byte
-      BYTE_WEB: "false"  # Caddy serves the panel
+      BYTE_WEB: "false"  # the panel is served elsewhere
     depends_on:
       db:
         condition: service_healthy

@@ -36,8 +36,10 @@ expenses, proactive reminders and alarms.
 Voice is not a GUI. Audio endpoints belong here.
 
 **Web control panel (`frontend/`)** — one static page (HTML/CSS/vanilla JS, no build step,
-no framework) served by FastAPI. It is a *client* of `/api/v1`: bearer token typed by the
-owner, kept in `sessionStorage`, never in a URL. It shows the 0/1 sphere agent and gives direct
+no framework). It runs on the owner's other devices, never on the server (on the PC
+`python main.py --web` may serve it): the owner types the server address (kept in
+`localStorage`) and the bearer token (kept in `sessionStorage`, never in a URL). The API allows
+any CORS origin because the token, never a cookie, is the guard. It shows the 0/1 sphere agent and gives direct
 control of lights, climate, music, agenda and expenses through the same `ToolRunner` +
 confirmation rules as chat — no logic or credentials in the browser. Contract:
 `docs/web-api-contract.md`.
@@ -259,9 +261,10 @@ Rules:
 docker compose up --build
 ```
 
-- Spec 7 (`docs/superpowers/specs/2026-11-18-self-hosted-split-design.md`): `caddy` serves
-  `frontend/` and proxies `/api/*` (WebSockets too) to `api`, owns TLS; `api` is plain HTTP on
-  host loopback; `db` loopback. Compose and `.env` live at the repo root.
+- Spec 7 (`docs/superpowers/specs/2026-11-18-self-hosted-split-design.md`): the server runs
+  the back end only. `caddy` owns TLS and proxies everything to `api` (WebSockets too); `api` is
+  plain HTTP on host loopback for the voice client; `db` loopback. The panel is not served
+  there. Compose and `.env` live at the repo root.
 - Loopback by default; LAN exposure only as described in **Safety and security**.
 - Config from env (`BYTE_` prefix, **including provider keys**). Settings are
   validated at boot in the FastAPI lifespan; a bad config fails fast.
