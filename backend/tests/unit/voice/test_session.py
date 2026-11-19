@@ -10,6 +10,7 @@ import pytest
 from tests.fakes.clock import FakeClock
 from tests.fakes.logger import RecordingLogger
 from tests.fakes.voice import FakeDetector, FakeSocket, FakeSpeaker
+from voice.notifications import WAKE_CHIME
 from voice.session import SessionConfig, VoiceSession, upsample_16k_to_24k
 
 if TYPE_CHECKING:
@@ -114,6 +115,26 @@ async def test_buffer_keeps_only_the_latest_frames() -> None:
     assert [middle(c) for c in rig.socket.audio()] == pytest.approx([300, 400], rel=0.05)
 
 
+async def test_wake_plays_a_chime() -> None:
+    rig = Rig()
+    await rig.wake()
+    assert rig.speaker.played == [WAKE_CHIME]
+
+
+async def test_the_chime_never_reaches_the_model() -> None:
+    rig = Rig(SessionConfig(echo_tail_seconds=0.3))
+    await rig.wake()
+    rig.speaker.is_busy = True
+    await rig.session.on_frame(tone(100))  # the mic hears the chime
+    rig.speaker.is_busy = False
+    await rig.session.on_frame(tone(200))  # its echo tail
+    rig.clock.advance(0.31)
+    await rig.session.on_frame(tone(300))  # the owner
+    rig.socket.push({"type": "ready"})
+    await settle()
+    assert [middle(c) for c in rig.socket.audio()] == pytest.approx([300], rel=0.05)
+
+
 async def test_second_wake_while_connecting_is_ignored() -> None:
     rig = Rig()
     await rig.wake()
@@ -129,7 +150,7 @@ async def test_binary_before_ready_is_not_played() -> None:
     await rig.wake()
     rig.socket.push(b"\x01\x02")
     await settle()
-    assert rig.speaker.played == []
+    assert rig.speaker.played == [WAKE_CHIME]
 
 
 async def test_live_frames_are_upsampled_and_sent() -> None:
@@ -152,7 +173,7 @@ async def test_server_audio_is_played() -> None:
     await rig.go_live()
     rig.socket.push(b"\x01\x00" * 10)
     await settle()
-    assert rig.speaker.played == [b"\x01\x00" * 10]
+    assert rig.speaker.played == [WAKE_CHIME, b"\x01\x00" * 10]
 
 
 async def test_mic_is_muted_while_speaking_and_for_the_echo_tail() -> None:

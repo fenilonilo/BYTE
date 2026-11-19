@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Literal, Protocol, cast
 import numpy as np
 from scipy.signal import resample_poly
 
+from voice.notifications import WAKE_CHIME
+
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -110,6 +112,8 @@ class VoiceSession:
             else:
                 self._open_link()
         elif self._state == "connecting":
+            if self._muted():  # the wake chime must not reach the model
+                return
             self._buffer.append(frame)
         else:
             await self._relay(frame)
@@ -118,6 +122,7 @@ class VoiceSession:
         self._state = "connecting"
         self._buffer.clear()
         self._log.info("voice.wake")
+        self._speaker.play(WAKE_CHIME)
         self._link = asyncio.create_task(self._serve())
 
     async def _serve(self) -> None:
@@ -176,12 +181,8 @@ class VoiceSession:
 
     async def _relay(self, frame: bytes) -> None:
         now = self._clock()
-        if self._speaker.busy():
+        if self._muted():
             # ponytail: half-duplex, no barge-in; upgrade to AEC or a headset with hardware AEC
-            self._unmute_at = now + self._cfg.echo_tail_seconds
-            self._last_activity = now
-            return
-        if now < self._unmute_at:
             return
         # ponytail: no local VAD, so a user utterance that starts after a turn and runs past
         # idle_seconds is cut; raise BYTE_VOICE_IDLE_SECONDS or add an energy VAD if that bites
@@ -194,6 +195,15 @@ class VoiceSession:
             return
         with contextlib.suppress(Exception):  # the receive loop sees a dead socket and ends us
             await self._send(upsample_16k_to_24k(frame))
+
+    def _muted(self) -> bool:
+        """True while our own speaker plays, and for the echo tail after it."""
+        now = self._clock()
+        if self._speaker.busy():
+            self._unmute_at = now + self._cfg.echo_tail_seconds
+            self._last_activity = now
+            return True
+        return now < self._unmute_at
 
     async def _send(self, message: str | bytes) -> None:
         assert self._ws is not None

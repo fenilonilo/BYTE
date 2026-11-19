@@ -36,6 +36,8 @@ def _silence(seconds: float) -> bytes:
 
 CHIME = _tone(660, 0.15) + _tone(880, 0.2) + _silence(0.2)
 BEEPS = (_tone(880, 0.2) + _silence(0.1)) * 3 + _silence(0.3)
+# "Ei Byte" heard: short and rising, so the owner knows to speak
+WAKE_CHIME = _tone(880, 0.08) + _tone(1320, 0.1)
 
 
 class Notifier:
