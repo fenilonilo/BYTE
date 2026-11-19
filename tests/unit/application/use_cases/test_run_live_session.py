@@ -377,3 +377,34 @@ async def test_instructions_name_the_projects() -> None:
     assert world.adapter.opened_with is not None
     assert "Projetos: FinFlow." in world.adapter.opened_with[0]
     await finish(world, task)
+
+
+@pytest.mark.unit
+async def test_speech_while_the_reply_still_plays_interrupts_the_client() -> None:
+    world = LiveWorld()
+    task = await start_and_wait_ready(world)
+
+    # the provider finished generating, but a second of audio is still playing on the client
+    world.session.push(
+        ResponseStarted(),
+        AssistantAudio(data=bytes(48000), item_id="a1"),
+        ResponseDone(),
+        UserSpeechStarted("u1"),
+    )
+    await eventually(lambda: bool(world.transport.sent("interrupt")))
+    await finish(world, task)
+
+
+@pytest.mark.unit
+async def test_speech_after_the_reply_played_does_not_interrupt() -> None:
+    world = LiveWorld()
+    task = await start_and_wait_ready(world)
+
+    world.session.push(ResponseStarted(), AssistantAudio(data=b"\x01\x02", item_id="a1"))
+    world.session.push(ResponseDone())
+    await eventually(lambda: bool(world.transport.sent("turn_done")))
+    await asyncio.sleep(0.01)
+    user_says(world, "e amanhã?")
+    await eventually(lambda: bool(world.transport.sent("transcript")))
+    assert not world.transport.sent("interrupt")
+    await finish(world, task)

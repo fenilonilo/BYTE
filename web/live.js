@@ -18,9 +18,10 @@ const CHIME_UP = [587.33, 880]; // D5 -> A5, rising: session open
 const CHIME_DOWN = [880, 587.33]; // falling: session closed
 const ECHO_TAIL_SECONDS = 0.3;
 const THINKING_MAX_SECONDS = 8;
-// ponytail: half-duplex like the laptop client (mic ignored while Byte talks, no barge-in);
-// set true once the browser's echo cancellation proves good enough on the owner's speakers.
-const BARGE_IN = false;
+// Full duplex: the mic keeps streaming while Byte talks (browser echo cancellation removes its
+// voice), so speaking over Byte stops it. Set false for half-duplex if the speakers leak echo
+// and Byte keeps cutting itself off.
+const BARGE_IN = true;
 // Calibration knobs for the local end-of-speech guess (only drives the "pensando" state).
 // Hysteresis: speech starts above ON and keeps going until the level drops below OFF.
 export const SPEECH_ON_RMS = 0.03;

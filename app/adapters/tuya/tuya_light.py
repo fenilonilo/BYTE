@@ -152,8 +152,15 @@ class TuyaLight(LightPort):
             raise UnknownLightDeviceError(f"unknown light: {name!r}") from None
 
     def _connect(self, device: TuyaLightDevice) -> Any:  # noqa: ANN401
+        # tinytuya's default (5 tries, 5 s apart) holds an offline lamp for ~50 s, and /state
+        # with it: the panel's sign-in waits on that reply.
         conn = tinytuya.Device(
-            device.device_id, device.address, device.local_key, version=device.version
+            device.device_id,
+            device.address,
+            device.local_key,
+            version=device.version,
+            connection_timeout=self._timeout,
+            connection_retry_limit=1,
         )
         conn.set_socketTimeout(self._timeout)
         return conn

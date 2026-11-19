@@ -23,7 +23,7 @@ from app.application.pending_actions import PendingActionStore
 from app.application.tool_runner import ToolRunner
 from app.application.tools.catalog import build_tool_registry
 from app.application.tools.music import KnownUris
-from app.domain.exceptions import MusicError, MusicOfflineError
+from app.domain.exceptions import LightError, MusicError, MusicOfflineError
 from app.domain.reminders import calendar_warnings
 from app.domain.world import CalendarEvent
 from tests.fakes.clock import FakeClock
@@ -56,6 +56,11 @@ class OfflineMusic(InMemoryMusic):
 
     async def select_device(self, name: str) -> None:
         raise MusicOfflineError("BatCaverna está offline no Spotify. Abra o Spotify nele.")
+
+
+class OfflineLight(InMemoryLight):
+    async def get_state(self, device: str) -> LightState:
+        raise LightError("lampada fora da rede")
 
 
 class SlowLight(InMemoryLight):
@@ -367,6 +372,18 @@ def test_state_isolates_a_failing_section() -> None:
     assert body["music"] is None
     assert body["errors"] == ["music"]
     assert body["lights"]
+
+
+@pytest.mark.unit
+def test_an_offline_device_is_listed_as_unavailable() -> None:
+    panel = Panel(light=OfflineLight())
+    body = panel.get("/state").json()
+    assert [(x["name"], x["available"], x["power"]) for x in body["lights"]] == [
+        ("lampada", False, False)
+    ]
+    assert body["climates"][0]["available"] is True
+    assert body["errors"] == []
+    assert panel.get("/lights").json()["lights"][0]["available"] is False
 
 
 @pytest.mark.unit

@@ -281,6 +281,13 @@ docker compose up --build
 8. **No singletons** except through `lru_cache` in `api/deps.py`.
 9. **No new abstraction without a second concrete implementation in sight.**
 10. **Audio bytes are opaque** below the API layer: relayed, never interpreted.
+11. **Resilient to every unavailable integration.** A device, vendor, database or model
+    that is off, unreachable or slow (owner away, lamp unplugged, Postgres down, API out)
+    must never stop the app from booting, block a request, or break another feature. Every
+    vendor call has a short bounded timeout (no long retry loops); the failure stays inside
+    its own device or section (the panel shows the device greyed as unavailable, a tool
+    reports it to the model, the background loop logs and retries later); sections and
+    devices are read concurrently so one timeout is not added to the others.
 
 ## Testing
 
@@ -382,5 +389,6 @@ Run `ruff check`, `pyright`, `pytest`. Three green = ship. Read
 - Logging tool arguments, transcripts or content; `print()` or naked `logging`.
 - Exposing the service on a network without the token and TLS.
 - A test that mocks the system under test, or reaches a real vendor by default.
+- One unavailable integration stalling or erroring the boot, the panel, chat or another tool.
 - Function > 50 lines, or a class with > 5 public methods, without
   justification.

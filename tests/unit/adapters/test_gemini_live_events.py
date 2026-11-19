@@ -37,16 +37,41 @@ TURN_COMPLETE = content(turn_complete=True)
 
 
 @pytest.mark.unit
-def test_user_transcript_is_joined_and_released_when_the_model_answers() -> None:
+def test_user_transcript_is_joined_and_released_when_the_turn_ends() -> None:
     m = GeminiEventMapper()
     assert m.map(heard("liga a ")) == [UserSpeechStarted(item_id="user-1")]
     assert m.map(heard("luz")) == []
     assert m.map(audio(b"\x01\x02")) == [
-        UserTranscript(item_id="user-1", text="liga a luz"),
         ResponseStarted(),
         AssistantAudio(data=b"\x01\x02", item_id="turn-1"),
     ]
     assert m.map(audio(b"\x03")) == [AssistantAudio(data=b"\x03", item_id="turn-1")]
+    assert m.map(TURN_COMPLETE) == [
+        UserTranscript(item_id="user-1", text="liga a luz"),
+        ResponseDone(),
+    ]
+
+
+@pytest.mark.unit
+def test_a_late_transcript_during_the_answer_is_not_new_speech() -> None:
+    # Gemini sends input transcription independently: it often lands after the answer started
+    m = GeminiEventMapper()
+    m.map(heard("liga a"))
+    m.map(audio(b"\x01"))
+    assert m.map(heard(" luz")) == []
+    assert m.map(audio(b"\x02")) == [AssistantAudio(data=b"\x02", item_id="turn-1")]
+    assert m.map(TURN_COMPLETE) == [
+        UserTranscript(item_id="user-1", text="liga a luz"),
+        ResponseDone(),
+    ]
+
+
+@pytest.mark.unit
+def test_a_late_transcript_while_a_tool_runs_is_released_at_once() -> None:
+    m = GeminiEventMapper()
+    m.map(heard("si"))
+    m.map(types.LiveServerMessage(tool_call=types.LiveServerToolCall(function_calls=[])))
+    assert m.map(heard("m")) == [UserTranscript(item_id="user-1", text="m")]
 
 
 @pytest.mark.unit
