@@ -1,48 +1,55 @@
-// The agent orb: '0' and '1' glyphs on a rotating Fibonacci sphere, drawn with Canvas 2D.
+// The agent orb: a holographic core (frontend/nova_interface). Particle rings orbit a glowing
+// sphere over a pulsing platform, with a waveform below. Canvas 2D, additive light.
 
-// Every parameter eases toward the target state, including `listen` / `talk` (how much the mic
-// swell and the speaking rings apply) and `breath` (breathing rate), so no state change snaps.
+// Every parameter eases toward the target state, so no state change snaps. `orbit` scales the
+// particle speed, `spin` the ring precession, `listen` / `talk` how much the mic or voice level
+// drives the core and the waveform.
 const STATES = {
-  idle:      { spin: 0.14, radius: 1.0,  flip: 0.04, jitter: 0.0,  pulse: 0.012, bright: 0.85, listen: 0, talk: 0, breath: 1.1 },
-  listening: { spin: 0.22, radius: 0.86, flip: 0.10, jitter: 0.0,  pulse: 0.045, bright: 1.0,  listen: 1, talk: 0, breath: 4.2 },
-  thinking:  { spin: 0.95, radius: 0.97, flip: 2.60, jitter: 0.03, pulse: 0.0,   bright: 0.95, listen: 0, talk: 0, breath: 1.1 },
-  speaking:  { spin: 0.30, radius: 1.0,  flip: 0.30, jitter: 0.0,  pulse: 0.0,   bright: 1.0,  listen: 0, talk: 1, breath: 1.1 },
+  idle:      { orbit: 1.0, spin: 1.0, wave: 0.45, bright: 0.85, listen: 0, talk: 0 },
+  listening: { orbit: 1.2, spin: 1.0, wave: 0.6,  bright: 1.0,  listen: 1, talk: 0 },
+  thinking:  { orbit: 3.2, spin: 5.0, wave: 0.3,  bright: 1.0,  listen: 0, talk: 0 },
+  speaking:  { orbit: 1.4, spin: 1.6, wave: 0.5,  bright: 1.0,  listen: 0, talk: 1 },
 };
 const EASE_RATE = 3.5; // per second; higher snaps faster
 const EASE_RATE_IDLE = 1.6; // settling back to rest is slower, so a session end reads as calm
 const PARAMS = Object.keys(STATES.idle);
-const GOLDEN = Math.PI * (3 - Math.sqrt(5));
-const SPRITE_PX = 48;
-const PERSPECTIVE = 3.2;
+const TICKS = 60; // the reference animation steps per frame at 60 fps; we step per second
+const TRAIL = 0.35; // share of the last frame erased each frame: lower = longer trails
+const HUE_CYAN = 195, HUE_VIOLET = 275;
 
-function sprite(char, color, font) {
-  const c = document.createElement('canvas');
-  c.width = c.height = SPRITE_PX;
-  const g = c.getContext('2d');
-  g.fillStyle = color;
-  g.font = `500 ${SPRITE_PX * 0.78}px ${font}`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(char, SPRITE_PX / 2, SPRITE_PX / 2 + SPRITE_PX * 0.04);
-  return c;
+function makeRings() {
+  return Array.from({ length: 7 }, (_, i) => ({
+    r: 0.18 + i * 0.045 + Math.random() * 0.04,
+    tiltX: 0.25 + Math.random() * 0.45,
+    rz: Math.random() * Math.PI,
+    spin: (Math.random() - 0.5) * 0.004,
+    hue: Math.random() < 0.5 ? HUE_CYAN : HUE_VIOLET,
+  }));
 }
 
-function fibonacci(n) {
-  const pts = [];
-  for (let i = 0; i < n; i++) {
-    // A little jitter breaks the visible spiral stripes of a perfect Fibonacci lattice.
-    const y = Math.max(-1, Math.min(1, 1 - (i / (n - 1)) * 2 + (Math.random() - 0.5) * 0.6 / n));
-    const r = Math.sqrt(1 - y * y);
-    const th = i * GOLDEN + (Math.random() - 0.5) * 0.35;
-    pts.push({
-      x: Math.cos(th) * r, y, z: Math.sin(th) * r,
-      bit: Math.random() < 0.5 ? 0 : 1,
-      flash: 0,
-      seed: Math.random() * Math.PI * 2,
-    });
-  }
-  return pts;
+function makeParticles(n, rings) {
+  return Array.from({ length: n }, () => {
+    const ring = rings[(Math.random() * rings.length) | 0];
+    const off = (Math.random() + Math.random() + Math.random() - 1.5) * 0.018;
+    return {
+      ring, off,
+      a: Math.random() * Math.PI * 2,
+      s: 0.002 + Math.random() * 0.006,
+      size: Math.random() * 1.3 + 0.4,
+      color: `hsl(${Math.round(ring.hue + off * 300)},100%,70%)`,
+    };
+  });
 }
+
+function makeCore(n) {
+  return Array.from({ length: n }, () => {
+    const u = Math.random() * 2 - 1, t = Math.random() * Math.PI * 2, q = Math.sqrt(1 - u * u);
+    return { x: q * Math.cos(t), y: u, z: q * Math.sin(t), r: 0.08 + Math.random() * 0.1 };
+  });
+}
+
+// The core's hue follows depth (200 + z * 60); 21 buckets avoid a colour string per point.
+const CORE_COLORS = Array.from({ length: 21 }, (_, i) => `hsl(${200 + (i / 10 - 1) * 60},100%,72%)`);
 
 /** Mount the orb on `canvas`. Returns { setState(name), setLevel(0..1) }. */
 export function createSphere(canvas) {
@@ -50,41 +57,21 @@ export function createSphere(canvas) {
   const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
   let reduced = motionQuery.matches;
 
+  // ponytail: particle count fixed by screen size at mount; tune here if a phone stutters.
   const small = Math.min(innerWidth, innerHeight) < 600;
-  const pts = fibonacci(small ? 240 : 720);
-  const order = pts.map((_, i) => i);
-  const depth = new Float32Array(pts.length);
-  const sx = new Float32Array(pts.length);
-  const sy = new Float32Array(pts.length);
-  const ss = new Float32Array(pts.length);
-  const wave = new Float32Array(pts.length);
-  const lit = new Float32Array(pts.length);
-  const front = new Uint8Array(pts.length);
+  const rings = makeRings();
+  const parts = makeParticles(small ? 2500 : 7000, rings);
+  const core = makeCore(small ? 600 : 1500);
 
   const cur = { ...STATES.idle };
   let target = STATES.idle;
   let stateName = 'idle';
   let level = 0;
   let levelSmooth = 0;
-  let angle = 0;
-  let wavePhase = 0;
-  let breathPhase = 0;
-  let tiltX = 0, tiltY = 0, aimX = 0, aimY = 0;
+  let T = 0; // reference ticks elapsed
   let W = 0, H = 0, dpr = 1;
-  let sprites = null;
   let raf = 0;
   let last = performance.now();
-
-  function buildSprites() {
-    const css = getComputedStyle(document.documentElement);
-    const fg = css.getPropertyValue('--fg').trim() || '#e9e3d7';
-    const accent = css.getPropertyValue('--accent').trim() || '#e2a24a';
-    const font = css.getPropertyValue('--mono').trim() || 'monospace';
-    sprites = {
-      fg: [sprite('0', fg, font), sprite('1', fg, font)],
-      accent: [sprite('0', accent, font), sprite('1', accent, font)],
-    };
-  }
 
   function fit() {
     const r = canvas.getBoundingClientRect();
@@ -96,88 +83,114 @@ export function createSphere(canvas) {
     // A hidden canvas (display:none collapses it to 0x0) gets no frames at all.
     if (!W || !H) return stop();
     start();
-    if (reduced) draw(performance.now() / 1000, 0);
+    if (reduced) draw();
   }
 
-  function step(t, dt) {
+  function step(dt) {
     const k = Math.min(1, dt * (stateName === 'idle' ? EASE_RATE_IDLE : EASE_RATE));
     for (const p of PARAMS) cur[p] += (target[p] - cur[p]) * k;
     levelSmooth += (level - levelSmooth) * Math.min(1, dt * (level > levelSmooth ? 18 : 6));
 
-    const motion = reduced ? 0.15 : 1;
-    angle += dt * cur.spin * motion;
-    breathPhase += dt * cur.breath; // integrated, so a rate change never jumps the phase
-    wavePhase += dt * (5 + levelSmooth * 7) * motion;
-    tiltX += ((reduced ? 0 : aimX) - tiltX) * Math.min(1, dt * 2.5);
-    tiltY += ((reduced ? 0 : aimY) - tiltY) * Math.min(1, dt * 2.5);
+    const ticks = dt * TICKS * (reduced ? 0.15 : 1);
+    T += ticks;
+    for (const ring of rings) ring.rz += ring.spin * cur.spin * ticks;
+    const orbit = cur.orbit * ticks;
+    for (const p of parts) p.a += p.s * orbit;
+  }
 
-    const flipChance = cur.flip * dt * (reduced ? 0.1 : 1);
-    for (const p of pts) {
-      if (Math.random() < flipChance) { p.bit ^= 1; p.flash = 1; }
-      p.flash *= Math.pow(0.02, dt);
+  function project(x, y, z, ring) {
+    const c1 = Math.cos(ring.tiltX), s1 = Math.sin(ring.tiltX);
+    let y2 = y * c1 - z * s1;
+    const z2 = y * s1 + z * c1;
+    const c2 = Math.cos(ring.rz), s2 = Math.sin(ring.rz);
+    const x3 = x * c2 - y2 * s2;
+    y2 = x * s2 + y2 * c2;
+    return [x3, y2, z2];
+  }
+
+  function drawPlatform(cx, S) {
+    for (let i = 0; i < 7; i++) {
+      const pulse = i === 0 ? 0 : ((T * 0.004 + i / 6) % 1);
+      const rx = S * (0.11 + pulse * 0.45), ry = S * (0.02 + pulse * 0.07);
+      const n = Math.floor(rx * 2.2);
+      ctx.globalAlpha = (i === 0 ? 0.9 : (1 - pulse) * 0.7) * cur.bright;
+      ctx.fillStyle = `hsl(${195 + i * 12},100%,${i === 0 ? 80 : 65}%)`;
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + T * 0.003 * (i % 2 ? 1 : -1);
+        const j = Math.abs((Math.sin(k * 12.9898 + i) * 43758.5453) % 1) * 3;
+        ctx.fillRect(cx + Math.cos(a) * (rx + j), H * 0.8 + Math.sin(a) * (ry + j * 0.3), 1.6, 1.6);
+      }
     }
   }
 
-  function draw(t) {
-    if (!W || !sprites) return;
-    ctx.clearRect(0, 0, W, H);
-    const cx = W / 2, cy = H / 2;
-    // 0.40 leaves room for the speaking bulge, jitter and perspective without clipping.
-    const R = Math.min(W, H) * 0.40;
-    const speak = cur.talk * (0.2 + levelSmooth * 0.8);
-    // While listening the orb swells with the microphone level.
-    const breathe = 1 + Math.sin(breathPhase) * cur.pulse + cur.listen * levelSmooth * 0.14;
-    const rotY = angle + tiltY;
-    const rotX = 0.32 + tiltX;
-    const cY = Math.cos(rotY), sY = Math.sin(rotY), cX = Math.cos(rotX), sX = Math.sin(rotX);
-    const glyphBase = Math.max(5, R * 0.062);
-    // 6px on a full-size orb; a small orb (gate, phones) keeps more of its rim.
-    const minGlyph = small ? Math.max(Math.min(6, glyphBase * 0.8), glyphBase * 0.55) : Math.min(6, glyphBase * 0.8);
-
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i];
-      const x = p.x * cY + p.z * sY;
-      const z = -p.x * sY + p.z * cY;
-      const y2 = p.y * cX - z * sX;
-      const z2 = p.y * sX + z * cX;
-      // Rings around the view axis read as a wave radiating from the centre of the orb.
-      wave[i] = speak ? speak * Math.pow(Math.max(0, Math.sin(Math.acos(Math.min(1, Math.max(-1, z2))) * 3 - wavePhase)), 6) : 0;
-      let d = cur.radius * breathe + wave[i] * 0.08;
-      if (cur.jitter) d += Math.sin(t * 9 + p.seed * 7) * cur.jitter;
-      const f = PERSPECTIVE / (PERSPECTIVE - z2 * d);
-      sx[i] = cx + x * R * d * f;
-      sy[i] = cy + y2 * R * d * f;
-      depth[i] = (z2 + 1) / 2;
-      // Key light from the upper left gives the ball volume.
-      lit[i] = 0.35 + 0.65 * Math.max(0, -0.4 * x - 0.5 * y2 + 0.77 * z2);
-      front[i] = z2 >= 0 ? 1 : 0;
-      ss[i] = glyphBase * (0.45 + depth[i] * 0.85) * f;
+  function drawRings(cx, cy, S) {
+    for (const p of parts) {
+      const r = p.ring.r + p.off;
+      const [x, y, z] = project(Math.cos(p.a) * r, p.off * 0.5, Math.sin(p.a) * r, p.ring);
+      ctx.globalAlpha = Math.max(0.1, Math.min(1, 0.35 + (z + 0.4) * 0.9)) * cur.bright;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(cx + x * S, cy + y * S, p.size, p.size);
     }
-    order.sort((a, b) => depth[a] - depth[b]);
+  }
 
-    for (const i of order) {
-      const p = pts[i];
-      const dz = depth[i];
-      if (ss[i] < minGlyph) continue; // rim glyphs this small only add mush
-      const s = front[i] ? ss[i] : ss[i] * 0.8;
-      let alpha = (0.06 + Math.pow(dz, 1.6) * 0.9) * cur.bright * lit[i];
-      if (!front[i]) alpha = Math.min(alpha * 0.35, 0.14);
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(sprites.fg[p.bit], sx[i] - s / 2, sy[i] - s / 2, s, s);
-      const hot = Math.max(p.flash, wave[i] * 1.4);
-      if (hot > 0.05) {
-        ctx.globalAlpha = Math.min(1, hot) * alpha;
-        ctx.drawImage(sprites.accent[p.bit], sx[i] - s / 2, sy[i] - s / 2, s, s);
-      }
+  function drawCore(cx, cy, S, drive) {
+    const rot = T * 0.006;
+    const c = Math.cos(rot), s = Math.sin(rot);
+    const swell = 1 + Math.sin(T * 0.03) * 0.05 + drive * 0.25;
+    for (const q of core) {
+      const x = q.x * c - q.z * s, z = q.x * s + q.z * c;
+      const k = q.r * swell * S;
+      ctx.globalAlpha = (0.25 + (z + 1) * 0.3) * cur.bright;
+      ctx.fillStyle = CORE_COLORS[Math.round((z + 1) * 10)];
+      ctx.fillRect(cx + x * k, cy + q.y * k, 1.4, 1.4);
     }
+    const R = S * 0.12 * (1 + drive * 0.3);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0, `hsla(200,100%,75%,${0.35 + drive * 0.3})`);
+    g.addColorStop(1, 'hsla(260,100%,50%,0)');
     ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function drawWave(cx, S, drive) {
+    const step = S * 0.0067, amp0 = S * 0.024, base = S * 0.0022;
+    const gain = cur.wave + drive * 1.4;
+    ctx.globalAlpha = 0.8;
+    for (let i = -60; i <= 60; i++) {
+      if (Math.abs(i) < 6) continue;
+      const env = Math.exp(-((Math.abs(i) - 25) ** 2) / 200);
+      const amp = (Math.sin(i * 0.4 + T * 0.15) * 0.5 + 0.5) * env * amp0 * gain + base;
+      ctx.fillStyle = `hsl(${200 + Math.abs(i)},100%,65%)`;
+      ctx.fillRect(cx + i * step, H * 0.905 - amp / 2, Math.max(1, step / 3), amp);
+    }
+  }
+
+  function draw() {
+    if (!W) return;
+    // Fade the last frame toward transparent, not toward a colour, so the page glow shows through.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = `rgba(0,0,0,${reduced ? 1 : TRAIL})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+
+    const cx = W / 2, cy = H * 0.47, S = Math.min(W * 1.1, H * 1.5) * 0.8;
+    // The mic level drives the core while listening; the voice level while speaking.
+    const drive = levelSmooth * (cur.listen + cur.talk);
+    drawPlatform(cx, S);
+    drawRings(cx, cy, S);
+    drawCore(cx, cy, S, drive);
+    drawWave(cx, S, drive);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    step(now / 1000, dt);
-    draw(now / 1000);
+    step(dt);
+    draw();
     raf = requestAnimationFrame(frame);
   }
 
@@ -188,16 +201,10 @@ export function createSphere(canvas) {
   }
   function stop() { cancelAnimationFrame(raf); raf = 0; }
 
-  addEventListener('pointermove', (e) => {
-    aimY = ((e.clientX / innerWidth) - 0.5) * 0.5;
-    aimX = ((e.clientY / innerHeight) - 0.5) * 0.35;
-  }, { passive: true });
   document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
   motionQuery.addEventListener('change', (e) => { reduced = e.matches; });
   new ResizeObserver(fit).observe(canvas);
 
-  buildSprites();
-  document.fonts?.ready.then(buildSprites);
   fit();
   start();
 

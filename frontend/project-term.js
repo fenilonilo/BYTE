@@ -15,11 +15,11 @@ export const clampBackoff = (ms) => Math.min(Math.max(ms * 2, 1000), 30_000);
 // The panel palette (style.css :root) mapped onto the 16 ANSI colours, so claude's output reads
 // as part of the panel instead of a stock VS Code terminal.
 const THEME = {
-  background: '#0d0c0a',
-  foreground: '#ebe5d9',
-  cursor: '#e3a548',
-  cursorAccent: '#0d0c0a',
-  selectionBackground: 'rgba(227, 165, 72, 0.28)',
+  background: '#030817',
+  foreground: '#d0eaf3',
+  cursor: '#00ddf9',
+  cursorAccent: '#030817',
+  selectionBackground: 'rgba(0, 221, 249, 0.28)',
   black: '#23201b',
   red: '#e2826a',
   green: '#9cc3a2',

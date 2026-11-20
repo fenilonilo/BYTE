@@ -215,6 +215,7 @@ function showPending(summary, host, { onConfirm, onCancel, before = null }) {
 
 function showPanelPending(summary, section, onDone) {
   const sec = section ? $(`#sec-${section}`) : $('#global-pending');
+  if (!section && $('#app').dataset.view === 'home') showView('apps'); // the strip lives in the drawer
   const node = showPending(summary, sec, {
     before: section ? $('.note', sec) : null,
     onConfirm: async () => {
@@ -981,7 +982,7 @@ function renderLynus() {
   $('#lynus-log').hidden = r.shown !== 'lynus';
   // The panel wears the name and colour of the agent on screen (style.css :root[data-persona]).
   const name = r.shown === 'lynus' ? 'Lynus' : 'Byte';
-  for (const el of [$('#brand-name'), $('#nav-core')]) el.textContent = name;
+  $('#brand-name').textContent = name;
   document.title = name;
   if (r.shown === 'lynus') document.documentElement.dataset.persona = 'lynus';
   else delete document.documentElement.dataset.persona;
@@ -1236,8 +1237,10 @@ function showProject(project) {
   $('#term-form').hidden = xterm;
   $('#term-clear').hidden = xterm;
   $('#term-xterm').hidden = !xterm;
-  $('#shell').toggleAttribute('data-project', xterm);
+  const opened = xterm && !$('#app').hasAttribute('data-project');
+  $('#app').toggleAttribute('data-project', xterm);
   $('#term-title').textContent = view.title;
+  if (opened) showView('memory', '#pane-term'); // a project opened by voice shows its claude
   if (xterm) projectTerm?.focus();
 }
 
@@ -1323,6 +1326,7 @@ function enter(initial) {
     tickMusic();
     tickAlerts();
     renderAgent();
+    renderActivity();
   };
   tick();
   timers.push(
@@ -1349,14 +1353,45 @@ function trackSections() {
   links.forEach((a) => io.observe($(a.hash)));
 }
 
-// Narrow screens show one pane; the others stay mounted (voice and timers keep running).
-function showPane(name) {
-  $('#shell').dataset.pane = name;
-  document.querySelectorAll('#panes-nav button').forEach((b) => {
-    if (b.dataset.pane === name) b.setAttribute('aria-current', 'page');
-    else b.removeAttribute('aria-current');
+// The side nav opens one drawer filtered to a view; "home" closes it. Panes stay mounted (voice
+// and timers keep running).
+const VIEW_TITLE = { devices: 'Dispositivos', apps: 'Aplicativos', memory: 'Memória', settings: 'Configurações' };
+function showView(name, target = null) {
+  const app = $('#app');
+  const changed = app.dataset.view !== name;
+  app.dataset.view = name;
+  $('#drawer-title').textContent = VIEW_TITLE[name] || '';
+  document.querySelectorAll('#holo-nav a').forEach((a) => {
+    if (a.dataset.view === name) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
   });
-  if (name === 'term' && matchMedia('(pointer: fine)').matches) $('#term-input').focus({ preventScroll: true });
+  if (name === 'home') return;
+  if (target) $(target)?.scrollIntoView({ block: 'start' });
+  else if (changed) $('#pane-fn').scrollTop = 0;
+  if (name === 'memory' && matchMedia('(pointer: fine)').matches) $('#term-input').focus({ preventScroll: true });
+}
+
+// The Atividades panel: one line per area, read from the state the sections already hold.
+function renderActivity() {
+  const set = (id, text) => { const el = $(`#${id} small`); if (el.textContent !== text) el.textContent = text; };
+  const m = state.music;
+  set('act-music', m === null ? 'indisponível' : !m ? '—' : m.item ? `${m.playing ? 'Tocando' : 'Pausado'} · ${m.item.name}` : 'Nada tocando');
+  $('#act-music').classList.toggle('playing', Boolean(m?.playing));
+  const lights = state.lights || [];
+  const acs = state.climates || [];
+  const away = [...lights, ...acs].filter((x) => x.available === false).length;
+  const lit = lights.filter((l) => l.power && l.available !== false).length;
+  const cool = acs.filter((c) => c.power && c.available !== false).length;
+  const home = [
+    lights.length && `${lit} de ${lights.length} luz${lights.length > 1 ? 'es' : ''} acesa${lit === 1 ? '' : 's'}`,
+    acs.length && `ar ${cool ? 'ligado' : 'desligado'}`,
+    away && `${away} indisponível`,
+  ].filter(Boolean).join(' · ');
+  set('act-home', state.lights || state.climates ? home || 'nenhum aparelho' : '—');
+  const total = $('#finance-total').textContent;
+  set('act-finance', total === '—' ? '—' : `Total do mês ${total}`);
+  const now = state.weather?.home_now;
+  set('act-weather', now ? `${deg(now.temperature)} · ${now.raining ? 'chovendo' : CONDITION_WORD[now.condition]}${homeCity ? ` em ${homeCity}` : ''}` : '—');
 }
 
 // Connect devices come and go (a Chromecast sleeps), so the list reloads whenever Música comes
@@ -1375,9 +1410,18 @@ function wire() {
   $('#gate-form').addEventListener('submit', signIn);
   $('#logout').addEventListener('click', () => signOut());
 
-  document.querySelectorAll('#panes-nav button').forEach((b) => b.addEventListener('click', () => showPane(b.dataset.pane)));
-  $('#next-alert').addEventListener('click', () => showPane('fn'));
-  document.querySelectorAll('.index a').forEach((a) => a.addEventListener('click', () => showPane('fn')));
+  document.querySelectorAll('#holo-nav a').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const view = a.dataset.view;
+    showView($('#app').dataset.view === view ? 'home' : view); // the open item closes it again
+  }));
+  document.querySelectorAll('.holo-act [data-go]').forEach((b) => b.addEventListener('click', () => showView(b.dataset.go, b.dataset.sec)));
+  $('#next-alert').addEventListener('click', () => showView('apps'));
+  $('#wx-chip').addEventListener('click', () => showView('apps'));
+  $('#drawer-close').addEventListener('click', () => showView('home'));
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $('#app').dataset.view !== 'home' && !e.target.closest('.term-xterm')) showView('home');
+  });
   $('#term-clear').addEventListener('click', () => term.clear());
   $('#new-conv').addEventListener('click', newConversation);
   $('#alert-form').addEventListener('submit', submitAlert);

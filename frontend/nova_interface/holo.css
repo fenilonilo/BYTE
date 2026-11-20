@@ -1,0 +1,47 @@
+/* Estilos da interface IAGO — extraídos de src/styles.css do projeto Lovable "Web Animation Studio".
+   Fontes: Orbitron + Exo 2 (Google Fonts) — carregue com <link> no <head>. */
+
+:root {
+  --holo-bg: oklch(0.08 0.03 265);
+  --holo-cyan: oklch(0.82 0.15 210);
+  --holo-violet: oklch(0.62 0.24 295);
+  --holo-panel: oklch(0.14 0.04 250 / 0.55);
+  --holo-line: oklch(0.82 0.15 210 / 0.35);
+  --holo-text: oklch(0.92 0.03 220);
+  --holo-dim: oklch(0.7 0.04 230);
+  --font-display: "Orbitron", sans-serif;
+  --font-body: "Exo 2", sans-serif;
+}
+.holo { position: fixed; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 55%, oklch(0.16 0.06 260), var(--holo-bg) 70%); color: var(--holo-text); font-family: var(--font-body); }
+.holo canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.holo-panel { position: absolute; background: var(--holo-panel); border: 1px solid var(--holo-line); backdrop-filter: blur(8px); clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px); box-shadow: inset 0 0 30px oklch(0.82 0.15 210 / 0.08); }
+.holo-brand { top: 3%; left: 2.5%; padding: 18px 40px; }
+.holo-brand h1 { font-family: var(--font-display); letter-spacing: .6em; font-size: 1.8rem; font-weight: 400; border-left: 2px solid var(--holo-cyan); padding-left: 18px; }
+.holo-brand p { font-size: .6rem; letter-spacing: .55em; color: var(--holo-dim); padding-left: 20px; margin-top: 4px; }
+.holo-online { top: 3%; right: 2.5%; padding: 12px 34px; display: flex; gap: 10px; align-items: center; color: var(--holo-cyan); font-family: var(--font-display); font-size: .85rem; letter-spacing: .1em; }
+.holo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--holo-cyan); box-shadow: 0 0 12px var(--holo-cyan); animation: holo-pulse 1.6s infinite; }
+.holo-nav { top: 31%; left: 2%; width: 210px; padding: 8px 0; }
+.holo-nav a { display: flex; gap: 14px; align-items: center; padding: 13px 22px; font-size: .9rem; color: var(--holo-dim); cursor: pointer; transition: all .3s; border-left: 3px solid transparent; }
+.holo-nav a:hover, .holo-nav a.active { color: var(--holo-cyan); border-left-color: var(--holo-cyan); background: linear-gradient(90deg, oklch(0.82 0.15 210 / .18), transparent); }
+.holo-act { top: 33%; right: 2.5%; width: 260px; padding: 16px 22px; }
+.holo-act h3 { color: var(--holo-cyan); font-size: .9rem; margin-bottom: 10px; display: flex; gap: 10px; }
+.holo-act li { list-style: none; display: flex; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid oklch(0.82 0.15 210 / .1); font-size: .85rem; }
+.holo-act li small { display: block; color: var(--holo-dim); font-size: .7rem; }
+.holo-act svg { color: var(--holo-cyan); }
+.holo-bars { margin-left: auto; display: flex; gap: 2px; align-items: flex-end; height: 16px; }
+.holo-bars i { width: 2px; background: var(--holo-cyan); animation: holo-eq 0.9s ease-in-out infinite alternate; }
+.holo-foot { position: absolute; bottom: 6%; left: 5%; font-size: .7rem; letter-spacing: .25em; color: var(--holo-dim); }
+.holo-mic { position: absolute; bottom: 5%; left: 50%; transform: translateX(-50%); text-align: center; font-size: .95rem; }
+.holo-mic-orb { width: 60px; height: 60px; margin: 0 auto 10px; border-radius: 50%; border: 3px solid var(--holo-cyan); box-shadow: 0 0 25px var(--holo-cyan), inset 0 0 20px var(--holo-violet); animation: holo-pulse 2s infinite; }
+.holo-stripes { position: absolute; bottom: 4%; right: 3%; display: flex; gap: 5px; }
+.holo-stripes i { width: 14px; height: 5px; transform: skewX(-30deg); background: linear-gradient(90deg, var(--holo-cyan), var(--holo-violet)); animation: holo-pulse 1.5s infinite; }
+@keyframes holo-pulse { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: .5; transform: scale(.92);} }
+.holo-mic-orb { animation-name: holo-orb; }
+@keyframes holo-orb { 0%,100% { box-shadow: 0 0 20px var(--holo-cyan), inset 0 0 15px var(--holo-violet);} 50% { box-shadow: 0 0 45px var(--holo-cyan), inset 0 0 30px var(--holo-violet);} }
+@keyframes holo-eq { from { height: 20%; } to { height: 100%; } }
+@media (max-width: 900px) { .holo-nav, .holo-act { display: none; } }
+@media (max-width: 640px) {
+  .holo-brand { padding: 12px 22px; } .holo-brand h1 { font-size: 1.1rem; } .holo-brand p { font-size: .5rem; letter-spacing: .3em; }
+  .holo-online { top: auto; bottom: 16%; right: 50%; transform: translateX(50%); padding: 8px 20px; font-size: .7rem; }
+  .holo-foot, .holo-stripes { display: none; }
+}

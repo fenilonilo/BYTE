@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IAGO — Núcleo Holográfico de IA</title>
+<meta name="description" content="Animação de núcleo holográfico futurista do assistente virtual IAGO." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600&family=Orbitron:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+/* reset mínimo (no Lovable vinha do Tailwind preflight) */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ul { list-style: none; }
+a { text-decoration: none; }
+svg { flex-shrink: 0; }
+
+/* Estilos da interface IAGO — extraídos de src/styles.css do projeto Lovable "Web Animation Studio".
+   Fontes: Orbitron + Exo 2 (Google Fonts) — carregue com <link> no <head>. */
+
+:root {
+  --holo-bg: oklch(0.08 0.03 265);
+  --holo-cyan: oklch(0.82 0.15 210);
+  --holo-violet: oklch(0.62 0.24 295);
+  --holo-panel: oklch(0.14 0.04 250 / 0.55);
+  --holo-line: oklch(0.82 0.15 210 / 0.35);
+  --holo-text: oklch(0.92 0.03 220);
+  --holo-dim: oklch(0.7 0.04 230);
+  --font-display: "Orbitron", sans-serif;
+  --font-body: "Exo 2", sans-serif;
+}
+.holo { position: fixed; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 55%, oklch(0.16 0.06 260), var(--holo-bg) 70%); color: var(--holo-text); font-family: var(--font-body); }
+.holo canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.holo-panel { position: absolute; background: var(--holo-panel); border: 1px solid var(--holo-line); backdrop-filter: blur(8px); clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px); box-shadow: inset 0 0 30px oklch(0.82 0.15 210 / 0.08); }
+.holo-brand { top: 3%; left: 2.5%; padding: 18px 40px; }
+.holo-brand h1 { font-family: var(--font-display); letter-spacing: .6em; font-size: 1.8rem; font-weight: 400; border-left: 2px solid var(--holo-cyan); padding-left: 18px; }
+.holo-brand p { font-size: .6rem; letter-spacing: .55em; color: var(--holo-dim); padding-left: 20px; margin-top: 4px; }
+.holo-online { top: 3%; right: 2.5%; padding: 12px 34px; display: flex; gap: 10px; align-items: center; color: var(--holo-cyan); font-family: var(--font-display); font-size: .85rem; letter-spacing: .1em; }
+.holo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--holo-cyan); box-shadow: 0 0 12px var(--holo-cyan); animation: holo-pulse 1.6s infinite; }
+.holo-nav { top: 31%; left: 2%; width: 210px; padding: 8px 0; }
+.holo-nav a { display: flex; gap: 14px; align-items: center; padding: 13px 22px; font-size: .9rem; color: var(--holo-dim); cursor: pointer; transition: all .3s; border-left: 3px solid transparent; }
+.holo-nav a:hover, .holo-nav a.active { color: var(--holo-cyan); border-left-color: var(--holo-cyan); background: linear-gradient(90deg, oklch(0.82 0.15 210 / .18), transparent); }
+.holo-act { top: 33%; right: 2.5%; width: 260px; padding: 16px 22px; }
+.holo-act h3 { color: var(--holo-cyan); font-size: .9rem; margin-bottom: 10px; display: flex; gap: 10px; }
+.holo-act li { list-style: none; display: flex; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid oklch(0.82 0.15 210 / .1); font-size: .85rem; }
+.holo-act li small { display: block; color: var(--holo-dim); font-size: .7rem; }
+.holo-act svg { color: var(--holo-cyan); }
+.holo-bars { margin-left: auto; display: flex; gap: 2px; align-items: flex-end; height: 16px; }
+.holo-bars i { width: 2px; background: var(--holo-cyan); animation: holo-eq 0.9s ease-in-out infinite alternate; }
+.holo-foot { position: absolute; bottom: 6%; left: 5%; font-size: .7rem; letter-spacing: .25em; color: var(--holo-dim); }
+.holo-mic { position: absolute; bottom: 5%; left: 50%; transform: translateX(-50%); text-align: center; font-size: .95rem; }
+.holo-mic-orb { width: 60px; height: 60px; margin: 0 auto 10px; border-radius: 50%; border: 3px solid var(--holo-cyan); box-shadow: 0 0 25px var(--holo-cyan), inset 0 0 20px var(--holo-violet); animation: holo-pulse 2s infinite; }
+.holo-stripes { position: absolute; bottom: 4%; right: 3%; display: flex; gap: 5px; }
+.holo-stripes i { width: 14px; height: 5px; transform: skewX(-30deg); background: linear-gradient(90deg, var(--holo-cyan), var(--holo-violet)); animation: holo-pulse 1.5s infinite; }
+@keyframes holo-pulse { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: .5; transform: scale(.92);} }
+.holo-mic-orb { animation-name: holo-orb; }
+@keyframes holo-orb { 0%,100% { box-shadow: 0 0 20px var(--holo-cyan), inset 0 0 15px var(--holo-violet);} 50% { box-shadow: 0 0 45px var(--holo-cyan), inset 0 0 30px var(--holo-violet);} }
+@keyframes holo-eq { from { height: 20%; } to { height: 100%; } }
+@media (max-width: 900px) { .holo-nav, .holo-act { display: none; } }
+@media (max-width: 640px) {
+  .holo-brand { padding: 12px 22px; } .holo-brand h1 { font-size: 1.1rem; } .holo-brand p { font-size: .5rem; letter-spacing: .3em; }
+  .holo-online { top: auto; bottom: 16%; right: 50%; transform: translateX(50%); padding: 8px 20px; font-size: .7rem; }
+  .holo-foot, .holo-stripes { display: none; }
+}
+
+</style>
+</head>
+<body>
+  <main class="holo">
+    <canvas id="holo-canvas"></canvas>
+    <div class="holo-panel holo-brand"><h1>IAGO</h1><p>ASSISTENTE VIRTUAL</p></div>
+    <div class="holo-panel holo-online"><span class="holo-dot"></span>ONLINE</div>
+    <nav class="holo-panel holo-nav">
+      <a class="active"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Início</a>
+      <a><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/></svg>Dispositivos</a>
+      <a><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>Aplicativos</a>
+      <a><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>Memória</a>
+      <a><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Configurações</a>
+    </nav>
+    <aside class="holo-panel holo-act">
+      <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Atividades</h3>
+      <ul>
+        <li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg><div>Spotify<small>Tocando agora</small></div><span class="holo-bars"><i style="animation-delay:0.00s"></i><i style="animation-delay:0.12s"></i><i style="animation-delay:0.24s"></i><i style="animation-delay:0.36s"></i><i style="animation-delay:0.48s"></i><i style="animation-delay:0.60s"></i></span></li>
+        <li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><div>Casa Inteligente<small>Tudo funcionando</small></div></li>
+        <li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><div>Análise de Dados<small>Processando...</small></div></li>
+        <li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><div>Navegação<small>Pronta para ajudar</small></div></li>
+      </ul>
+    </aside>
+    <div class="holo-foot">∿ Sempre ao seu lado</div>
+    <div class="holo-mic"><div class="holo-mic-orb"></div>Escutando...</div>
+    <div class="holo-stripes"><i style="animation-delay:0.0s"></i><i style="animation-delay:0.1s"></i><i style="animation-delay:0.2s"></i><i style="animation-delay:0.3s"></i><i style="animation-delay:0.4s"></i><i style="animation-delay:0.5s"></i><i style="animation-delay:0.6s"></i><i style="animation-delay:0.7s"></i></div>
+  </main>
+
+<script>
+(() => {
+    const c = document.getElementById("holo-canvas");
+    const ctx = c.getContext("2d");
+    let w = 0, h = 0, raf = 0;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const resize = () => { w = c.clientWidth; h = c.clientHeight; c.width = w * dpr; c.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+    resize(); window.addEventListener("resize", resize);
+
+    // orbit rings: each has tilt (rx), rotation (rz), radius
+    const rings = Array.from({ length: 7 }, (_, i) => ({
+      r: 0.18 + i * 0.045 + Math.random() * 0.04,
+      tiltX: 0.25 + Math.random() * 0.45,
+      rz: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * 0.004,
+      hue: Math.random() < 0.5 ? 195 : 275,
+    }));
+    const parts = Array.from({ length: 9000 }, () => {
+      const ring = rings[(Math.random() * rings.length) | 0];
+      return { ring, a: Math.random() * Math.PI * 2, s: 0.002 + Math.random() * 0.006, off: (Math.random() + Math.random() + Math.random() - 1.5) * 0.018, size: Math.random() * 1.3 + 0.4 };
+    });
+    const sphere = Array.from({ length: 1500 }, () => {
+      const u = Math.random() * 2 - 1, t = Math.random() * Math.PI * 2;
+      return { x: Math.sqrt(1 - u * u) * Math.cos(t), y: u, z: Math.sqrt(1 - u * u) * Math.sin(t), r: 0.08 + Math.random() * 0.1 };
+    });
+    const project = (x, y, z, ring) => {
+      const cy = Math.cos(ring.tiltX), sy = Math.sin(ring.tiltX);
+      let y2 = y * cy - z * sy; const z2 = y * sy + z * cy;
+      const cz = Math.cos(ring.rz), sz = Math.sin(ring.rz);
+      const x3 = x * cz - y2 * sz; y2 = x * sz + y2 * cz;
+      return [x3, y2, z2];
+    };
+    let t = 0;
+    const draw = () => {
+      t += 1;
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "rgba(4,6,18,0.35)"; ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = "lighter";
+      const cx = w / 2, cy = h * 0.47, S = Math.min(w * 1.1, h * 1.5) * 0.8;
+      // base platform (particles only)
+      for (let i = 0; i < 7; i++) {
+        const pulse = i === 0 ? 0 : ((t * 0.004 + i / 6) % 1);
+        const rx = S * (0.11 + pulse * 0.45), ry = S * (0.02 + pulse * 0.07);
+        const al = i === 0 ? 0.9 : (1 - pulse) * 0.7;
+        const n = Math.floor(rx * 2.2);
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + t * 0.003 * (i % 2 ? 1 : -1);
+          const j = Math.abs((Math.sin(k * 12.9898 + i) * 43758.5453) % 1) * 3;
+          ctx.fillStyle = `hsla(${195 + i * 12},100%,${i === 0 ? 80 : 65}%,${al})`;
+          ctx.fillRect(cx + Math.cos(a) * (rx + j), h * 0.8 + Math.sin(a) * (ry + j * 0.3), 1.6, 1.6);
+        }
+      }
+      // ring lines
+      for (const ring of rings) {
+        ring.rz += ring.spin;
+      }
+      // particles
+      for (const p of parts) {
+        p.a += p.s;
+        const r = p.ring.r + p.off;
+        const [x, y, z] = project(Math.cos(p.a) * r, p.off * 0.5, Math.sin(p.a) * r, p.ring);
+        const alpha = 0.35 + (z + 0.4) * 0.9;
+        ctx.fillStyle = `hsla(${p.ring.hue + p.off * 300},100%,70%,${Math.max(0.1, Math.min(1, alpha))})`;
+        ctx.fillRect(cx + x * S, cy + y * S, p.size, p.size);
+      }
+      // core sphere
+      const rot = t * 0.006;
+      for (const s of sphere) {
+        const x = s.x * Math.cos(rot) - s.z * Math.sin(rot), z = s.x * Math.sin(rot) + s.z * Math.cos(rot);
+        const k = s.r * (1 + Math.sin(t * 0.03) * 0.05);
+        ctx.fillStyle = `hsla(${200 + z * 60},100%,72%,${0.25 + (z + 1) * 0.3})`;
+        ctx.fillRect(cx + x * k * S, cy + s.y * k * S, 1.4, 1.4);
+      }
+      const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, S * 0.12);
+      cg.addColorStop(0, "hsla(200,100%,75%,0.35)"); cg.addColorStop(1, "hsla(260,100%,50%,0)");
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, S * 0.12, 0, Math.PI * 2); ctx.fill();
+      // waveform
+      for (let i = -60; i <= 60; i++) {
+        if (Math.abs(i) < 6) continue;
+        const amp = (Math.sin(i * 0.4 + t * 0.15) * 0.5 + 0.5) * Math.exp(-((Math.abs(i) - 25) ** 2) / 200) * 22 + 2;
+        ctx.fillStyle = `hsla(${200 + Math.abs(i)},100%,65%,0.8)`;
+        ctx.fillRect(cx + i * 6, h * 0.905 - amp / 2, 2, amp);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    })();
+
+// navegação: troca o item ativo ao clicar
+document.querySelectorAll(".holo-nav a").forEach(a => a.addEventListener("click", () => {
+  document.querySelectorAll(".holo-nav a").forEach(x => x.classList.remove("active"));
+  a.classList.add("active");
+}));
+</script>
+</body>
+</html>
