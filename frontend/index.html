@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#14120f">
+<meta name="theme-color" content="#02040f">
 <meta name="robots" content="noindex">
 <title>Byte</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314120f'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='17' text-anchor='middle' fill='%23e3a548'%3E01%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2302040f'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='17' text-anchor='middle' fill='%2300ddf9'%3E01%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600&family=Orbitron:wght@400;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/xterm/xterm.css">
 <link rel="stylesheet" href="style.css">
 <!-- xterm.js 5.5.0 + addon-fit 0.10.0, vendored (MIT, vendor/xterm/LICENSE): UMD globals -->
@@ -54,7 +54,8 @@
 
 <!-- Token gate -->
 <section class="gate" id="gate" hidden aria-labelledby="gate-title">
-  <form class="gate-form" id="gate-form" novalidate>
+  <div class="gate-orb" aria-hidden="true"><canvas id="gate-orb"></canvas></div>
+  <form class="holo-panel gate-form" id="gate-form" novalidate>
     <p class="eyebrow">byte / painel local</p>
     <h1 id="gate-title">Acesso do dono</h1>
     <p class="lede">Cole o token da API uma vez. Este aparelho fica conectado; o token não é guardado.</p>
@@ -68,67 +69,66 @@
     <p class="help mock-only" hidden><span class="tag">mock</span> qualquer token com 32 ou mais caracteres entra.</p>
     <button class="btn primary" type="submit">Entrar</button>
   </form>
-  <div class="gate-orb" aria-hidden="true"><canvas id="gate-orb"></canvas></div>
 </section>
 
-<div class="app" id="app" hidden>
-  <header class="bar">
+<!-- Holographic core (frontend/nova_interface): the agent fills the stage; every function opens
+     from the side nav in one drawer. data-view = the open drawer, "home" = none. -->
+<div class="app holo" id="app" data-view="home" hidden>
+  <div class="stage orb-wrap" aria-hidden="true">
+    <canvas id="orb"></canvas>
+    <canvas id="lynus-orb" hidden></canvas>
+  </div>
+
+  <header class="holo-panel holo-brand">
     <!-- the version follows pyproject.toml -->
-    <div class="brand"><strong id="brand-name">Byte</strong><span class="version">v1.0.0</span></div>
-    <p class="agent-state" role="status" aria-live="polite"><span class="led" aria-hidden="true"></span><span id="agent-state">em espera</span></p>
-    <a class="next-alert" id="next-alert" href="#sec-alerts" hidden></a>
-    <a class="wx-chip" id="wx-chip" href="#sec-weather" hidden></a>
-    <div class="bar-end">
-      <span class="tag mock-only" hidden>mock</span>
-      <span class="clock-wrap">
-        <svg class="art clock3d" id="clock-art" viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="15" fill="url(#g-brass)"/>
-          <circle cx="16" cy="16" r="12.5" fill="#1b1915"/>
-          <path d="M16 5.5v2M26.5 16h-2M16 26.5v-2M5.5 16h2" stroke="#a8a091" stroke-width="1.3" stroke-linecap="round"/>
-          <g class="ck-h"><path d="M16 16V10" stroke="#ebe5d9" stroke-width="2" stroke-linecap="round"/></g>
-          <g class="ck-m"><path d="M16 16V7" stroke="#ebe5d9" stroke-width="1.4" stroke-linecap="round"/></g>
-          <g class="ck-s"><path d="M16 18.5V6" style="stroke: var(--accent)" stroke-width=".8" stroke-linecap="round"/></g>
-          <circle cx="16" cy="16" r="1.3" style="fill: var(--accent)"/>
-          <ellipse cx="12" cy="10" rx="7" ry="3.6" fill="#fff" opacity=".08" transform="rotate(-30 12 10)"/>
-        </svg>
-        <time id="clock" class="mono">--:--:--</time>
-      </span>
-      <button class="btn ghost small" id="logout" type="button">Sair</button>
-    </div>
+    <h1 id="brand-name">Byte</h1>
+    <p>ASSISTENTE VIRTUAL <span class="version">v1.0.0</span></p>
   </header>
 
-  <main class="shell" id="shell" data-pane="core">
-    <!-- 1. Terminal: activity log + local commands -->
-    <section class="pane term" id="pane-term" aria-label="Terminal">
-      <header class="term-head">
-        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="term-title mono" id="term-title">byte@casa: ~</span>
-        <button class="icon-btn" type="button" id="term-clear" aria-label="Limpar terminal"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
-      </header>
-      <div class="term-out" id="term-out" role="log" aria-live="polite" aria-label="Atividade"></div>
-      <div class="term-xterm" id="term-xterm" aria-label="Claude Code no projeto aberto" hidden></div>
-      <form class="term-in" id="term-form" autocomplete="off">
-        <label for="term-input" class="term-prompt mono">byte@casa:~$</label>
-        <input id="term-input" class="mono" spellcheck="false" maxlength="200" aria-describedby="term-hint">
-        <span class="sr-only" id="term-hint">Digite help para ver os comandos.</span>
-      </form>
-    </section>
+  <div class="holo-top">
+    <a class="next-alert" id="next-alert" href="#sec-alerts" hidden></a>
+    <a class="wx-chip" id="wx-chip" href="#sec-weather" hidden></a>
+    <span class="tag mock-only" hidden>mock</span>
+    <span class="holo-panel holo-clock clock-wrap">
+      <svg class="art clock3d" id="clock-art" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="15" fill="url(#g-brass)"/>
+        <circle cx="16" cy="16" r="12.5" fill="#071226"/>
+        <path d="M16 5.5v2M26.5 16h-2M16 26.5v-2M5.5 16h2" stroke="#86a4b3" stroke-width="1.3" stroke-linecap="round"/>
+        <g class="ck-h"><path d="M16 16V10" stroke="#d0eaf3" stroke-width="2" stroke-linecap="round"/></g>
+        <g class="ck-m"><path d="M16 16V7" stroke="#d0eaf3" stroke-width="1.4" stroke-linecap="round"/></g>
+        <g class="ck-s"><path d="M16 18.5V6" style="stroke: var(--accent)" stroke-width=".8" stroke-linecap="round"/></g>
+        <circle cx="16" cy="16" r="1.3" style="fill: var(--accent)"/>
+        <ellipse cx="12" cy="10" rx="7" ry="3.6" fill="#fff" opacity=".08" transform="rotate(-30 12 10)"/>
+      </svg>
+      <time id="clock" class="mono">--:--:--</time>
+    </span>
+    <p class="holo-panel holo-online agent-state" role="status" aria-live="polite"><span class="led" aria-hidden="true"></span><span id="agent-state">em espera</span></p>
+  </div>
 
-    <!-- 2. Agent core: sphere, voice, chat -->
-    <section class="pane core" id="pane-core" aria-label="Agente">
-      <div class="orb-wrap">
-        <canvas id="orb" aria-hidden="true"></canvas>
-        <canvas id="lynus-orb" aria-hidden="true" hidden></canvas>
-      </div>
-      <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversa por texto" hidden></div>
-      <div class="transcript lynus-log" id="lynus-log" aria-live="polite" aria-label="Conversa com o Lynus" hidden></div>
-      <div class="voice" id="voice" data-voice="off">
-        <button class="btn talk" type="button" id="talk" aria-describedby="voice-note">
-          <span class="talk-led" aria-hidden="true"></span><span id="talk-word">Falar</span><span class="talk-stop" aria-hidden="true">parar</span>
-        </button>
-        <button class="toggle" type="button" id="wake-toggle" aria-pressed="false" aria-describedby="voice-note">escuta ativa</button>
-        <p class="voice-note" id="voice-note" role="status" aria-live="polite"></p>
-      </div>
+  <nav class="holo-panel holo-nav" id="holo-nav" aria-label="Seções">
+    <a href="#" data-view="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Início</span></a>
+    <a href="#sec-lights" data-view="devices"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/></svg><span>Dispositivos</span></a>
+    <a href="#sec-alerts" data-view="apps"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>Aplicativos</span><span class="badge" id="fn-badge" hidden></span></a>
+    <a href="#sec-agent" data-view="memory"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg><span>Memória</span></a>
+    <a href="#sec-settings" data-view="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>Configurações</span></a>
+  </nav>
+
+  <!-- Live summary of the house; each row opens its section. -->
+  <aside class="holo-panel holo-act" aria-labelledby="h-act">
+    <h3 id="h-act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Atividades</h3>
+    <ul>
+      <li><button type="button" id="act-music" data-go="apps" data-sec="#sec-music"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg><div>Spotify<small>—</small></div><span class="holo-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span></button></li>
+      <li><button type="button" id="act-home" data-go="devices" data-sec="#sec-lights"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><div>Casa Inteligente<small>—</small></div></button></li>
+      <li><button type="button" id="act-finance" data-go="apps" data-sec="#sec-finance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><div>Finanças<small>—</small></div></button></li>
+      <li><button type="button" id="act-weather" data-go="apps" data-sec="#sec-weather"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><div>Tempo<small>—</small></div></button></li>
+    </ul>
+  </aside>
+
+  <!-- Início: the conversation sits under the core, the mic orb is the talk button. -->
+  <section class="dock core" id="pane-core" aria-label="Agente">
+    <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversa por texto" hidden></div>
+    <div class="transcript lynus-log" id="lynus-log" aria-live="polite" aria-label="Conversa com o Lynus" hidden></div>
+    <div class="holo-panel chatbar">
       <div class="agent-switch" role="group" aria-label="Com quem falar">
         <button type="button" class="seg" id="to-byte" aria-pressed="true">Byte</button>
         <button type="button" class="seg" id="to-lynus" aria-pressed="false" title="Passar uma tarefa de programação ao Lynus">Lynus</button>
@@ -140,17 +140,31 @@
         <input id="chat-input" maxlength="4000" autocomplete="off" placeholder="Escreva para o Byte…">
         <button class="btn primary" type="submit" id="chat-send">Enviar</button>
       </form>
-    </section>
+    </div>
+    <div class="voice holo-mic" id="voice" data-voice="off">
+      <button class="talk" type="button" id="talk" aria-describedby="voice-note">
+        <span class="talk-led holo-mic-orb" aria-hidden="true"></span><span id="talk-word">Falar</span><span class="talk-stop" aria-hidden="true">parar</span>
+      </button>
+      <p class="voice-note" id="voice-note" role="status" aria-live="polite"></p>
+    </div>
+  </section>
 
-    <!-- 3. Functions: alerts, agent, every tool segment -->
-    <section class="pane fn" id="pane-fn" aria-label="Funções">
-      <nav class="index" aria-label="Seções">
-        <a href="#sec-alerts">Alertas</a><a href="#sec-agent">Agente</a><a href="#sec-lights">Luzes</a><a href="#sec-climate">Clima</a><a href="#sec-music">Música</a><a href="#sec-weather">Tempo</a><a href="#sec-agenda">Agenda</a><a href="#sec-finance">Finanças</a>
-      </nav>
-      <div class="console" id="console" tabindex="-1">
-        <div class="global-pending" id="global-pending"></div>
+  <div class="holo-foot" aria-hidden="true">∿ Sempre ao seu lado</div>
+  <div class="holo-stripes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 
-        <section class="sec alerts" id="sec-alerts" aria-labelledby="h-alerts">
+  <!-- The drawer: every function, filtered by the open nav item (data-view on #app). -->
+  <section class="holo-panel drawer fn" id="pane-fn" aria-labelledby="drawer-title">
+    <header class="drawer-head">
+      <h2 id="drawer-title"></h2>
+      <button class="icon-btn" type="button" id="drawer-close" aria-label="Fechar e voltar ao início"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </header>
+    <nav class="index" aria-label="Nesta seção">
+      <a href="#sec-lights" data-in="devices">Luzes</a><a href="#sec-climate" data-in="devices">Clima</a><a href="#sec-alerts" data-in="apps">Alertas</a><a href="#sec-music" data-in="apps">Música</a><a href="#sec-weather" data-in="apps">Tempo</a><a href="#sec-agenda" data-in="apps">Agenda</a><a href="#sec-finance" data-in="apps">Finanças</a><a href="#sec-agent" data-in="memory">Agente</a><a href="#pane-term" data-in="memory">Terminal</a>
+    </nav>
+    <div class="console" id="console" tabindex="-1">
+      <div class="global-pending" id="global-pending"></div>
+
+<section class="sec alerts" id="sec-alerts" data-in="apps" aria-labelledby="h-alerts">
           <header class="sec-head">
             <span class="num">00</span><h2 id="h-alerts">Lembretes e alarmes</h2>
             <button class="icon-btn" type="button" data-refresh="alerts" aria-label="Atualizar lembretes"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
@@ -169,7 +183,7 @@
           <p class="note" role="status" data-note="alerts"></p>
         </section>
 
-        <section class="sec" id="sec-agent" aria-labelledby="h-agent">
+        <section class="sec" id="sec-agent" data-in="memory" aria-labelledby="h-agent">
           <header class="sec-head">
             <span class="num">01</span><h2 id="h-agent">Agente</h2>
             <button class="btn ghost small" type="button" id="new-conv">Nova conversa</button>
@@ -184,7 +198,7 @@
           </dl>
         </section>
 
-        <section class="sec" id="sec-lights" aria-labelledby="h-lights">
+        <section class="sec" id="sec-lights" data-in="devices" aria-labelledby="h-lights">
           <header class="sec-head">
             <span class="num">02</span><h2 id="h-lights">Luzes</h2>
             <button class="icon-btn" type="button" data-refresh="lights" aria-label="Atualizar luzes"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
@@ -193,7 +207,7 @@
           <p class="note" role="status" data-note="lights"></p>
         </section>
 
-        <section class="sec" id="sec-climate" aria-labelledby="h-climate">
+        <section class="sec" id="sec-climate" data-in="devices" aria-labelledby="h-climate">
           <header class="sec-head">
             <span class="num">03</span><h2 id="h-climate">Clima</h2>
             <button class="icon-btn" type="button" data-refresh="climate" aria-label="Atualizar clima"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
@@ -202,7 +216,7 @@
           <p class="note" role="status" data-note="climate"></p>
         </section>
 
-        <section class="sec wide" id="sec-music" aria-labelledby="h-music">
+        <section class="sec wide" id="sec-music" data-in="apps" aria-labelledby="h-music">
           <header class="sec-head">
             <span class="num">04</span><h2 id="h-music">Música</h2>
             <button class="icon-btn" type="button" data-refresh="music" aria-label="Atualizar música"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
@@ -235,7 +249,7 @@
           <p class="note" role="status" data-note="music"></p>
         </section>
 
-        <section class="sec" id="sec-weather" aria-labelledby="h-weather">
+        <section class="sec" id="sec-weather" data-in="apps" aria-labelledby="h-weather">
           <header class="sec-head">
             <span class="num">05</span><h2 id="h-weather">Tempo</h2>
             <div class="wx-where">
@@ -248,7 +262,7 @@
           <p class="note" role="status" data-note="weather"></p>
         </section>
 
-        <section class="sec" id="sec-agenda" aria-labelledby="h-agenda">
+        <section class="sec" id="sec-agenda" data-in="apps" aria-labelledby="h-agenda">
           <header class="sec-head">
             <span class="num">06</span><h2 id="h-agenda">Agenda</h2>
             <div class="day-nav">
@@ -285,7 +299,7 @@
           <p class="note" role="status" data-note="agenda"></p>
         </section>
 
-        <section class="sec" id="sec-finance" aria-labelledby="h-finance">
+        <section class="sec" id="sec-finance" data-in="apps" aria-labelledby="h-finance">
           <header class="sec-head">
             <span class="num">07</span><h2 id="h-finance">Finanças</h2>
             <div class="day-nav">
@@ -318,16 +332,38 @@
           </details>
           <p class="note" role="status" data-note="finance"></p>
         </section>
-      </div>
-    </section>
-  </main>
 
-  <!-- Narrow screens show one pane at a time. -->
-  <nav class="panes-nav" id="panes-nav" aria-label="Painéis">
-    <button type="button" data-pane="term">Terminal</button>
-    <button type="button" data-pane="core" aria-current="page" id="nav-core">Byte</button>
-    <button type="button" data-pane="fn">Funções<span class="badge" id="fn-badge" hidden></span></button>
-  </nav>
+        <!-- Terminal: activity log + local commands, or the open project's claude -->
+        <section class="sec term" id="pane-term" data-in="memory" aria-label="Terminal">
+          <header class="term-head">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-title mono" id="term-title">byte@casa: ~</span>
+            <button class="icon-btn" type="button" id="term-clear" aria-label="Limpar terminal"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
+          </header>
+          <div class="term-out" id="term-out" role="log" aria-live="polite" aria-label="Atividade"></div>
+          <div class="term-xterm" id="term-xterm" aria-label="Claude Code no projeto aberto" hidden></div>
+          <form class="term-in" id="term-form" autocomplete="off">
+            <label for="term-input" class="term-prompt mono">byte@casa:~$</label>
+            <input id="term-input" class="mono" spellcheck="false" maxlength="200" aria-describedby="term-hint">
+            <span class="sr-only" id="term-hint">Digite help para ver os comandos.</span>
+          </form>
+        </section>
+
+        <section class="sec" id="sec-settings" data-in="settings" aria-labelledby="h-settings">
+          <header class="sec-head"><span class="num">08</span><h2 id="h-settings">Configurações</h2></header>
+          <ul class="rows settings">
+            <li>
+              <div style="min-width:0"><div class="row-title">Escuta ativa</div><div class="row-meta">Fica esperando “Ei Byte” pelo microfone deste aparelho.</div></div>
+              <button class="toggle" type="button" id="wake-toggle" aria-pressed="false" aria-describedby="voice-note">escuta ativa</button>
+            </li>
+            <li>
+              <div style="min-width:0"><div class="row-title">Sessão deste aparelho</div><div class="row-meta">Sair apaga a sessão; o token da API será pedido de novo.</div></div>
+              <button class="btn ghost small" id="logout" type="button">Sair</button>
+            </li>
+          </ul>
+        </section>
+    </div>
+  </section>
 </div>
 
 <template id="tpl-pending">

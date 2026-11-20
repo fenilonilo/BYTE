@@ -1,36 +1,42 @@
-/* Byte control panel. Warm phosphor terminal: off-black, bone text, one amber accent. */
+/* Byte control panel. Holographic core: deep navy, cyan light, violet for Lynus and accents.
+   Palette and type from frontend/nova_interface (holo.css). */
 
 :root {
-  --bg: #14120f;
-  --bg-2: #1b1915;
-  --bg-3: #23201b;
-  --fg: #ebe5d9;
-  --fg-2: #a8a091;
-  --fg-3: #8f877a;
-  --line: rgba(235, 229, 217, 0.09);
-  --line-2: rgba(235, 229, 217, 0.18);
-  --accent: #e3a548;
-  --accent-rgb: 227, 165, 72; /* the accent as numbers, for rgba(var(--accent-rgb), a) */
-  --accent-hover: #ecb460;
-  --accent-ink: #1a140a;
+  --bg: #02040f;
+  --bg-2: #071226;
+  --bg-3: #0d1c34;
+  --bg-rgb: 2, 4, 15; /* the background as numbers, for translucent bars over the glow */
+  --fg: #d0eaf3;
+  --fg-2: #86a4b3;
+  --fg-3: #698595;
+  --line: rgba(0, 221, 249, 0.12);
+  --line-2: rgba(0, 221, 249, 0.3);
+  --accent: #00ddf9;
+  --accent-rgb: 0, 221, 249; /* the accent as numbers, for rgba(var(--accent-rgb), a) */
+  --accent-hover: #67edff;
+  --accent-ink: #001519;
   --accent-wash: rgba(var(--accent-rgb), 0.1);
-  --danger: #e2826a;
+  --violet: #9658ff;
+  --violet-rgb: 150, 88, 255;
+  --danger: #ff7a8a;
   --rain: #7fb3d5;
-  --lynus: #3fd8ff; /* Lynus's own colour: cool and electric next to Byte's amber */
+  --lynus: #9658ff; /* Lynus's own colour: violet next to Byte's cyan */
   --lynus-done: #9cc3a2;
-  --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --display: "Orbitron", "Exo 2", sans-serif;
+  --sans: "Exo 2", ui-sans-serif, system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --cut: 14px; /* the clipped corner of a holo panel */
   --bar-h: 56px;
   --gutter: clamp(16px, 2.4vw, 32px);
   color-scheme: dark;
 }
 
 :root[data-persona="lynus"] {
-  --accent: #3fd8ff;
-  --accent-rgb: 63, 216, 255;
-  --accent-hover: #74e4ff;
-  --accent-ink: #03161c;
+  --accent: #aa7eff;
+  --accent-rgb: 170, 126, 255;
+  --accent-hover: #c2a2ff;
+  --accent-ink: #0d0420;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -38,7 +44,7 @@ html { scroll-behavior: smooth; scrollbar-color: var(--line-2) var(--bg); }
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--bg);
+  background: radial-gradient(ellipse at 50% 55%, #010b26, var(--bg) 70%) fixed;
   color: var(--fg);
   font: 400 15px/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
@@ -178,18 +184,13 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--acce
 input[type="range"]:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* ---------- Gate ---------- */
-.gate {
-  min-height: 100dvh;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
-  padding: var(--gutter);
-}
-.gate-orb { position: relative; height: min(70dvh, 620px); }
+/* The core turns behind the sign-in panel. */
+.gate { position: fixed; inset: 0; display: grid; place-items: center; padding: var(--gutter); overflow-y: auto; }
+.gate-orb { position: fixed; inset: 0; }
 .gate-orb canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .gate-form {
-  width: min(100%, 420px);
-  margin-left: clamp(0px, 12vw, 220px);
+  position: relative; z-index: 1;
+  width: min(100%, 440px); padding: 32px 36px;
   display: grid; gap: 20px;
   animation: rise 0.8s var(--ease) both;
 }
@@ -198,69 +199,145 @@ input[type="range"]:disabled { opacity: 0.35; cursor: not-allowed; }
 .eyebrow { margin: 0; color: var(--accent); }
 .gate .btn { justify-self: start; }
 
-/* ---------- App frame ---------- */
-/* The app fills the viewport; each pane scrolls on its own, so the orb and the prompt never leave. */
-.app { height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
-.bar {
-  position: relative; z-index: 20;
-  height: var(--bar-h);
-  display: flex; align-items: center; gap: 20px;
-  padding: 0 var(--gutter);
-  background: rgba(20, 18, 15, 0.88);
-  border-bottom: 1px solid var(--line);
+/* ---------- Holo frame (frontend/nova_interface) ----------
+   The core fills the stage; brand, status, nav and Atividades float over it as glass panels.
+   The side nav opens one drawer (#app[data-view]); the stage shrinks so the core stays centred. */
+.app { position: fixed; inset: 0; overflow: hidden; --edge: 2.5vw; --drawer-w: clamp(440px, 42vw, 640px); }
+.app[data-project] { --drawer-w: clamp(560px, 56vw, 920px); } /* claude needs ~80 columns */
+.holo-panel {
+  background: rgba(7, 18, 38, 0.55);
+  border: 1px solid var(--line-2);
+  box-shadow: inset 0 0 30px rgba(var(--accent-rgb), 0.08);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
 }
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand strong { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.stage { position: absolute; inset: 0; }
+.app:not([data-view="home"]) .stage { right: calc(var(--drawer-w) + var(--edge)); }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.holo-brand { position: absolute; z-index: 3; top: 3%; left: var(--edge); padding: 18px 40px; }
+.holo-brand h1 {
+  margin: 0; font: 400 1.8rem/1.2 var(--display); letter-spacing: 0.6em; text-transform: uppercase;
+  border-left: 2px solid var(--accent); padding-left: 18px;
+}
+.holo-brand p { margin: 4px 0 0; padding-left: 20px; font-size: 0.6rem; letter-spacing: 0.55em; color: var(--fg-2); display: flex; align-items: center; gap: 12px; }
 .version {
   font: 500 10px/1 var(--mono); color: var(--accent); letter-spacing: 0.04em;
   padding: 3px 5px; border: 1px solid rgba(var(--accent-rgb), 0.45); border-radius: 2px;
 }
-.agent-state { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--fg-2); min-width: 9ch; }
-.led { width: 6px; height: 6px; background: var(--fg-3); transition: background-color 0.4s var(--ease); }
-body[data-agent="thinking"] .led,
-body[data-agent="speaking"] .led,
-body[data-agent="listening"] .led { background: var(--accent); animation: blink 1.2s steps(2, jump-none) infinite; }
-@keyframes blink { 50% { opacity: 0.25; } }
-.bar-end { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+
+.holo-top {
+  position: absolute; z-index: 3; top: 3%; right: var(--edge);
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
+  max-width: calc(100% - 2 * var(--edge) - 330px);
+}
+.holo-online, .holo-clock { display: flex; align-items: center; gap: 10px; margin: 0; height: 46px; padding: 0 30px; }
+.holo-online { color: var(--accent); font: 400 0.85rem/1 var(--display); letter-spacing: 0.1em; text-transform: uppercase; }
+.holo-clock { padding: 0 22px; }
 #clock { color: var(--fg); font-size: 14px; letter-spacing: 0.02em; }
+.led {
+  width: 10px; height: 10px; flex: none; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: holo-pulse 1.6s infinite;
+}
+body[data-agent="thinking"] .led, body[data-agent="speaking"] .led, body[data-agent="listening"] .led { animation-duration: 0.7s; }
+@keyframes blink { 50% { opacity: 0.25; } }
 .tag { color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.45); padding: 2px 6px; border-radius: 2px; }
 
 /* Next reminder chip: always on screen, warms up as the time comes. */
 .next-alert {
   display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 46ch;
-  height: 32px; padding: 0 12px; margin-left: auto;
-  border: 1px solid var(--line-2); border-radius: 3px;
+  height: 36px; padding: 0 12px;
+  border: 1px solid var(--line-2); border-radius: 3px; background: rgba(7, 18, 38, 0.55);
   color: var(--fg-2); text-decoration: none; font-size: 13px;
   transition: border-color 0.3s var(--ease), color 0.3s var(--ease), background-color 0.3s var(--ease);
 }
-.next-alert + .bar-end { margin-left: 0; }
 .next-alert:hover { color: var(--fg); border-color: var(--fg-3); }
 .next-alert .art { width: 20px; height: 20px; flex: none; }
 .na-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
 .na-left { font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums; flex: none; }
 .next-alert.soon { border-color: rgba(var(--accent-rgb), 0.6); color: var(--accent); }
-.next-alert.due { border-color: var(--danger); color: var(--danger); background: rgba(226, 130, 106, 0.1); animation: alarm 1s steps(2, jump-none) infinite; }
+.next-alert.due { border-color: var(--danger); color: var(--danger); background: rgba(255, 122, 138, 0.1); animation: alarm 1s steps(2, jump-none) infinite; }
 @keyframes alarm { 50% { border-color: transparent; } }
 
-.shell {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(280px, 0.95fr) minmax(340px, 1fr) minmax(400px, 1.2fr);
-  grid-template-areas: "term core fn";
+/* Side nav: Início closes the drawer, the others open it on their sections. */
+.holo-nav { position: absolute; z-index: 3; top: 31%; left: 2%; width: 210px; padding: 8px 0; }
+.holo-nav a {
+  position: relative; display: flex; gap: 14px; align-items: center; padding: 13px 22px;
+  font-size: 0.9rem; color: var(--fg-2); text-decoration: none;
+  border-left: 3px solid transparent; transition: all 0.3s;
 }
-.pane { min-width: 0; min-height: 0; }
-.term { grid-area: term; }
-.core { grid-area: core; }
-.fn { grid-area: fn; }
+.holo-nav a:hover, .holo-nav a[aria-current] {
+  color: var(--accent); border-left-color: var(--accent);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.18), transparent);
+}
+.holo-nav svg, .holo-act svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.holo-nav .badge { margin-left: auto; }
+
+/* Atividades: a live line per area; a row opens its section. */
+.holo-act { position: absolute; z-index: 3; top: 33%; right: var(--edge); width: 260px; padding: 16px 22px; }
+.app:not([data-view="home"]) .holo-act { display: none; }
+.holo-act h3 { margin: 0 0 10px; color: var(--accent); font-size: 0.9rem; font-weight: 500; display: flex; gap: 10px; align-items: center; }
+.holo-act h3 svg { width: 18px; height: 18px; }
+.holo-act ul { list-style: none; margin: 0; padding: 0; }
+.holo-act li { border-top: 1px solid rgba(var(--accent-rgb), 0.1); }
+.holo-act li button {
+  width: 100%; display: flex; gap: 12px; align-items: center; padding: 11px 0;
+  border: 0; background: none; text-align: left; font-size: 0.85rem; color: var(--fg);
+}
+.holo-act li button:hover { color: var(--accent); }
+.holo-act li button > div { min-width: 0; }
+.holo-act li svg { width: 22px; height: 22px; color: var(--accent); }
+.holo-act small { display: block; color: var(--fg-2); font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.holo-bars { margin-left: auto; display: flex; gap: 2px; align-items: flex-end; height: 16px; flex: none; visibility: hidden; }
+.playing .holo-bars { visibility: visible; }
+.holo-bars i { width: 2px; background: var(--accent); animation: holo-eq 0.9s ease-in-out infinite alternate; }
+.holo-bars i:nth-child(2) { animation-delay: 0.12s; } .holo-bars i:nth-child(3) { animation-delay: 0.24s; }
+.holo-bars i:nth-child(4) { animation-delay: 0.36s; } .holo-bars i:nth-child(5) { animation-delay: 0.48s; }
+.holo-bars i:nth-child(6) { animation-delay: 0.6s; }
+
+.holo-foot { position: absolute; bottom: 6%; left: 5%; font-size: 0.7rem; letter-spacing: 0.25em; color: var(--fg-2); pointer-events: none; }
+.holo-stripes { position: absolute; bottom: 4%; right: 3%; display: flex; gap: 5px; pointer-events: none; }
+.app:not([data-view="home"]) .holo-stripes { display: none; }
+.holo-stripes i { width: 14px; height: 5px; transform: skewX(-30deg); background: linear-gradient(90deg, var(--accent), var(--violet)); animation: holo-pulse 1.5s infinite; }
+.holo-stripes i:nth-child(2) { animation-delay: 0.1s; } .holo-stripes i:nth-child(3) { animation-delay: 0.2s; }
+.holo-stripes i:nth-child(4) { animation-delay: 0.3s; } .holo-stripes i:nth-child(5) { animation-delay: 0.4s; }
+.holo-stripes i:nth-child(6) { animation-delay: 0.5s; } .holo-stripes i:nth-child(7) { animation-delay: 0.6s; }
+.holo-stripes i:nth-child(8) { animation-delay: 0.7s; }
+@keyframes holo-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.92); } }
+@keyframes holo-orb { 0%, 100% { box-shadow: 0 0 20px var(--accent), inset 0 0 15px var(--violet); } 50% { box-shadow: 0 0 45px var(--accent), inset 0 0 30px var(--violet); } }
+@keyframes holo-eq { from { height: 20%; } to { height: 100%; } }
+
+/* The drawer: one scroll container; its head and section index stick on top. */
+.drawer {
+  position: absolute; z-index: 4; top: calc(3% + 62px); right: var(--edge); bottom: 3%; width: var(--drawer-w);
+  overflow-y: auto; scroll-padding-top: 104px; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.app[data-view="home"] .drawer { display: none; }
+.drawer-head {
+  position: sticky; top: 0; z-index: 6; display: flex; align-items: center; gap: 12px;
+  height: 52px; padding: 0 12px 0 28px; background: rgba(var(--bg-rgb), 0.86);
+}
+.drawer-head h2 { margin: 0; font: 400 15px/1 var(--display); letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+.drawer-head .icon-btn { margin-left: auto; }
+/* Only the open view's sections and index links show. */
+.app[data-view="devices"] [data-in]:not([data-in="devices"]),
+.app[data-view="apps"] [data-in]:not([data-in="apps"]),
+.app[data-view="memory"] [data-in]:not([data-in="memory"]),
+.app[data-view="settings"] [data-in]:not([data-in="settings"]) { display: none; }
+.app[data-view="settings"] .index { display: none; } /* one section, nothing to index */
+.settings > li { grid-template-columns: minmax(0, 1fr) auto; }
+.settings .row-title, .settings .row-meta { white-space: normal; }
 
 /* ---------- Terminal ---------- */
-.term {
+.sec.term {
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
-  background: #0d0c0a;
-  border-right: 1px solid var(--line);
+  height: min(62dvh, 560px); padding: 0;
+  background: rgba(var(--bg-rgb), 0.7);
   font: 400 12.5px/1.55 var(--mono);
   container: term / inline-size;
 }
+.app[data-project] .sec.term { height: calc(94dvh - 190px); min-height: 360px; }
 .term-head { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); }
 .term-head .icon-btn { margin-left: auto; }
 .term-dots { display: flex; gap: 6px; }
@@ -304,22 +381,22 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .term-in input:focus-visible { outline: none; }
 .term-in:focus-within { box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.35); }
 
-/* ---------- Core ---------- */
-.core {
-  display: grid;
-  grid-template-rows: minmax(160px, 1fr) auto auto auto auto;
-  gap: 16px;
-  padding: 16px var(--gutter) var(--gutter);
-  border-right: 1px solid var(--line);
+/* ---------- Dock (Início) ----------
+   The conversation under the core: transcript, the Byte/Lynus switch with the chat, the mic orb. */
+.dock {
+  position: absolute; z-index: 2; left: 50%; bottom: 3%; transform: translateX(-50%);
+  width: min(600px, calc(100% - 2 * var(--edge)));
+  display: grid; gap: 12px;
 }
-.orb-wrap { position: relative; min-height: 0; container-type: size; }
-/* Square canvas centred both ways: the agent sits in the middle of its column. */
-.orb-wrap canvas { position: absolute; inset: 0; margin: auto; width: min(100cqh, 100cqw); height: min(100cqh, 100cqw); display: block; }
+/* With the drawer open the dock fills the gap between the nav and the drawer. */
+.app:not([data-view="home"]) .dock { left: calc(2% + 226px); right: calc(var(--drawer-w) + var(--edge) + 16px); width: auto; transform: none; }
+.chatbar { display: grid; gap: 8px; padding: 10px 14px; }
 .transcript {
-  max-height: 38dvh; overflow-y: auto;
+  max-height: 26dvh; overflow-y: auto;
+  padding: 12px 16px 10px; background: rgba(7, 18, 38, 0.5); border: 1px solid var(--line);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   -webkit-mask-image: linear-gradient(transparent, #000 24px);
   mask-image: linear-gradient(transparent, #000 24px);
-  padding-top: 12px;
   display: grid; gap: 14px; align-content: end;
   padding-right: 4px;
   scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
@@ -352,39 +429,47 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .chat input { height: 44px; padding: 0 14px; font-size: 15px; }
 .chat .btn { height: 44px; }
 
-/* Voice: the talk button carries the live state; "parar" shows it doubles as stop. */
-.voice { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
-.talk { min-width: 15ch; justify-content: flex-start; font-family: var(--mono); font-size: 13px; letter-spacing: 0.02em; }
-.talk-led { width: 6px; height: 6px; background: var(--fg-3); transition: background-color 0.3s var(--ease); }
-.talk-stop { display: none; margin-left: auto; padding-left: 12px; color: var(--fg-3); font-size: 11px; }
-.voice:not([data-voice="off"], [data-voice="wake"]) .talk { border-color: rgba(var(--accent-rgb), 0.45); }
-.voice:not([data-voice="off"], [data-voice="wake"]) .talk-stop { display: inline; }
-.voice:not([data-voice="off"]) .talk-led { background: var(--accent); }
-.voice[data-voice="wake"] .talk-led { animation: breathe 2.4s ease-in-out infinite; }
-.voice[data-voice="connecting"] .talk-led,
-.voice[data-voice="thinking"] .talk-led { animation: blink 0.6s steps(2, jump-none) infinite; }
-/* A hairline under the talk button: a sweep while connecting, a draining bar before an idle close. */
-.talk { position: relative; overflow: hidden; }
-.talk::after {
+/* Voice: the mic orb is the talk button and carries the live state; "parar" shows it doubles as stop. */
+.voice { display: grid; justify-items: center; gap: 4px; }
+.talk {
+  display: grid; justify-items: center; gap: 8px; padding: 0;
+  border: 0; background: none; color: var(--fg); font: 400 0.95rem/1.2 var(--sans);
+}
+.holo-mic-orb {
+  width: 60px; height: 60px; border-radius: 50%;
+  border: 3px solid var(--accent); opacity: 0.55;
+  box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.5), inset 0 0 12px var(--violet);
+  transition: opacity 0.3s var(--ease), transform 0.2s var(--ease);
+}
+.talk:hover .holo-mic-orb { opacity: 0.85; }
+.talk:active .holo-mic-orb { transform: scale(0.95); }
+.voice:not([data-voice="off"]) .holo-mic-orb { opacity: 1; animation: holo-orb 2s infinite; }
+.voice[data-voice="wake"] .holo-mic-orb { opacity: 0.8; animation-duration: 3.2s; }
+.voice[data-voice="connecting"] .holo-mic-orb,
+.voice[data-voice="thinking"] .holo-mic-orb { animation-duration: 0.8s; }
+.talk-stop { display: none; color: var(--fg-3); font: 400 11px/1 var(--mono); }
+.voice:not([data-voice="off"], [data-voice="wake"]) .talk-stop { display: block; }
+/* A hairline under the word: a sweep while connecting, a draining bar before an idle close. */
+#talk-word { position: relative; overflow: hidden; padding-bottom: 3px; }
+#talk-word::after {
   content: ""; position: absolute; left: 0; bottom: 0; height: 1px; width: 100%;
   background: var(--accent); opacity: 0; transform-origin: left; pointer-events: none;
 }
-.voice[data-voice="connecting"] .talk::after { width: 40%; opacity: 0.85; animation: sweep 1.2s var(--ease) infinite; }
-.voice[data-closing] .talk::after { opacity: 1; background: var(--fg-2); animation: drain var(--closing, 3s) linear forwards; }
+.voice[data-voice="connecting"] #talk-word::after { width: 40%; opacity: 0.85; animation: sweep 1.2s var(--ease) infinite; }
+.voice[data-closing] #talk-word::after { opacity: 1; background: var(--fg-2); animation: drain var(--closing, 3s) linear forwards; }
 .voice[data-closing] .voice-note { color: var(--fg-3); }
 @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-.voice-note { margin: 0; flex: 1 1 18ch; min-width: 0; font: 400 12px/1.4 var(--mono); color: var(--fg-2); }
+.voice-note { margin: 0; max-width: 60ch; text-align: center; font: 400 12px/1.4 var(--mono); color: var(--fg-2); }
 .voice-note:empty { display: none; }
 .voice-note.error { color: var(--danger); }
 
-/* ---------- Functions ---------- */
-.fn { overflow-y: auto; scroll-padding-top: 60px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+/* ---------- Functions (in the drawer) ---------- */
 .index {
-  position: sticky; top: 0; z-index: 5;
-  display: flex; flex-wrap: wrap; gap: 2px; min-height: 44px; align-items: center;
-  padding: 4px max(8px, var(--gutter) - 14px);
-  background: rgba(20, 18, 15, 0.94);
+  position: sticky; top: 52px; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 2px; min-height: 40px; align-items: center;
+  padding: 2px 20px 6px;
+  background: rgba(var(--bg-rgb), 0.86);
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
@@ -392,13 +477,12 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
   flex: none; color: var(--fg-2); text-decoration: none; padding: 6px 7px; border-radius: 3px; letter-spacing: 0.04em;
   transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
 }
-.index a:hover { color: var(--fg); background: var(--bg-3); }
-.index a[aria-current] { color: var(--fg); box-shadow: inset 0 -1px 0 var(--accent); }
+.index a:hover, .index a[aria-current] { color: var(--accent); background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.18), transparent); }
 .console {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
-  padding: 0 var(--gutter) 64px;
+  padding: 0 16px 24px;
   outline: none;
   container-type: inline-size;
 }
@@ -406,7 +490,6 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .global-pending { padding-top: 16px; }
 .sec {
   padding: 24px 0 28px;
-  border-bottom: 1px solid var(--line);
   min-width: 0;
   animation: rise 0.7s var(--ease) both;
   animation-delay: calc(var(--i, 0) * 60ms);
@@ -428,9 +511,9 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .reminder .row-title { white-space: normal; }
 .reminder .left { font: 400 17px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--fg); min-width: 7ch; text-align: right; }
 .reminder.soon .left { color: var(--accent); }
-.reminder.due { margin: 0 calc(-1 * var(--gutter)); padding-left: var(--gutter); padding-right: var(--gutter); background: rgba(var(--accent-rgb), 0.08); box-shadow: inset 2px 0 0 var(--accent); }
+.reminder.due { margin: 0 -20px; padding-left: 20px; padding-right: 20px; background: rgba(var(--accent-rgb), 0.08); box-shadow: inset 2px 0 0 var(--accent); }
 .reminder.due .left { color: var(--accent); }
-.reminder.alarm.due { background: rgba(226, 130, 106, 0.1); box-shadow: inset 2px 0 0 var(--danger); }
+.reminder.alarm.due { background: rgba(255, 122, 138, 0.1); box-shadow: inset 2px 0 0 var(--danger); }
 .reminder.alarm.due .left { color: var(--danger); animation: blink 1s steps(2, jump-none) infinite; }
 
 /* Agent facts: a readout grid with hairline gaps. */
@@ -439,8 +522,6 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .facts dt { font: 400 11px/1.4 var(--mono); letter-spacing: 0.08em; color: var(--fg-3); }
 .facts dd { margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Pane switcher, narrow screens only. */
-.panes-nav { display: none; }
 .badge {
   display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
   border-radius: 9px; background: var(--danger); color: var(--bg); font: 500 11px/1 var(--mono);
@@ -714,62 +795,50 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
 /* ---------- Responsive ---------- */
-/* An open project runs claude in the terminal: it needs ~80 columns, so the terminal grows. */
-.shell[data-project] { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.7fr) minmax(400px, 1.1fr); }
-/* Medium: Byte and Funções side by side, the terminal under Byte. */
-@media (max-width: 1279px) {
-  .shell {
-    grid-template-columns: minmax(320px, 1fr) minmax(0, 1.15fr);
-    grid-template-rows: minmax(0, 1fr) minmax(180px, 34%);
-    grid-template-areas: "core fn" "term fn";
-  }
-  .shell[data-project] {
-    grid-template-columns: minmax(300px, 1fr) minmax(0, 1.15fr);
-    grid-template-rows: minmax(0, 1fr) minmax(240px, 55%);
-    grid-template-areas: "core fn" "term term";
-  }
-  .shell[data-project] .core { grid-template-rows: minmax(0, 1fr) auto auto auto; }
-  .term { border-top: 1px solid var(--line); border-right: 0; }
-  .core { padding-bottom: 16px; }
-}
-/* Short screens (a phone on its side): the orb gives way before the prompt does. */
+/* Short screens (a phone on its side): the transcript gives way before the prompt does. */
 @media (max-height: 560px) {
-  .core { grid-template-rows: minmax(0, 1fr) auto auto auto; gap: 10px; }
-  .transcript { max-height: 30dvh; }
-  .app .panes-nav button { height: 44px; }
+  .transcript { max-height: 18dvh; }
+  .holo-mic-orb { width: 44px; height: 44px; }
 }
-@media (max-width: 1000px) {
-  .gate-form { margin-left: 0; }
-  .gate { grid-template-columns: minmax(0, 1fr); align-content: start; padding-top: 48px; }
-  .gate-orb { order: -1; height: 220px; }
+/* Narrow: as in the design, Atividades and the side panels give way; the nav becomes a bottom bar
+   and the drawer covers the stage. */
+@media (max-width: 900px) {
+  .app { --bottom: calc(60px + env(safe-area-inset-bottom)); }
+  .holo-act, .holo-foot, .holo-stripes { display: none; }
+  .app:not([data-view="home"]) .stage { right: 0; }
+  .holo-nav {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; padding: 0 0 env(safe-area-inset-bottom);
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); clip-path: none; border-width: 1px 0 0;
+  }
+  .holo-nav a {
+    flex-direction: column; justify-content: center; gap: 4px; height: 60px; padding: 0 2px;
+    font-size: 0.66rem; border-left: 0; border-top: 3px solid transparent;
+  }
+  .holo-nav a[aria-current] { border-top-color: var(--accent); background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.18), transparent); }
+  .holo-nav .badge { position: absolute; top: 4px; left: calc(50% + 6px); margin: 0; }
+  .drawer { top: 76px; left: 8px; right: 8px; bottom: calc(var(--bottom) + 8px); width: auto; }
+  .dock { left: 12px; right: 12px; bottom: calc(var(--bottom) + 10px); width: auto; transform: none; }
+  .app:not([data-view="home"]) .dock { display: none; }
+  .holo-top { max-width: calc(100% - 2 * var(--edge) - 190px); }
 }
-/* Narrow: one pane at a time, switched from the bottom bar. */
-@media (max-width: 859px) {
-  .shell, .shell[data-project] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "pane"; }
-  .pane { grid-area: pane; border: 0; }
-  .shell:not([data-pane="term"]) .term,
-  .shell:not([data-pane="core"]) .core,
-  .shell:not([data-pane="fn"]) .fn { display: none; }
-  .core { padding: 12px var(--gutter); }
-  .transcript { max-height: 42dvh; }
-  .orb-wrap canvas { top: 0; margin: auto 0; }
-  .panes-nav {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    border-top: 1px solid var(--line); background: var(--bg-2);
-    padding-bottom: env(safe-area-inset-bottom);
+@media (max-width: 640px) {
+  .gate-form { padding: 24px; }
+  .holo-brand { padding: 12px 22px; }
+  .holo-brand h1 { font-size: 1.1rem; }
+  .holo-brand p { font-size: 0.5rem; letter-spacing: 0.3em; }
+  .holo-online, .holo-clock { height: 36px; padding: 0 14px; font-size: 0.7rem; }
+  /* The status row moves under the brand, in one line that scrolls sideways if it must. */
+  .holo-top {
+    top: 86px; left: 8px; right: 8px; max-width: none; gap: 6px;
+    flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none;
   }
-  .panes-nav button {
-    height: 52px; border: 0; background: transparent; color: var(--fg-2);
-    font: 400 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: lowercase;
-  }
-  .panes-nav button[aria-current] { color: var(--fg); box-shadow: inset 0 2px 0 var(--accent); }
-  .bar { gap: 12px; }
-  .agent-state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .next-alert { max-width: none; flex: 1 1 auto; }
-  .brand { margin-right: auto; }
+  .holo-top > * { flex: none; }
+  .next-alert { max-width: 60vw; }
+  .holo-online { order: -1; } /* the agent state first, the chips may scroll */
+  .drawer { top: 134px; }
 }
 @media (max-width: 420px) {
-  .brand strong, #logout, .clock3d { display: none; }
+  .clock3d, .version { display: none; }
   #clock { font-size: 13px; }
 }
 /* Touch: every control at least 40px tall. */
@@ -799,8 +868,8 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
    The chip next to the clock is always the home city; the section shows what the owner asked for. */
 .wx-chip {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
-  height: 32px; padding: 0 10px 0 4px;
-  border: 1px solid var(--line-2); border-radius: 16px;
+  height: 36px; padding: 0 10px 0 4px;
+  border: 1px solid var(--line-2); border-radius: 18px; background: rgba(7, 18, 38, 0.55);
   color: var(--fg); text-decoration: none; font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums;
   transition: border-color 0.3s var(--ease), background-color 0.3s var(--ease);
 }
@@ -808,9 +877,6 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
 .wx-chip .art { width: 28px; height: 26px; }
 .wx-chip .wet { color: var(--rain); }
 .wx-chip.raining { border-color: color-mix(in oklab, var(--rain) 55%, transparent); }
-/* Whatever follows the agent state sits on the right, with or without the reminder chip. */
-.bar .agent-state { margin-right: auto; }
-.bar .next-alert, .bar .wx-chip, .bar .bar-end { margin-left: 0; }
 
 .wx-where { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wx-where .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -883,6 +949,21 @@ body[data-agent="listening"] .led { background: var(--accent); animation: blink 
   .wx-temp { font-size: 48px; }
   .wx-days > li { grid-template-columns: 4.5ch 26px 3.5ch minmax(24px, 1fr) 3.5ch 4.5ch; gap: 8px; }
 }
+
+/* ---------- Holo skin (frontend/nova_interface) ---------- */
+/* Glass sections with one clipped corner pair, display type, cyan glow. */
+.gate h1, .sec-head h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; }
+.gate h1 { letter-spacing: 0.12em; font-size: clamp(22px, 3vw, 32px); }
+.sec-head h2 { font-size: 14px; letter-spacing: 0.22em; color: var(--accent); }
+.sec {
+  margin-top: 16px; padding: 20px 20px 24px;
+  border: 1px solid var(--line-2);
+  background: rgba(7, 18, 38, 0.55);
+  box-shadow: inset 0 0 30px rgba(var(--accent-rgb), 0.08);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.btn.primary { box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.35); }
+.btn.primary:hover { box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.55); }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

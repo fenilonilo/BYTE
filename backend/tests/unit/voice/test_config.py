@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from app.domain.exceptions import ConfigError
 from voice.config import load_voice_settings
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 TOKEN = "t" * 32
 
@@ -18,6 +15,7 @@ TOKEN = "t" * 32
 def _clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:  # pyright: ignore[reportUnusedFunction]
     for name in [n for n in os.environ if n.startswith("BYTE_")]:
         monkeypatch.delenv(name)
+    monkeypatch.delenv("STATE_DIRECTORY", raising=False)
     monkeypatch.chdir(tmp_path)  # a developer's real .env must not leak into the test
     monkeypatch.setenv("BYTE_API_TOKEN", TOKEN)
     monkeypatch.setenv("BYTE_VOICE_WAKE_MODEL", "hey_jarvis")
@@ -31,6 +29,29 @@ def test_defaults() -> None:
     assert settings.segment == "auto"
     assert settings.input_device is None
     assert settings.api_token.get_secret_value() == TOKEN
+
+
+def test_false_wake_guards_are_on_by_default() -> None:
+    settings = load_voice_settings()
+    assert settings.patience == 3
+    assert settings.cooldown_seconds == 2.0
+    assert settings.vad_threshold == 0.5
+    assert settings.no_speech_seconds == 6.0
+    assert settings.speech_rms == 300
+    assert settings.clip_seconds == 10.0
+    assert settings.clip_keep == 500
+    assert settings.clip_dir == Path("data") / "voice_clips"
+
+
+def test_clips_go_to_the_systemd_state_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STATE_DIRECTORY", "/var/lib/byte-voice")
+    assert load_voice_settings().clip_dir == Path("/var/lib/byte-voice") / "voice_clips"
+
+
+def test_clip_length_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BYTE_VOICE_CLIP_SECONDS", "120")
+    with pytest.raises(ConfigError, match="clip_seconds"):
+        load_voice_settings()
 
 
 def test_short_token_is_rejected_without_echoing_it(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -126,9 +126,14 @@ async def test_the_end_log_counts_the_traffic_and_names_who_ended_it() -> None:
     await eventually(lambda: bool(world.transport.sent("turn_done")))
     await finish(world, task)
 
+    start = next(f for _, name, f in world.log.events if name == "live.start")
+    assert start == {"conversation_id": "c1", "client": "device"}
     end = next(f for _, name, f in world.log.events if name == "live.end")
+    seconds = end.pop("seconds")
+    assert isinstance(seconds, float) and 0 <= seconds < 5
     assert end == {
         "conversation_id": "c1",
+        "client": "device",
         "ended_by": "client",
         "audio_in": 2,
         "audio_out": 1,
