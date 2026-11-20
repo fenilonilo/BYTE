@@ -10,6 +10,7 @@ import contextlib
 import signal
 import sys
 import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import websockets
@@ -17,6 +18,7 @@ import websockets
 from app.adapters.logging.structlog_logger import StructlogLogger, configure_logging
 from app.domain.exceptions import ConfigError
 from voice.audio import Speaker, microphone_frames
+from voice.clips import ClipStore
 from voice.config import load_voice_settings
 from voice.notifications import Notifier
 from voice.session import SessionConfig, VoiceSession
@@ -50,14 +52,37 @@ async def run() -> None:
             idle=lambda: session is not None and session.state == "idle",
             clock=time.monotonic,
         )
+        clips = ClipStore(
+            settings.clip_dir, keep=settings.clip_keep, log=log, now=lambda: datetime.now(UTC)
+        )
         session = VoiceSession(
-            detector=WakeWord(settings.wake_model, settings.threshold),
+            detector=WakeWord(settings.wake_model, settings.vad_threshold),
             connect=connect,
             speaker=speaker,
             clock=time.monotonic,
             log=log,
-            config=SessionConfig(segment=settings.segment, idle_seconds=settings.idle_seconds),
+            config=SessionConfig(
+                segment=settings.segment,
+                idle_seconds=settings.idle_seconds,
+                threshold=settings.threshold,
+                patience=settings.patience,
+                cooldown_seconds=settings.cooldown_seconds,
+                no_speech_seconds=settings.no_speech_seconds,
+                speech_rms=settings.speech_rms,
+                preroll_seconds=settings.clip_seconds,
+            ),
             interrupt=notifier.stop,
+            save_clip=clips.save,
+        )
+        log.info(
+            "voice.ready",
+            threshold=settings.threshold,
+            patience=settings.patience,
+            vad_threshold=settings.vad_threshold,
+            cooldown_seconds=settings.cooldown_seconds,
+            no_speech_seconds=settings.no_speech_seconds,
+            speech_rms=settings.speech_rms,
+            clip_seconds=settings.clip_seconds,
         )
         notify = asyncio.create_task(notifier.run())
         try:

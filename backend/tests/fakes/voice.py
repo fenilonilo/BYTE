@@ -61,15 +61,20 @@ class FakeSpeaker:
 
 
 class FakeDetector:
+    """Scores 1.0 for one frame after `wake_next`, else the queued `scores`, else 0.0."""
+
     def __init__(self) -> None:
         self.wake_next = False
+        self.scores: list[float] = []
         self.calls = 0
         self.resets = 0
 
-    def __call__(self, frame: bytes) -> bool:
+    def __call__(self, frame: bytes) -> float:
         self.calls += 1
         fired, self.wake_next = self.wake_next, False
-        return fired
+        if fired:
+            return 1.0
+        return self.scores.pop(0) if self.scores else 0.0
 
     def reset(self) -> None:
         self.resets += 1

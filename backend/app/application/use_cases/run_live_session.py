@@ -105,7 +105,9 @@ class RunLiveSession:
             limits=self._limits,
             now=self._now,
         )
-        self._log.info("live.start", conversation_id=conversation_id)
+        client = "panel" if panel else "device"
+        started = self._now()
+        self._log.info("live.start", conversation_id=conversation_id, client=client)
         try:
             await transport.send_event(
                 {"type": "ready", "conversation_id": conversation_id, "audio": AUDIO_FORMAT}
@@ -121,7 +123,12 @@ class RunLiveSession:
         finally:
             await run.close()
             self._log.info(
-                "live.end", conversation_id=conversation_id, ended_by=run.ended_by, **run.counts
+                "live.end",
+                conversation_id=conversation_id,
+                client=client,
+                ended_by=run.ended_by,
+                seconds=round(self._now() - started, 1),
+                **run.counts,
             )
 
 

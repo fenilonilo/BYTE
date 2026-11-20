@@ -36,6 +36,7 @@ class Rig:
     def __init__(
         self, config: SessionConfig | None = None, connect_error: Exception | None = None
     ) -> None:
+        self.clips: list[tuple[bytes, float]] = []
         self.sockets: list[FakeSocket] = []
         self.connect_error = connect_error
         self.detector = FakeDetector()
@@ -50,8 +51,13 @@ class Rig:
             log=self.log,
             config=config or SessionConfig(),
             interrupt=lambda: self.ringing,
+            save_clip=self._save_clip,
         )
         self.ringing = False
+
+    def _save_clip(self, pcm: bytes, score: float) -> str:
+        self.clips.append((pcm, score))
+        return f"clip{len(self.clips)}.wav"
 
     async def _connect(self) -> FakeSocket:
         if self.connect_error is not None:
@@ -391,3 +397,129 @@ async def test_wake_word_while_an_alarm_rings_only_stops_it() -> None:
     assert rig.session.state == "idle"
     assert rig.sockets == []
     assert rig.detector.resets == 1
+
+
+# ---------------------------------------------------------------- false-wake guards and logs
+
+
+def event(rig: Rig, name: str) -> dict[str, object]:
+    return next(f for _, n, f in rig.log.events if n == name)
+
+
+async def feed(rig: Rig, *scores: float, frame: bytes = FRAME) -> None:
+    rig.detector.scores = list(scores)
+    for _ in scores:
+        await rig.session.on_frame(frame)
+    await settle()
+
+
+async def test_patience_needs_consecutive_frames_over_the_threshold() -> None:
+    rig = Rig(SessionConfig(threshold=0.5, patience=3))
+    await feed(rig, 0.9, 0.8, 0.1)
+    assert rig.session.state == "idle"
+    assert ("info", "voice.wake_rejected", {"frames": 2, "score": 0.9}) in rig.log.events
+    await feed(rig, 0.6, 0.95, 0.7)
+    assert rig.session.state == "connecting"
+    wake = event(rig, "voice.wake")
+    assert wake["score"] == 0.95
+    assert wake["frames"] == 3
+
+
+async def test_a_score_at_the_threshold_does_not_count() -> None:
+    rig = Rig(SessionConfig(threshold=0.5, patience=1))
+    await feed(rig, 0.5)
+    assert rig.session.state == "idle"
+
+
+async def test_cooldown_after_a_session_ignores_the_wake_word() -> None:
+    rig = Rig(SessionConfig(cooldown_seconds=2.0))
+    await rig.go_live()
+    rig.socket.end()
+    await settle()
+    await feed(rig, 1.0)
+    assert rig.session.state == "idle"
+    rig.clock.advance(2.1)
+    await feed(rig, 1.0)
+    assert rig.session.state == "connecting"
+
+
+async def test_the_detector_keeps_hearing_during_the_cooldown() -> None:
+    rig = Rig(SessionConfig(cooldown_seconds=2.0))
+    await rig.go_live()
+    rig.socket.end()
+    await settle()
+    calls = rig.detector.calls
+    await feed(rig, 0.0, 0.0)
+    assert rig.detector.calls == calls + 2  # its feature window must stay continuous
+
+
+async def test_silence_after_the_wake_closes_the_session_as_no_speech() -> None:
+    rig = Rig(SessionConfig(no_speech_seconds=6.0, speech_rms=300))
+    await rig.go_live()
+    rig.clock.advance(5)
+    await rig.session.on_frame(tone(100))
+    assert not rig.socket.closed
+    rig.clock.advance(1.1)
+    await rig.session.on_frame(tone(100))
+    await settle()
+    assert rig.socket.closed
+    end = event(rig, "voice.session_end")
+    assert end["reason"] == "no_speech"
+    assert end["heard_speech"] is False
+    assert end["peak_rms"] == 100
+
+
+async def test_speech_on_the_mic_keeps_the_session_open() -> None:
+    rig = Rig(SessionConfig(no_speech_seconds=6.0, speech_rms=300))
+    await rig.go_live()
+    await rig.session.on_frame(tone(900))
+    rig.clock.advance(10)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert not rig.socket.closed
+
+
+async def test_a_user_transcript_counts_as_speech() -> None:
+    rig = Rig(SessionConfig(no_speech_seconds=6.0, speech_rms=300))
+    await rig.go_live()
+    rig.socket.push({"type": "transcript", "role": "user", "text": "x", "final": True})
+    await settle()
+    rig.clock.advance(10)
+    await rig.session.on_frame(FRAME)
+    await settle()
+    assert not rig.socket.closed
+
+
+async def test_wake_saves_the_preroll_clip_and_logs_its_name() -> None:
+    rig = Rig(SessionConfig(preroll_seconds=0.16))  # two frames
+    await feed(rig, 0.0, frame=tone(1))
+    await feed(rig, 0.0, frame=tone(2))
+    await feed(rig, 0.7, frame=tone(3))
+    assert rig.clips == [(tone(2) + tone(3), 0.7)]
+    assert event(rig, "voice.wake")["clip"] == "clip1.wav"
+
+
+async def test_no_preroll_means_no_clip() -> None:
+    rig = Rig()
+    await rig.wake()
+    assert rig.clips == []
+    assert "clip" not in event(rig, "voice.wake")
+
+
+async def test_session_end_summarises_the_session() -> None:
+    rig = Rig()
+    await rig.go_live()
+    rig.socket.push({"type": "transcript", "role": "user", "text": "x", "final": True})
+    rig.socket.push(bytes(48_000))  # one second of agent audio at 24 kHz
+    rig.clock.advance(3)
+    rig.socket.push({"type": "closed", "reason": "idle"})
+    await settle()
+    end = event(rig, "voice.session_end")
+    assert end == {
+        "reason": "server_idle",
+        "seconds": 3.0,
+        "user_turns": 1,
+        "agent_seconds": 1.0,
+        "heard_speech": True,
+        "peak_rms": 0,
+    }
